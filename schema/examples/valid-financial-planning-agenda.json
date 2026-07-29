@@ -1,0 +1,31 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "financial-planning"},
+  "revision": "financial-4",
+  "generated_at": "2026-07-29T13:00:00-04:00",
+  "entries": [
+    {
+      "id": "reduce-recurring-expenses",
+      "source": {
+        "plugin_id": "financial-planning",
+        "entity_type": "initiative",
+        "entity_id": "reduce-recurring-expenses"
+      },
+      "title": "Reduce recurring household expenses",
+      "kind": "initiative",
+      "state": "open"
+    },
+    {
+      "id": "review-insurance-renewal",
+      "source": {
+        "plugin_id": "financial-planning",
+        "entity_type": "adjustment-review",
+        "entity_id": "insurance-renewal-2026"
+      },
+      "title": "Review insurance renewal",
+      "kind": "action",
+      "state": "ready",
+      "timing": {"kind": "due-on", "due_on": "2026-08-15"}
+    }
+  ]
+}

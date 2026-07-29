@@ -1,0 +1,8 @@
+{
+  "schema_version": "mission-control.plugin/v1",
+  "id": "github",
+  "name": "GitHub",
+  "version": "0.1.0",
+  "plugin_api": ">=1.0.0 <2.0.0",
+  "capabilites": ["jobs"]
+}
