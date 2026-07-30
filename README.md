@@ -16,7 +16,7 @@ A NixOS host is the first deployment target and proving ground, not an applicati
 | systemd unit | `mission-control.service` |
 | NixOS module | `services.mission-control` |
 
-`mcctl` is the canonical documented command. The shorter `mc` name is deliberately avoided because it is already used by widely deployed tools. `mcd` is reserved for the future application daemon and must not be used for unrelated helpers.
+`mcctl` is the canonical documented command. The shorter `mc` name is deliberately avoided because it is already used by widely deployed tools. `mcd` is the application server and browser-shell process.
 
 ## Implementation philosophy
 
@@ -30,8 +30,11 @@ The executable implementation provides:
 
 - a small Python application core
 - the canonical `mcctl` executable
+- the minimal `mcd` HTTP server and browser shell
 - ordered SQLite migrations
 - task creation, updates, listing, and immutable event history
+- browser task creation, completion, and reopening through the authoritative task repository
+- a responsive Overview, House, and Yard demo workspace using clearly synthetic showcase data
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
 - frozen registration domain values, enum-backed finite vocabularies, and an immutable discovery catalog
@@ -42,7 +45,7 @@ The executable implementation provides:
 - core tasks projected through the same agenda contract intended for plugins
 - Rich-backed opt-in human tables with stable JSON remaining the default
 - `version`, `init`, and `doctor` commands
-- executable migration, repository, event-invariant, rendering, plugin-contract, discovery, agenda, presentation, and CLI tests
+- executable migration, repository, event-invariant, rendering, plugin-contract, discovery, agenda, presentation, CLI, and HTTP tests
 
 From the repository root:
 
@@ -69,6 +72,18 @@ pytest
 
 `MC_DATABASE` may be used instead of passing `--database` to every command. `mcctl render markdown --output tasks.md` writes the rendered document directly to a file. Plugin registration validation and discovery do not initialize the database or import plugin implementation code.
 
+### MVP browser demo
+
+Run the demo against a disposable database:
+
+```sh
+mcd --database ./mission-control-demo.db --demo
+```
+
+Then open `http://127.0.0.1:8000`. The House and Yard content is a packaged synthetic fixture. Tasks are real SQLite records: adding, completing, or reopening one in the browser writes through `TaskRepository` and retains immutable task history.
+
+The current MVP has no user authentication. It binds to loopback by default. Keep it on loopback or reach it through an SSH tunnel; do not expose it directly to an untrusted network. Authentication and production deployment are separate follow-up slices.
+
 ## Agenda ownership boundary
 
 The agenda is an aggregated read model, not a shared mutable task database. Core tasks and future plugins project immutable values through one public contract:
@@ -82,14 +97,14 @@ initiative | action | event
         |
         | validation and deterministic aggregation
         v
-read-only JSON, CLI table, and future web views
+read-only JSON, CLI table, and web views
 ```
 
 Providers retain authoritative ownership of their records, detailed state machines, recurrence rules, and transitions. The aggregate does not calculate plugin-specific recurrence, copy records into a second source of truth, or write directly to owner tables.
 
-Unscheduled work is explicit rather than represented by invented or nullable dates. Actions use `anytime`, `due-on`, `due-at`, or `window` timing; events use `all-day` or `timed` timing. Providers receiving an agenda query expand their own recurring definitions into concrete occurrences within the requested horizon and may separately include initiatives or unscheduled actions.
+Unscheduled work is explicit rather than represented by invented or nullable dates. Actions use `anytime`, `due-on`, `due-at`, or `window` timing; events use `all-day` or `timed` timing. Providers receiving an agenda query expand their own recurring definitions into concrete occurrences within that horizon and may separately include initiatives or unscheduled actions.
 
-The current CLI projects core tasks only because plugin activation and transport are not implemented yet. Future provider snapshots will enter the same pure aggregator. User operations such as complete, defer, approve, or run will follow a separate authenticated command path back to the authoritative owner; renderers remain incapable of mutation.
+The current CLI and browser shell project core tasks only because plugin activation and transport are not implemented yet. Future provider snapshots will enter the same pure aggregator. User operations such as complete, defer, approve, or run follow a separate command path back to the authoritative owner; renderers remain incapable of mutation.
 
 ## CLI presentation boundary
 
@@ -154,6 +169,7 @@ mcctl agenda list [--format json|table]
 mcctl render markdown
 mcctl plugin validate
 mcctl plugin list [--format json|table]
+mcd [--database PATH] [--host HOST] [--port PORT] [--demo]
 ```
 
 Planned additions:
@@ -162,12 +178,6 @@ Planned additions:
 mcctl plugin enable
 mcctl plugin disable
 mcctl backup create
-```
-
-The future server process will run as:
-
-```text
-mcd
 ```
 
 ## Deployment direction
@@ -185,7 +195,7 @@ These are deployment adapters. They produce or consume the same validated applic
 
 1. Portable core, SQLite migrations, `mcctl`, tests, and Markdown rendering.
 2. Stable public plugin contracts plus a reference plugin and contract test harness.
-3. Application server (`mcd`), authentication, and minimal web UI.
+3. Minimal `mcd` server and browser demo; authentication and production hardening remain follow-up work.
 4. Declarative NixOS deployment adapter.
 5. OCI/Compose deployment adapter.
 6. Guided first-boot setup and Raspberry Pi appliance image.

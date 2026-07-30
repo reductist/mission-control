@@ -7,6 +7,7 @@ on:
       - "plugins/**"
       - "tests/**"
       - "pyproject.toml"
+      - "flake.nix"
       - ".github/workflows/core.yml"
   push:
     branches: [main]
@@ -15,6 +16,7 @@ on:
       - "plugins/**"
       - "tests/**"
       - "pyproject.toml"
+      - "flake.nix"
       - ".github/workflows/core.yml"
 
 jobs:
@@ -50,6 +52,10 @@ jobs:
               "mission_control/schemas/agenda-contribution.schema.json",
               "mission_control/schemas/agenda-query.schema.json",
               "mission_control/schemas/plugin-registration.schema.json",
+              "mission_control/web/app.js",
+              "mission_control/web/demo.json",
+              "mission_control/web/index.html",
+              "mission_control/web/styles.css",
           }
           with ZipFile(wheel) as archive:
               missing = sorted(expected.difference(archive.namelist()))

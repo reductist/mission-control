@@ -58,6 +58,10 @@
             type = "app";
             program = "${package}/bin/mcctl";
           };
+          mcd = {
+            type = "app";
+            program = "${package}/bin/mcd";
+          };
         }
       );
 

@@ -1,0 +1,74 @@
+{
+  "house": {
+    "status": "Exploring, not rushing",
+    "summary": "Compare the life improvement against the financial and moving cost before falling in love with a listing.",
+    "metrics": [
+      {"label": "Decision mode", "value": "Patient search"},
+      {"label": "Must protect", "value": "Community and daily rhythm"},
+      {"label": "Next checkpoint", "value": "After 3 strong candidates"}
+    ],
+    "priorities": [
+      "More flexible family and guest space",
+      "A yard that supports play, gardening, and maintenance access",
+      "A purchase that leaves room for ordinary life and future projects"
+    ],
+    "scenarios": [
+      {
+        "name": "Stay and improve",
+        "signal": "Baseline",
+        "detail": "Lowest disruption; continue targeted improvements while watching the market."
+      },
+      {
+        "name": "Move for a clear upgrade",
+        "signal": "Preferred",
+        "detail": "Act only when space, location, and long-term fit are meaningfully better."
+      },
+      {
+        "name": "Stretch for the perfect fit",
+        "signal": "Caution",
+        "detail": "Worth considering only when the trade-offs are explicit and reversible."
+      }
+    ],
+    "next_steps": [
+      "Write the shared must-have and nice-to-have list",
+      "Compare monthly cost using the same assumptions",
+      "Record one decision note after each serious property"
+    ]
+  },
+  "yard": {
+    "status": "Maintain now, design deliberately",
+    "summary": "Protect the healthy landscape while solving access and low-light constraints one durable project at a time.",
+    "metrics": [
+      {"label": "Current season", "value": "Summer maintenance"},
+      {"label": "Primary project", "value": "Equipment access"},
+      {"label": "Planning horizon", "value": "Next 2 seasons"}
+    ],
+    "projects": [
+      {
+        "name": "Equipment access",
+        "state": "Research",
+        "detail": "Measure the grade and evaluate solutions that do not require an unsafe temporary ramp."
+      },
+      {
+        "name": "Shade lighting",
+        "state": "Options",
+        "detail": "Find an efficient, extensible system that can charge away from the shaded installation area."
+      },
+      {
+        "name": "Fall leaf workflow",
+        "state": "Plan",
+        "detail": "Reduce the weather-sensitive solo workload before the short collection window arrives."
+      }
+    ],
+    "seasonal": [
+      "Keep irrigation and new plantings stable during heat",
+      "Photograph problem areas before foliage changes",
+      "Prepare fall planting and leaf-management materials early"
+    ],
+    "constraints": [
+      "Steep driveway drop-off",
+      "Limited direct light on one side of the property",
+      "Maintenance timing depends heavily on rain"
+    ]
+  }
+}
