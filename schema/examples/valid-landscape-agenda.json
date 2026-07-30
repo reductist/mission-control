@@ -1,0 +1,49 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "landscape"},
+  "revision": "landscape-17",
+  "generated_at": "2026-07-29T13:00:00-04:00",
+  "entries": [
+    {
+      "id": "equipment-access",
+      "source": {
+        "plugin_id": "landscape",
+        "entity_type": "initiative",
+        "entity_id": "equipment-access"
+      },
+      "title": "Improve backyard equipment access",
+      "context": "Backyard",
+      "kind": "initiative",
+      "state": "open"
+    },
+    {
+      "id": "measure-dropoff",
+      "source": {
+        "plugin_id": "landscape",
+        "entity_type": "task",
+        "entity_id": "measure-dropoff"
+      },
+      "title": "Measure driveway drop-off",
+      "context": "Equipment access",
+      "kind": "action",
+      "state": "ready",
+      "timing": {"kind": "anytime"}
+    },
+    {
+      "id": "fall-planting-window",
+      "source": {
+        "plugin_id": "landscape",
+        "entity_type": "task",
+        "entity_id": "fall-planting"
+      },
+      "title": "Complete fall planting",
+      "kind": "action",
+      "state": "ready",
+      "timing": {
+        "kind": "window",
+        "starts_at": "2026-09-15T00:00:00-04:00",
+        "ends_at": "2026-10-31T23:59:59-04:00"
+      }
+    }
+  ]
+}

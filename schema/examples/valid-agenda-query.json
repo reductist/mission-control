@@ -1,0 +1,9 @@
+{
+  "schema_version": "mission-control.agenda-query/v1",
+  "window": {
+    "starts_at": "2026-07-29T00:00:00-04:00",
+    "ends_at": "2026-10-31T23:59:59-04:00"
+  },
+  "include_unscheduled": true,
+  "include_initiatives": true
+}

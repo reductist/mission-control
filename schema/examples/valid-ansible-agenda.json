@@ -1,0 +1,35 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "ansible-automation"},
+  "revision": "ansible-22",
+  "generated_at": "2026-07-29T13:00:00-04:00",
+  "entries": [
+    {
+      "id": "nightly-backup-2026-07-30t020000z",
+      "source": {
+        "plugin_id": "ansible-automation",
+        "entity_type": "scheduled-execution",
+        "entity_id": "nightly-backup-2026-07-30t020000z"
+      },
+      "title": "Run nightly backup playbook",
+      "kind": "event",
+      "timing": {
+        "kind": "timed",
+        "starts_at": "2026-07-30T02:00:00Z",
+        "ends_at": "2026-07-30T02:30:00Z"
+      }
+    },
+    {
+      "id": "review-failed-restore-test",
+      "source": {
+        "plugin_id": "ansible-automation",
+        "entity_type": "execution-follow-up",
+        "entity_id": "restore-test-188"
+      },
+      "title": "Review failed restore test",
+      "kind": "action",
+      "state": "blocked",
+      "timing": {"kind": "anytime"}
+    }
+  ]
+}

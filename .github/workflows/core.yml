@@ -1,0 +1,59 @@
+name: Core
+
+on:
+  pull_request:
+    paths:
+      - "mission_control/**"
+      - "plugins/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/core.yml"
+  push:
+    branches: [main]
+    paths:
+      - "mission_control/**"
+      - "plugins/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/core.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package and test dependencies
+        run: python -m pip install -e '.[test]'
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps --wheel-dir dist
+
+      - name: Verify packaged runtime resources
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheel = next(Path("dist").glob("mission_control-*.whl"))
+          expected = {
+              "mission_control/migrations/0001_initial.sql",
+              "mission_control/schemas/agenda-contribution.schema.json",
+              "mission_control/schemas/agenda-query.schema.json",
+              "mission_control/schemas/plugin-registration.schema.json",
+          }
+          with ZipFile(wheel) as archive:
+              missing = sorted(expected.difference(archive.namelist()))
+          if missing:
+              raise SystemExit(f"missing packaged resources: {', '.join(missing)}")
+          print(f"verified runtime resources in {wheel.name}")
+          PY

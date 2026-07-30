@@ -1,0 +1,22 @@
+{
+  "schema_version": "mission-control.plugin/v1",
+  "id": "reference",
+  "name": "Reference Plugin",
+  "version": "0.1.0",
+  "plugin_api": ">=1.0.0 <2.0.0",
+  "capabilities": ["cli", "events", "health"],
+  "arguments": {
+    "message": {
+      "type": "string",
+      "required": true,
+      "description": "Message returned by the reference capability",
+      "min_length": 1
+    },
+    "repeat": {
+      "type": "integer",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 10
+    }
+  }
+}

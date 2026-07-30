@@ -1,0 +1,23 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "home-maintenance"},
+  "revision": "invalid-2",
+  "generated_at": "2026-07-29T13:00:00-04:00",
+  "entries": [
+    {
+      "id": "impossible-timing",
+      "source": {
+        "plugin_id": "home-maintenance",
+        "entity_type": "task",
+        "entity_id": "impossible-timing"
+      },
+      "title": "Impossible timing combination",
+      "kind": "action",
+      "state": "ready",
+      "timing": {
+        "kind": "anytime",
+        "due_on": "2026-08-01"
+      }
+    }
+  ]
+}

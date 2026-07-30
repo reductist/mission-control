@@ -1,0 +1,36 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "home-search"},
+  "revision": "home-search-12",
+  "generated_at": "2026-07-29T13:00:00-04:00",
+  "entries": [
+    {
+      "id": "open-house-42-oak",
+      "source": {
+        "plugin_id": "home-search",
+        "entity_type": "visit",
+        "entity_id": "open-house-42-oak"
+      },
+      "title": "Open house at 42 Oak Street",
+      "context": "Candidate property",
+      "kind": "event",
+      "timing": {
+        "kind": "timed",
+        "starts_at": "2026-08-02T13:00:00-04:00",
+        "ends_at": "2026-08-02T14:00:00-04:00"
+      }
+    },
+    {
+      "id": "compare-roof-estimates",
+      "source": {
+        "plugin_id": "home-search",
+        "entity_type": "follow-up",
+        "entity_id": "compare-roof-estimates"
+      },
+      "title": "Compare roof repair estimates",
+      "kind": "action",
+      "state": "waiting",
+      "timing": {"kind": "anytime"}
+    }
+  ]
+}

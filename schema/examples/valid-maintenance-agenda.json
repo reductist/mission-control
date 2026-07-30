@@ -1,0 +1,36 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "home-maintenance"},
+  "revision": "maintenance-9",
+  "generated_at": "2026-07-29T13:00:00-04:00",
+  "entries": [
+    {
+      "id": "hvac-filter-2026-09-01",
+      "source": {
+        "plugin_id": "home-maintenance",
+        "entity_type": "service-occurrence",
+        "entity_id": "hvac-filter-2026-09-01"
+      },
+      "title": "Replace HVAC filter",
+      "context": "Heating and cooling",
+      "kind": "action",
+      "state": "ready",
+      "timing": {"kind": "due-on", "due_on": "2026-09-01"}
+    },
+    {
+      "id": "annual-boiler-service-2026",
+      "source": {
+        "plugin_id": "home-maintenance",
+        "entity_type": "appointment",
+        "entity_id": "annual-boiler-service-2026"
+      },
+      "title": "Annual boiler service",
+      "kind": "event",
+      "timing": {
+        "kind": "timed",
+        "starts_at": "2026-10-05T09:00:00-04:00",
+        "ends_at": "2026-10-05T11:00:00-04:00"
+      }
+    }
+  ]
+}

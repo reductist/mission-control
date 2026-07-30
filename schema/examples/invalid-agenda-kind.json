@@ -1,0 +1,20 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "landscape"},
+  "revision": "invalid-1",
+  "generated_at": "2026-07-29T13:00:00-04:00",
+  "entries": [
+    {
+      "id": "bad-kind",
+      "source": {
+        "plugin_id": "landscape",
+        "entity_type": "task",
+        "entity_id": "bad-kind"
+      },
+      "title": "Invalid entry",
+      "kind": "reminder",
+      "state": "ready",
+      "timing": {"kind": "anytime"}
+    }
+  ]
+}
