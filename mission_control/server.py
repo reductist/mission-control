@@ -361,7 +361,7 @@ def _web_resource(name: str):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mcd")
+    parser = argparse.ArgumentParser(prog="mctrld")
     parser.add_argument(
         "--database",
         default=os.environ.get("MC_DATABASE", "mission-control.db"),
