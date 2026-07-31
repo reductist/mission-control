@@ -20,7 +20,7 @@ test = ["pytest>=8.0"]
 
 [project.scripts]
 mcctl = "mission_control.cli:main"
-mcd = "mission_control.server:main"
+mctrld = "mission_control.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mission_control"]
