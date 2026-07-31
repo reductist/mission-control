@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from mission_control.builtin_plugins import load_builtin_agenda_contributions
 from mission_control.database import Database
 from mission_control.server import MissionControlApplication, build_server
 
@@ -47,15 +48,33 @@ def request_json(
 def test_demo_seed_is_idempotent_and_dashboard_is_synthetic(tmp_path):
     database = Database(tmp_path / "mission-control.db")
 
-    first = MissionControlApplication(database, demo=True, write_token="test-token")
-    second = MissionControlApplication(database, demo=True, write_token="test-token")
+    contributions = load_builtin_agenda_contributions(("landscape",))
+    first = MissionControlApplication(
+        database,
+        demo=True,
+        write_token="test-token",
+        agenda_contributions=contributions,
+    )
+    second = MissionControlApplication(
+        database,
+        demo=True,
+        write_token="test-token",
+        agenda_contributions=contributions,
+    )
 
     dashboard = second.dashboard()
     assert dashboard["mode"] == "demo"
-    assert dashboard["summary"]["open"] == 3
-    assert len(dashboard["tasks"]) == 3
+    assert dashboard["summary"]["open"] == 1
+    assert len(dashboard["tasks"]) == 1
     assert dashboard["demo"]["house"]["status"] == "Exploring, not rushing"
-    assert dashboard["demo"]["yard"]["metrics"][1]["value"] == "Equipment access"
+    assert "yard" not in dashboard["demo"]
+    assert {entry["source"]["plugin_id"] for entry in dashboard["agenda"]} == {
+        "core",
+        "landscape",
+    }
+    assert any(
+        entry["id"] == "measure-access-route" for entry in dashboard["agenda"]
+    )
     assert len(first.repository.history(dashboard["tasks"][0]["id"])) >= 1
 
 
@@ -83,7 +102,7 @@ def test_http_dashboard_assets_and_health(tmp_path):
 
         status, dashboard = request_json(f"{base_url}/api/dashboard")
         assert status == 200
-        assert dashboard["summary"]["open"] == 3
+        assert dashboard["summary"]["open"] == 1
 
 
 def test_task_mutations_require_token_and_append_history(tmp_path):
