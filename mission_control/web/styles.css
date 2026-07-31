@@ -212,6 +212,8 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   font: 12px/1 var(--mono);
 }
 .task-toggle:hover { border-color: var(--accent); }
+.task-toggle.is-read-only { color: var(--muted); cursor: default; }
+.task-toggle.is-read-only:hover { border-color: var(--border-strong); }
 .task-title { margin: 1px 0 4px; font-size: 14px; font-weight: 550; }
 .task-description { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .task-row.is-done .task-title { color: var(--muted); text-decoration: line-through; }
