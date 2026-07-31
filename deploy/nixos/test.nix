@@ -1,6 +1,6 @@
 { self, pkgs }:
 
-pkgs.nixosTest {
+pkgs.testers.nixosTest {
   name = "mission-control";
 
   nodes.machine = { pkgs, ... }: {
