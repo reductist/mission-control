@@ -37,7 +37,7 @@ Unknown required capabilities or incompatible interface ranges cause validation 
 The application configuration contains core settings, enabled plugin identifiers, and namespaced plugin configuration. The same schema is consumed by:
 
 - `mcctl`
-- `mcd`
+- `mctrld`
 - the NixOS deployment adapter
 - container deployment adapters
 - the guided setup wizard

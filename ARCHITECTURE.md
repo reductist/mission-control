@@ -12,7 +12,7 @@ The application may consume platform-provided paths, sockets, credentials, and n
 - `mission-control` is the application and distribution package name.
 - `mission_control` is the Python import package.
 - `mcctl` is the canonical administrative CLI.
-- `mcd` is reserved for the long-running daemon.
+- `mctrld` is reserved for the long-running daemon.
 - `mission-control.service` is the systemd unit.
 - `services.mission-control` is the NixOS option namespace.
 
@@ -106,7 +106,7 @@ Mission Control accepts one application-level configuration format with:
 - enabled plugin identifiers
 - per-plugin validated configuration
 
-NixOS modules, Compose files, and the setup wizard are configuration producers. They must not become alternate implementations of application logic. Installer output must pass the same validator used by `mcctl` and `mcd`.
+NixOS modules, Compose files, and the setup wizard are configuration producers. They must not become alternate implementations of application logic. Installer output must pass the same validator used by `mcctl` and `mctrld`.
 
 ## Deployment adapters
 

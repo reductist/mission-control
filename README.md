@@ -12,11 +12,11 @@ A NixOS host is the first deployment target and proving ground, not an applicati
 | Application/package | `mission-control` |
 | Python package | `mission_control` |
 | Administrative CLI | `mcctl` |
-| Long-running daemon | `mcd` |
+| Long-running daemon | `mctrld` |
 | systemd unit | `mission-control.service` |
 | NixOS module | `services.mission-control` |
 
-`mcctl` is the canonical documented command. The shorter `mc` name is deliberately avoided because it is already used by widely deployed tools. `mcd` is the application server and browser-shell process.
+`mcctl` is the canonical administrative command. The shorter `mc` name is deliberately avoided because it is already used by widely deployed tools. `mctrld` is the application server and long-running daemon; the former `mcd` name is not used because it collides with Mtools.
 
 ## Implementation philosophy
 
@@ -30,7 +30,7 @@ The executable implementation provides:
 
 - a small Python application core
 - the canonical `mcctl` executable
-- the minimal `mcd` HTTP server and browser shell
+- the minimal `mctrld` HTTP server and browser shell
 - ordered SQLite migrations
 - task creation, updates, listing, and immutable event history
 - browser task creation, completion, and reopening through the authoritative task repository
@@ -77,12 +77,12 @@ pytest
 Run the demo against a disposable database:
 
 ```sh
-mcd --database ./mission-control-demo.db --demo
+mctrld --database ./mission-control-demo.db --demo
 ```
 
 Then open `http://127.0.0.1:8000`. The House and Yard content is a packaged synthetic fixture. Tasks are real SQLite records: adding, completing, or reopening one in the browser writes through `TaskRepository` and retains immutable task history.
 
-The current MVP has no user authentication. It binds to loopback by default. Keep it on loopback or reach it through an SSH tunnel; do not expose it directly to an untrusted network. Authentication and production deployment are separate follow-up slices.
+The current MVP has no user authentication. It binds to loopback by default. Keep it on loopback or reach it through an SSH tunnel or Tailscale Serve; do not expose it directly to an untrusted network. Authentication and production deployment are separate follow-up slices.
 
 ## Agenda ownership boundary
 
@@ -169,7 +169,7 @@ mcctl agenda list [--format json|table]
 mcctl render markdown
 mcctl plugin validate
 mcctl plugin list [--format json|table]
-mcd [--database PATH] [--host HOST] [--port PORT] [--demo]
+mctrld [--database PATH] [--host HOST] [--port PORT] [--demo]
 ```
 
 Planned additions:
@@ -195,7 +195,7 @@ These are deployment adapters. They produce or consume the same validated applic
 
 1. Portable core, SQLite migrations, `mcctl`, tests, and Markdown rendering.
 2. Stable public plugin contracts plus a reference plugin and contract test harness.
-3. Minimal `mcd` server and browser demo; authentication and production hardening remain follow-up work.
+3. Minimal `mctrld` server and browser demo; authentication and production hardening remain follow-up work.
 4. Declarative NixOS deployment adapter.
 5. OCI/Compose deployment adapter.
 6. Guided first-boot setup and Raspberry Pi appliance image.
