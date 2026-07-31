@@ -65,9 +65,27 @@
         }
       );
 
+      nixosModules = {
+        default = { lib, pkgs, ... }: {
+          imports = [ ./deploy/nixos/module.nix ];
+          services.mission-control.package = lib.mkDefault (
+            self.packages.${pkgs.stdenv.hostPlatform.system}.default
+          );
+        };
+
+        mission-control = self.nixosModules.default;
+      };
+
       checks = forAllSystems (
-        system: {
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        {
           package = self.packages.${system}.default;
+          nixos-service = import ./deploy/nixos/test.nix {
+            inherit self pkgs;
+          };
         }
       );
 
