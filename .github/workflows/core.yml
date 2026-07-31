@@ -6,6 +6,7 @@ on:
       - "mission_control/**"
       - "plugins/**"
       - "tests/**"
+      - "deploy/nixos/**"
       - "pyproject.toml"
       - "flake.nix"
       - ".github/workflows/core.yml"
@@ -15,6 +16,7 @@ on:
       - "mission_control/**"
       - "plugins/**"
       - "tests/**"
+      - "deploy/nixos/**"
       - "pyproject.toml"
       - "flake.nix"
       - ".github/workflows/core.yml"
@@ -68,3 +70,11 @@ jobs:
               raise SystemExit(f"missing packaged resources: {', '.join(missing)}")
           print(f"verified runtime resources in {wheel.name}")
           PY
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Check package and NixOS service
+        run: nix flake check --print-build-logs
