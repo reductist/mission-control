@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+from collections.abc import Iterable
 from dataclasses import asdict
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -18,6 +19,17 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from . import __version__
+from .agenda import (
+    AgendaContribution,
+    agenda_to_list,
+    aggregate_agenda,
+    project_core_tasks,
+)
+from .builtin_plugins import (
+    BUILTIN_AGENDA_PLUGIN_IDS,
+    BuiltinPluginError,
+    load_builtin_agenda_contributions,
+)
 from .database import Database
 from .migrations import MigrationRunner
 from .tasks import TASK_STATES, Task, TaskRepository
@@ -33,16 +45,6 @@ _DEMO_TASKS = (
         "Compare two home purchase scenarios",
         "Capture the trade-offs that matter before discussing individual listings.",
         "in-progress",
-    ),
-    (
-        "Measure the driveway drop-off for equipment access",
-        "Record the rise, run, and usable landing area before choosing a solution.",
-        "ready",
-    ),
-    (
-        "Review low-voltage shade lighting options",
-        "Favor an extensible system that can charge from a sunnier location.",
-        "ready",
     ),
 )
 
@@ -66,11 +68,13 @@ class MissionControlApplication:
         *,
         demo: bool = False,
         write_token: str | None = None,
+        agenda_contributions: Iterable[AgendaContribution] = (),
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
+        self.agenda_contributions = tuple(agenda_contributions)
         self._demo_fixture = _load_demo_fixture() if demo else None
         if demo:
             _seed_demo_tasks(self.repository)
@@ -78,9 +82,16 @@ class MissionControlApplication:
     def dashboard(self) -> dict[str, object]:
         tasks = self.repository.list()
         active = [task for task in tasks if task.state != "done"]
+        generated_at = datetime.now(UTC)
+        agenda = aggregate_agenda(
+            (
+                project_core_tasks(tasks, generated_at=generated_at),
+                *self.agenda_contributions,
+            )
+        )
         return {
             "version": __version__,
-            "generated_at": datetime.now(UTC).isoformat(),
+            "generated_at": generated_at.isoformat(),
             "mode": "demo" if self.demo else "live",
             "summary": {
                 "open": len(active),
@@ -89,6 +100,7 @@ class MissionControlApplication:
                 "completed": sum(task.state == "done" for task in tasks),
             },
             "tasks": [_task_to_dict(task) for task in _sort_tasks(tasks)],
+            "agenda": agenda_to_list(agenda),
             "demo": self._demo_fixture,
         }
 
@@ -381,16 +393,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--demo",
         action="store_true",
-        help="load synthetic House and Yard fixtures and seed example tasks",
+        help="load the synthetic House fixture and seed its example task",
+    )
+    parser.add_argument(
+        "--plugin",
+        action="append",
+        choices=BUILTIN_AGENDA_PLUGIN_IDS,
+        default=[],
+        help="load a bundled read-only agenda provider; may be repeated",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        agenda_contributions = load_builtin_agenda_contributions(args.plugin)
+    except BuiltinPluginError as error:
+        parser.error(str(error))
     application = MissionControlApplication(
         Database(Path(args.database)),
         demo=args.demo,
+        agenda_contributions=agenda_contributions,
     )
     server = build_server(application, args.host, args.port)
     host, port = server.server_address[:2]
