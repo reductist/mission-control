@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="mission-control-write-token" content="__MC_WRITE_TOKEN__">
+    <meta name="mission-control-mode" content="__MC_MODE__">
+    <title>Mission Control</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script defer src="/assets/app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">MC</span>
+          <div>
+            <strong>Mission Control</strong>
+            <small>Household workspace</small>
+          </div>
+        </div>
+
+        <nav aria-label="Primary navigation">
+          <button class="nav-item is-active" data-view="overview" type="button">
+            <span>01</span> Overview
+          </button>
+          <button class="nav-item" data-view="house" type="button">
+            <span>02</span> House
+          </button>
+          <button class="nav-item" data-view="yard" type="button">
+            <span>03</span> Yard
+          </button>
+        </nav>
+
+        <div class="sidebar-status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <strong id="connection-label">Connecting</strong>
+            <small id="mode-label">Loading workspace</small>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="page-header">
+          <div>
+            <p class="eyebrow" id="page-eyebrow">Household overview</p>
+            <h1 id="page-title">The next right things</h1>
+            <p id="page-description">A shared view of active work, decisions, and longer-term plans.</p>
+          </div>
+          <div class="header-meta">
+            <span id="today-label"></span>
+            <span id="version-label"></span>
+          </div>
+        </header>
+
+        <section id="app" aria-live="polite" aria-busy="true">
+          <div class="loading">Loading Mission Control…</div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
