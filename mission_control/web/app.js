@@ -141,7 +141,7 @@ function renderOverview() {
 function renderHouse() {
   const house = dashboard.demo?.house;
   if (!house) {
-    renderNoDemo("House planning", "Start mcd with --demo to load the synthetic showcase workspace.");
+    renderNoDemo("House planning", "Start mctrld with --demo to load the synthetic showcase workspace.");
     return;
   }
   app.innerHTML = `
@@ -186,7 +186,7 @@ function renderHouse() {
 function renderYard() {
   const yard = dashboard.demo?.yard;
   if (!yard) {
-    renderNoDemo("Yard planning", "Start mcd with --demo to load the synthetic showcase workspace.");
+    renderNoDemo("Yard planning", "Start mctrld with --demo to load the synthetic showcase workspace.");
     return;
   }
   app.innerHTML = `
