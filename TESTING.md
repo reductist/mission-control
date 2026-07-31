@@ -81,7 +81,7 @@ The same application-level smoke scenario should run against:
 - the OCI image and Compose adapter
 - eventually the Raspberry Pi appliance image
 
-The scenario initializes an instance with `mcctl`, creates and updates a task, enables a reference plugin, starts or restarts `mcd`, verifies history and health, and renders Markdown.
+The scenario initializes an instance with `mcctl`, creates and updates a task, enables a reference plugin, starts or restarts `mctrld`, verifies history and health, and renders Markdown.
 
 Deployment adapters may add environment-specific assertions, but they may not replace this shared scenario or alter its application semantics.
 
