@@ -58,9 +58,9 @@
             type = "app";
             program = "${package}/bin/mcctl";
           };
-          mcd = {
+          mctrld = {
             type = "app";
-            program = "${package}/bin/mcd";
+            program = "${package}/bin/mctrld";
           };
         }
       );
