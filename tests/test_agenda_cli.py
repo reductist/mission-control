@@ -136,3 +136,26 @@ def test_done_core_tasks_are_not_projected(tmp_path, capsys):
 
     assert main(["--database", str(database), "agenda", "list"]) == 0
     assert json.loads(capsys.readouterr().out) == []
+
+
+def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
+    database = tmp_path / "mission-control.db"
+
+    assert main(
+        [
+            "--database",
+            str(database),
+            "agenda",
+            "list",
+            "--plugin",
+            "landscape",
+        ]
+    ) == 0
+    output = json.loads(capsys.readouterr().out)
+
+    assert {entry["source"]["plugin_id"] for entry in output} == {"landscape"}
+    assert {entry["id"] for entry in output} >= {
+        "equipment-access",
+        "measure-access-route",
+        "compare-access-concepts",
+    }
