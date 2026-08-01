@@ -296,7 +296,7 @@ function scenarioRow(item) {
 }
 
 function wireTaskButtons() {
-  document.querySelectorAll(".task-toggle").forEach((button) => {
+  document.querySelectorAll("button.task-toggle[data-task-id]").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
