@@ -80,6 +80,15 @@ Plugins expose domain operations through registered command and query handlers. 
 
 Plugins may not reach into private core modules or mutate projections outside their registered operation boundaries.
 
+## Agenda contribution interface
+
+Plugins declaring the `agenda` capability may provide immutable, read-only
+snapshots of initiatives, actions, and events through the versioned agenda
+contract. The provider retains authoritative ownership of detailed state,
+recurrence, and transitions. Agenda renderers and aggregators cannot mutate a
+provider; complete, defer, approve, and run operations use the separate command
+interface and route to exactly one authoritative owner.
+
 ## `mcctl` contribution interface
 
 Plugins may register namespaced subcommands beneath `mcctl`. Contributions declare:
