@@ -124,8 +124,8 @@ Rich may later provide trees for nested configuration and plugin argument defini
 
 ```text
 ./
-├── mission_control/  Python application package and runtime resources
-├── plugins/          built-in and reference plugin assets
+├── mission_control/  Python package, bundled providers, and runtime resources
+├── plugins/          reference and filesystem-discovered plugin assets
 ├── schema/           canonical language-neutral CUE contracts
 ├── scripts/          schema and repository validation
 ├── tests/            core, contract, integration, and CLI tests
