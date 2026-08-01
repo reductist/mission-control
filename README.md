@@ -84,6 +84,10 @@ mctrld --database ./mission-control-demo.db --demo --plugin landscape
 
 Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. Yard reads a validated, read-only Landscape provider snapshot containing the real equipment-access initiative and current action items. Core tasks remain real SQLite records: adding, completing, or reopening one in the browser writes through `TaskRepository` and retains immutable task history. Landscape mutations remain deferred until owner command routing exists.
 
+#### Upgrading an existing Yard demo
+
+An existing demo database may retain the earlier core-owned `Measure the driveway drop-off for equipment access` and `Review low-voltage shade lighting options` tasks. Mission Control does not delete or reclassify stored tasks by title. Complete those two legacy demo tasks before enabling `--plugin landscape` so they do not appear as duplicate active work. Use a fresh database only when the old demo state and history are confirmed disposable.
+
 The current MVP has no user authentication. It binds to loopback by default. Keep it on loopback or reach it through an SSH tunnel or Tailscale Serve; do not expose it directly to an untrusted network. Authentication and production deployment are separate follow-up slices.
 
 ## Agenda ownership boundary
