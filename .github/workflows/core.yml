@@ -57,6 +57,7 @@ jobs:
           expected = {
               "mission_control/migrations/0001_initial.sql",
               "mission_control/builtin_plugins/landscape/agenda.json",
+              "mission_control/builtin_plugins/landscape/migrations/0001_initial.sql",
               "mission_control/builtin_plugins/landscape/registration.json",
               "mission_control/schemas/agenda-contribution.schema.json",
               "mission_control/schemas/agenda-query.schema.json",

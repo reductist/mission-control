@@ -1,0 +1,176 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import FrozenInstanceError, replace
+from datetime import UTC, datetime
+
+import pytest
+
+from mission_control.builtin_plugins import prepare_builtin_agenda_plugins
+from mission_control.builtin_plugins.landscape.domain import (
+    LandscapeActionState,
+    LandscapeEntityKind,
+)
+from mission_control.builtin_plugins.landscape.repository import (
+    LandscapeMigrationRunner,
+    LandscapeRepository,
+    SQLiteLandscapeRepository,
+)
+from mission_control.database import Database
+from mission_control.migrations import MigrationRunner
+from mission_control.server import MissionControlApplication
+
+
+def prepared_landscape():
+    return prepare_builtin_agenda_plugins(("landscape",))
+
+
+def initialized_repository(tmp_path) -> LandscapeRepository:
+    database = Database(tmp_path / "mission-control.db")
+    MigrationRunner(database).apply()
+    LandscapeMigrationRunner(database).apply()
+    repository = SQLiteLandscapeRepository(database)
+    repository.import_agenda_seed(prepared_landscape()[0].seed)
+    return repository
+
+
+def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    assert MigrationRunner(database).apply() == [1]
+    runner = LandscapeMigrationRunner(database)
+
+    assert runner.apply() == [1]
+    assert runner.apply() == []
+
+    with database.connect() as connection:
+        core_version = connection.execute(
+            "SELECT max(version) FROM schema_migrations"
+        ).fetchone()[0]
+        landscape_version = connection.execute(
+            "SELECT max(version) FROM landscape_schema_migrations"
+        ).fetchone()[0]
+    assert (core_version, landscape_version) == (1, 1)
+
+
+def test_packaged_seed_imports_once_into_immutable_domain_values(tmp_path) -> None:
+    repository = initialized_repository(tmp_path)
+
+    initiatives = repository.list_initiatives()
+    actions = repository.list_actions()
+    assert {item.initiative_id for item in initiatives} == {"equipment-access"}
+    assert {item.action_id for item in actions} == {
+        "measure-access-route",
+        "define-equipment-envelope",
+        "compare-access-concepts",
+        "prepare-fall-leaf-workflow",
+    }
+    assert repository.import_agenda_seed(prepared_landscape()[0].seed) is False
+    with pytest.raises(FrozenInstanceError):
+        actions[0].title = "mutable"  # type: ignore[misc]
+
+
+def test_seed_import_is_atomic_when_an_entry_identity_is_invalid(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    MigrationRunner(database).apply()
+    LandscapeMigrationRunner(database).apply()
+    repository = SQLiteLandscapeRepository(database)
+    seed = prepared_landscape()[0].seed
+    action = seed.entries[1]
+    invalid_action = replace(
+        action,
+        source=replace(action.source, entity_type="task"),
+    )
+    invalid_seed = replace(seed, entries=(seed.entries[0], invalid_action))
+
+    with pytest.raises(ValueError, match="must use entity type 'action'"):
+        repository.import_agenda_seed(invalid_seed)
+
+    assert repository.list_initiatives() == ()
+    assert repository.list_actions() == ()
+
+
+def test_state_and_history_survive_restart_without_seed_overwrite(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    prepared = prepared_landscape()
+    first = MissionControlApplication(database, builtin_plugins=prepared)
+    first_repository = first.agenda_providers[0].repository
+    changed = first_repository.set_action_state(
+        "measure-access-route", LandscapeActionState.DONE
+    )
+    assert changed.version == 2
+    assert (
+        len(
+            first_repository.history(LandscapeEntityKind.ACTION, "measure-access-route")
+        )
+        == 2
+    )
+
+    restarted = MissionControlApplication(database, builtin_plugins=prepared)
+    restarted_repository = restarted.agenda_providers[0].repository
+    persisted = restarted_repository.get_action("measure-access-route")
+    assert persisted.state is LandscapeActionState.DONE
+    assert persisted.version == 2
+    assert (
+        len(
+            restarted_repository.history(
+                LandscapeEntityKind.ACTION, "measure-access-route"
+            )
+        )
+        == 2
+    )
+    assert "measure-access-route" not in {
+        entry["id"] for entry in restarted.dashboard()["agenda"]
+    }
+
+
+def test_projection_revision_changes_with_persisted_state(tmp_path) -> None:
+    repository = initialized_repository(tmp_path)
+    generated_at = datetime.now(UTC)
+    before = repository.agenda_contribution(generated_at=generated_at)
+
+    repository.set_action_state("measure-access-route", LandscapeActionState.DONE)
+    after = repository.agenda_contribution(generated_at=generated_at)
+
+    assert before.revision != after.revision
+    assert {entry.entry_id for entry in before.entries} - {
+        entry.entry_id for entry in after.entries
+    } == {"measure-access-route"}
+
+
+def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    prepared = prepared_landscape()
+    enabled = MissionControlApplication(database, builtin_plugins=prepared)
+    enabled.agenda_providers[0].repository.set_action_state(
+        "measure-access-route", LandscapeActionState.DONE
+    )
+
+    disabled = MissionControlApplication(database)
+    assert all(
+        entry["source"]["plugin_id"] != "landscape"
+        for entry in disabled.dashboard()["agenda"]
+    )
+
+    reenabled = MissionControlApplication(database, builtin_plugins=prepared)
+    assert (
+        reenabled.agenda_providers[0]
+        .repository.get_action("measure-access-route")
+        .state
+        is LandscapeActionState.DONE
+    )
+
+
+def test_landscape_events_are_immutable_at_the_database_boundary(tmp_path) -> None:
+    repository = initialized_repository(tmp_path)
+    event = repository.history(LandscapeEntityKind.ACTION, "measure-access-route")[0]
+
+    with (
+        Database(tmp_path / "mission-control.db").connect() as connection,
+        pytest.raises(sqlite3.IntegrityError, match="immutable"),
+    ):
+        connection.execute(
+            "DELETE FROM landscape_events WHERE event_id = ?", (event.event_id,)
+        )
+
+    assert json.loads(event.payload_json)["state"] == "ready"

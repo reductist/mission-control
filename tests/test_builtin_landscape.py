@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-import sys
 
 import pytest
 
@@ -12,8 +11,13 @@ from mission_control.builtin_plugins import (
 )
 
 
-def test_landscape_provider_validates_real_equipment_access_work() -> None:
-    assert "mission_control.builtin_plugins.landscape" not in sys.modules
+def test_landscape_provider_validates_real_equipment_access_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_import(_name: str):
+        raise AssertionError("plugin implementation imported before activation")
+
+    monkeypatch.setattr(builtin_plugins, "import_module", unexpected_import)
     (contribution,) = load_builtin_agenda_contributions(("landscape",))
 
     assert contribution.provider.plugin_id.value == "landscape"
@@ -30,7 +34,6 @@ def test_landscape_provider_validates_real_equipment_access_work() -> None:
     }
     assert any(getattr(entry, "state", None).value == "blocked" for entry in contribution.entries)
     assert sum(getattr(getattr(entry, "timing", None), "kind", None) == "window" for entry in contribution.entries) == 2
-    assert "mission_control.builtin_plugins.landscape" not in sys.modules
 
 
 def test_builtin_provider_selection_rejects_duplicates() -> None:
