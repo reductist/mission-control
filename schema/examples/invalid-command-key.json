@@ -1,0 +1,15 @@
+{
+  "schema_version": "mission-control.command/v1",
+  "command_id": "b9778cc8-19bb-423d-b772-887e13599044",
+  "target": {
+    "plugin_id": "core",
+    "entity_type": "task",
+    "entity_id": "2aaaf904-df81-4c3b-844e-0f4ed9679c24"
+  },
+  "expected_revision": "2026-07-31T20:00:00+00:00",
+  "command": "set-state",
+  "arguments": {
+    "state": "done"
+  },
+  "callback": "/api/tasks"
+}

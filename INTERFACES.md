@@ -80,6 +80,10 @@ Plugins expose domain operations through registered command and query handlers. 
 
 Plugins may not reach into private core modules or mutate projections outside their registered operation boundaries.
 
+The experimental `mission-control.command/v1` envelope routes by a stable source target containing `plugin_id`, `entity_type`, and `entity_id`. It carries the caller's expected revision so the owner can reject stale intent before mutation. Arguments remain owner-specific JSON and are never interpreted by the aggregate renderer.
+
+The `mission-control.command-result/v1` tagged result reports `accepted`, `rejected`, `conflicted`, `stale`, `unauthorized`, or `failed`. Operator-facing failures are normalized and must not expose raw tracebacks. The initial `core/task:set-state` slice proves the boundary; plugin capability registration, durable idempotency, and actor-aware event envelopes remain experimental follow-up work.
+
 ## Agenda contribution interface
 
 Plugins declaring the `agenda` capability may provide immutable, read-only

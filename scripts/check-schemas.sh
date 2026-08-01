@@ -9,10 +9,14 @@ AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
 AGENDA_QUERY_GENERATED="$GENERATED_DIR/agenda-query.runtime-check.schema.json"
 AGENDA_QUERY_RUNTIME="./mission_control/schemas/agenda-query.schema.json"
+COMMAND_GENERATED="$GENERATED_DIR/command-envelope.runtime-check.schema.json"
+COMMAND_RUNTIME="./mission_control/schemas/command-envelope.schema.json"
+COMMAND_RESULT_GENERATED="$GENERATED_DIR/command-result.runtime-check.schema.json"
+COMMAND_RESULT_RUNTIME="./mission_control/schemas/command-result.schema.json"
 
 cd "$ROOT_DIR"
 mkdir -p "$GENERATED_DIR"
-trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED"' EXIT
+trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED"' EXIT
 
 cue def --force --out jsonschema -e '#PluginRegistration' \
   -o "$PLUGIN_GENERATED" \
@@ -23,6 +27,12 @@ cue def --force --out jsonschema -e '#AgendaContribution' \
 cue def --force --out jsonschema -e '#AgendaQuery' \
   -o "$AGENDA_QUERY_GENERATED" \
   ./schema/agenda
+cue def --force --out jsonschema -e '#CommandEnvelope' \
+  -o "$COMMAND_GENERATED" \
+  ./schema/command
+cue def --force --out jsonschema -e '#CommandResult' \
+  -o "$COMMAND_RESULT_GENERATED" \
+  ./schema/command
 
 compare_schema() {
   local generated="$1"
@@ -55,6 +65,8 @@ PY
 compare_schema "$PLUGIN_GENERATED" "$PLUGIN_RUNTIME" "plugin registration"
 compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
+compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
+compare_schema "$COMMAND_RESULT_GENERATED" "$COMMAND_RESULT_RUNTIME" "command result"
 
 validate_success() {
   local definition="$1"
@@ -81,6 +93,10 @@ for fixture in \
 done
 validate_success '#AgendaQuery' ./schema/agenda "$AGENDA_QUERY_GENERATED" \
   ./schema/examples/valid-agenda-query.json
+validate_success '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
+  ./schema/examples/valid-core-task-command.json
+validate_success '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
+  ./schema/examples/valid-command-result.json
 
 expect_failure() {
   local definition="$1"
@@ -107,6 +123,11 @@ for fixture in \
   ./schema/examples/invalid-default-type.json; do
   expect_failure '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" "$fixture"
 done
+
+expect_failure '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
+  ./schema/examples/invalid-command-key.json
+expect_failure '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
+  ./schema/examples/invalid-command-result.json
 
 for fixture in \
   ./schema/examples/invalid-agenda-kind.json \

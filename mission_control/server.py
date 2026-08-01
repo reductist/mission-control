@@ -30,6 +30,15 @@ from .builtin_plugins import (
     BuiltinPluginError,
     load_builtin_agenda_contributions,
 )
+from .commands import (
+    CommandContext,
+    CommandContractError,
+    CommandRouter,
+    CommandStatus,
+    CoreTaskCommandOwner,
+    outcome_to_dict,
+    parse_command,
+)
 from .database import Database
 from .migrations import MigrationRunner
 from .tasks import TASK_STATES, Task, TaskRepository
@@ -72,6 +81,9 @@ class MissionControlApplication:
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
+        self.command_router = CommandRouter(
+            {"core": CoreTaskCommandOwner(self.repository)}
+        )
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
@@ -146,6 +158,26 @@ class MissionControlApplication:
         except (TypeError, ValueError) as error:
             raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-task", str(error)) from error
 
+    def execute_command(
+        self, document: object, *, authorized: bool
+    ) -> tuple[HTTPStatus, dict[str, object]]:
+        try:
+            command = parse_command(document)
+        except CommandContractError as error:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-command", str(error)) from error
+
+        context = CommandContext(actor="local-write-token") if authorized else None
+        outcome = self.command_router.dispatch(command, context=context)
+        status = {
+            CommandStatus.ACCEPTED: HTTPStatus.OK,
+            CommandStatus.REJECTED: HTTPStatus.BAD_REQUEST,
+            CommandStatus.CONFLICTED: HTTPStatus.CONFLICT,
+            CommandStatus.STALE: HTTPStatus.CONFLICT,
+            CommandStatus.UNAUTHORIZED: HTTPStatus.FORBIDDEN,
+            CommandStatus.FAILED: HTTPStatus.INTERNAL_SERVER_ERROR,
+        }[outcome.status]
+        return status, outcome_to_dict(outcome)
+
     def index_document(self) -> bytes:
         source = _web_resource("index.html").read_text(encoding="utf-8")
         rendered = source.replace(
@@ -207,7 +239,11 @@ def _handler_for(application: MissionControlApplication):
             self._send_error(ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found"))
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler interface
-            if urlsplit(self.path).path != "/api/tasks":
+            path = urlsplit(self.path).path
+            if path == "/api/commands":
+                self._handle_command()
+                return
+            if path != "/api/tasks":
                 self._send_error(ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found"))
                 return
             self._handle_mutation(lambda payload: application.create_task(payload))
@@ -231,6 +267,19 @@ def _handler_for(application: MissionControlApplication):
                 self._send_error(error)
                 return
             self._send_json(HTTPStatus.OK, result)
+
+        def _handle_command(self) -> None:
+            try:
+                payload = self._read_json()
+                supplied = self.headers.get("X-Mission-Control-Token", "")
+                authorized = secrets.compare_digest(supplied, application.write_token)
+                status, result = application.execute_command(
+                    payload, authorized=authorized
+                )
+            except ApiError as error:
+                self._send_error(error)
+                return
+            self._send_json(status, result)
 
         def _require_write_token(self, expected: str) -> None:
             supplied = self.headers.get("X-Mission-Control-Token", "")
