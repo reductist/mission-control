@@ -74,6 +74,8 @@ A plugin migration declares:
 
 Core validates the migration plan before execution. A plugin may not modify core tables or another plugin's private tables.
 
+The current Landscape vertical slice exercises the intended ownership boundary with a domain-specific `LandscapeRepository` protocol, a `SQLiteLandscapeRepository` adapter, `landscape_*` tables, an independently recorded migration version, and append-only Landscape events. Its packaged agenda document is an import seed, not a runtime source of truth: activation records the import once and subsequent starts project only from persisted state. A generalized storage capability and third-party migration planner remain future interface work.
+
 ## Command and query interface
 
 Plugins expose domain operations through registered command and query handlers. Handlers receive only documented context objects, including authorized identity, transaction scope, configuration, logging, and approved core services.

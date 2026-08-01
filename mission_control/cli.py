@@ -17,7 +17,8 @@ from .agenda import aggregate_agenda, agenda_to_list, project_core_tasks
 from .builtin_plugins import (
     BUILTIN_AGENDA_PLUGIN_IDS,
     BuiltinPluginError,
-    load_builtin_agenda_contributions,
+    activate_builtin_agenda_plugins,
+    prepare_builtin_agenda_plugins,
 )
 from .database import Database
 from .migrations import MigrationRunner
@@ -195,10 +196,10 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(catalog_to_list(catalog), sort_keys=True))
         return 0
 
-    plugin_contributions = ()
+    prepared_plugins = ()
     if args.command == "agenda" and args.agenda_command == "list":
         try:
-            plugin_contributions = load_builtin_agenda_contributions(args.plugin)
+            prepared_plugins = prepare_builtin_agenda_plugins(args.plugin)
         except BuiltinPluginError as error:
             stderr.print(f"error: {error}", markup=False)
             return 2
@@ -225,8 +226,22 @@ def main(argv: list[str] | None = None) -> int:
     repository = TaskRepository(database)
 
     if args.command == "agenda" and args.agenda_command == "list":
-        contribution = project_core_tasks(repository.list(), generated_at=datetime.now(UTC))
-        agenda_snapshot = aggregate_agenda((contribution, *plugin_contributions))
+        try:
+            providers = activate_builtin_agenda_plugins(database, prepared_plugins)
+        except BuiltinPluginError as error:
+            stderr.print(f"error: {error}", markup=False)
+            return 2
+        generated_at = datetime.now(UTC)
+        contribution = project_core_tasks(repository.list(), generated_at=generated_at)
+        agenda_snapshot = aggregate_agenda(
+            (
+                contribution,
+                *(
+                    provider.contribution(generated_at=generated_at)
+                    for provider in providers
+                ),
+            )
+        )
         if args.format == "table":
             stdout.print(agenda_table(agenda_snapshot))
         else:

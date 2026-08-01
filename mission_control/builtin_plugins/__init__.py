@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime
+from importlib import import_module
 from importlib.resources import files
+from typing import Protocol
 
 from ..agenda import (
     AgendaContribution,
     AgendaContributionError,
     parse_agenda_contribution,
 )
+from ..database import Database
 from ..plugins import (
     Capability,
+    PluginRegistration,
     PluginRegistrationError,
     parse_plugin_registration,
 )
@@ -25,12 +32,22 @@ class BuiltinPluginError(ValueError):
 BUILTIN_AGENDA_PLUGIN_IDS = ("landscape",)
 
 
+class BuiltinAgendaProvider(Protocol):
+    def contribution(self, *, generated_at: datetime) -> AgendaContribution: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedBuiltinAgendaPlugin:
+    registration: PluginRegistration
+    seed: AgendaContribution
+
+
 def _document(plugin_id: str, name: str) -> object:
     resource = files(__package__).joinpath(plugin_id, name)
     return json.loads(resource.read_text(encoding="utf-8"))
 
 
-def _load_agenda_contribution(plugin_id: str) -> AgendaContribution:
+def _prepare_agenda_plugin(plugin_id: str) -> PreparedBuiltinAgendaPlugin:
     try:
         registration = parse_plugin_registration(
             _document(plugin_id, "registration.json")
@@ -43,7 +60,7 @@ def _load_agenda_contribution(plugin_id: str) -> AgendaContribution:
         contribution = parse_agenda_contribution(_document(plugin_id, "agenda.json"))
         if registration.plugin_id != contribution.provider.plugin_id:
             raise ValueError("registration and agenda provider ids must match")
-        return contribution
+        return PreparedBuiltinAgendaPlugin(registration, contribution)
     except (
         OSError,
         json.JSONDecodeError,
@@ -59,7 +76,15 @@ def load_builtin_agenda_contributions(
 ) -> tuple[AgendaContribution, ...]:
     """Load validated agenda snapshots for explicitly selected built-ins."""
 
-    contributions: list[AgendaContribution] = []
+    return tuple(plugin.seed for plugin in prepare_builtin_agenda_plugins(plugin_ids))
+
+
+def prepare_builtin_agenda_plugins(
+    plugin_ids: Iterable[str],
+) -> tuple[PreparedBuiltinAgendaPlugin, ...]:
+    """Validate selected built-ins without importing code or touching persistence."""
+
+    prepared: list[PreparedBuiltinAgendaPlugin] = []
     selected: set[str] = set()
     for plugin_id in plugin_ids:
         if plugin_id in selected:
@@ -70,5 +95,23 @@ def load_builtin_agenda_contributions(
             raise BuiltinPluginError(
                 f"unknown bundled agenda plugin {plugin_id!r}; available: {supported}"
             )
-        contributions.append(_load_agenda_contribution(plugin_id))
-    return tuple(contributions)
+        prepared.append(_prepare_agenda_plugin(plugin_id))
+    return tuple(prepared)
+
+
+def activate_builtin_agenda_plugins(
+    database: Database,
+    plugins: Iterable[PreparedBuiltinAgendaPlugin],
+) -> tuple[BuiltinAgendaProvider, ...]:
+    """Activate previously validated built-ins in their explicit bootstrap phase."""
+
+    providers: list[BuiltinAgendaProvider] = []
+    for plugin in plugins:
+        plugin_id = plugin.registration.plugin_id.value
+        try:
+            implementation = import_module(f"{__package__}.{plugin_id}")
+            provider = implementation.activate(database, plugin.seed)
+        except (ImportError, OSError, TypeError, ValueError, sqlite3.Error) as error:
+            raise BuiltinPluginError(f"{plugin_id}: {error}") from error
+        providers.append(provider)
+    return tuple(providers)

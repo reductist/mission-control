@@ -28,7 +28,9 @@ from .agenda import (
 from .builtin_plugins import (
     BUILTIN_AGENDA_PLUGIN_IDS,
     BuiltinPluginError,
-    load_builtin_agenda_contributions,
+    PreparedBuiltinAgendaPlugin,
+    activate_builtin_agenda_plugins,
+    prepare_builtin_agenda_plugins,
 )
 from .commands import (
     CommandContext,
@@ -78,6 +80,7 @@ class MissionControlApplication:
         demo: bool = False,
         write_token: str | None = None,
         agenda_contributions: Iterable[AgendaContribution] = (),
+        builtin_plugins: Iterable[PreparedBuiltinAgendaPlugin] = (),
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
@@ -87,6 +90,9 @@ class MissionControlApplication:
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
+        self.agenda_providers = activate_builtin_agenda_plugins(
+            database, tuple(builtin_plugins)
+        )
         self._demo_fixture = _load_demo_fixture() if demo else None
         if demo:
             _seed_demo_tasks(self.repository)
@@ -99,6 +105,10 @@ class MissionControlApplication:
             (
                 project_core_tasks(tasks, generated_at=generated_at),
                 *self.agenda_contributions,
+                *(
+                    provider.contribution(generated_at=generated_at)
+                    for provider in self.agenda_providers
+                ),
             )
         )
         return {
@@ -458,14 +468,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        agenda_contributions = load_builtin_agenda_contributions(args.plugin)
+        builtin_plugins = prepare_builtin_agenda_plugins(args.plugin)
     except BuiltinPluginError as error:
         parser.error(str(error))
-    application = MissionControlApplication(
-        Database(Path(args.database)),
-        demo=args.demo,
-        agenda_contributions=agenda_contributions,
-    )
+    try:
+        application = MissionControlApplication(
+            Database(Path(args.database)),
+            demo=args.demo,
+            builtin_plugins=builtin_plugins,
+        )
+    except BuiltinPluginError as error:
+        parser.error(str(error))
     server = build_server(application, args.host, args.port)
     host, port = server.server_address[:2]
     mode = "demo" if args.demo else "live"
