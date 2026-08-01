@@ -6,8 +6,16 @@ import json
 from collections.abc import Iterable
 from importlib.resources import files
 
-from ..agenda import AgendaContribution, parse_agenda_contribution
-from ..plugins import Capability, parse_plugin_registration
+from ..agenda import (
+    AgendaContribution,
+    AgendaContributionError,
+    parse_agenda_contribution,
+)
+from ..plugins import (
+    Capability,
+    PluginRegistrationError,
+    parse_plugin_registration,
+)
 
 
 class BuiltinPluginError(ValueError):
@@ -23,22 +31,27 @@ def _document(plugin_id: str, name: str) -> object:
 
 
 def _load_agenda_contribution(plugin_id: str) -> AgendaContribution:
-    registration = parse_plugin_registration(_document(plugin_id, "registration.json"))
-    if registration.plugin_id.value != plugin_id:
-        raise BuiltinPluginError(
-            f"bundled plugin directory and registration ids must match: {plugin_id}"
+    try:
+        registration = parse_plugin_registration(
+            _document(plugin_id, "registration.json")
         )
-    if Capability.AGENDA not in registration.capabilities:
-        raise BuiltinPluginError(
-            f"bundled plugin {plugin_id!r} must declare the agenda capability"
-        )
+        if registration.plugin_id.value != plugin_id:
+            raise ValueError("directory and registration ids must match")
+        if Capability.AGENDA not in registration.capabilities:
+            raise ValueError("registration must declare the agenda capability")
 
-    contribution = parse_agenda_contribution(_document(plugin_id, "agenda.json"))
-    if registration.plugin_id != contribution.provider.plugin_id:
-        raise BuiltinPluginError(
-            f"bundled plugin {plugin_id!r} registration and provider ids must match"
-        )
-    return contribution
+        contribution = parse_agenda_contribution(_document(plugin_id, "agenda.json"))
+        if registration.plugin_id != contribution.provider.plugin_id:
+            raise ValueError("registration and agenda provider ids must match")
+        return contribution
+    except (
+        OSError,
+        json.JSONDecodeError,
+        PluginRegistrationError,
+        AgendaContributionError,
+        ValueError,
+    ) as error:
+        raise BuiltinPluginError(f"{plugin_id}: {error}") from error
 
 
 def load_builtin_agenda_contributions(
