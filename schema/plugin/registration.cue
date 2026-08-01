@@ -17,6 +17,7 @@ import "strings"
 }
 
 #Capability:
+	"agenda" |
 	"cli" |
 	"http" |
 	"jobs" |

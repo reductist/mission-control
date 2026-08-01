@@ -99,13 +99,20 @@ function renderOverview() {
   const completedTasks = dashboard.tasks.filter((task) => task.state === "done").slice(0, 2);
   const visibleTasks = [...activeTasks, ...completedTasks].slice(0, 7);
   const house = dashboard.demo?.house;
-  const yard = dashboard.demo?.yard;
+  const yardEntries = landscapeEntries();
+  const yardInitiative = yardEntries.find((entry) => entry.kind === "initiative");
+  const yardActions = yardEntries.filter((entry) => entry.kind === "action");
+  const visibleYardActions = yardActions.slice(0, 4);
+  const visibleCoreTasks = visibleTasks.slice(0, Math.max(0, 7 - visibleYardActions.length));
+  const visibleCount = visibleYardActions.length + visibleCoreTasks.length;
+  const openWork = summary.open + yardActions.length;
+  const blockedWork = summary.blocked + yardActions.filter((entry) => entry.state === "blocked").length;
 
   app.innerHTML = `
     <div class="metric-grid">
-      ${metric("Open work", summary.open, "Across the household workspace")}
+      ${metric("Open work", openWork, "Across core and enabled providers")}
       ${metric("In progress", summary.in_progress, "Work currently being moved")}
-      ${metric("Blocked", summary.blocked, summary.blocked ? "Needs a decision or dependency" : "Nothing is stuck")}
+      ${metric("Blocked", blockedWork, blockedWork ? "Needs a decision or dependency" : "Nothing is stuck")}
       ${metric("Completed", summary.completed, "Durable task history retained")}
     </div>
 
@@ -113,10 +120,10 @@ function renderOverview() {
       <section class="panel">
         <div class="panel-header">
           <h2>Next up</h2>
-          <span>${visibleTasks.length} visible</span>
+          <span>${visibleCount} visible</span>
         </div>
         <div class="task-list">
-          ${visibleTasks.length ? visibleTasks.map(taskRow).join("") : '<div class="empty">No tasks yet. Add the first shared task below.</div>'}
+          ${visibleCount ? `${visibleYardActions.map(agendaRow).join("")}${visibleCoreTasks.map(taskRow).join("")}` : '<div class="empty">No tasks yet. Add the first shared task below.</div>'}
         </div>
         <form class="quick-add" id="quick-add-form">
           <input id="quick-add-title" name="title" required maxlength="160" placeholder="Add a shared task…" aria-label="New task title">
@@ -126,7 +133,7 @@ function renderOverview() {
 
       <div class="stack">
         ${house ? previewCard("House", house.status, house.summary, "house") : livePlaceholder("House planning")}
-        ${yard ? previewCard("Yard", yard.status, yard.summary, "yard") : livePlaceholder("Yard planning")}
+        ${yardInitiative ? previewCard("Yard", yardInitiative.title, yardInitiative.detail, "yard") : livePlaceholder("Yard planning")}
       </div>
     </div>
   `;
@@ -184,47 +191,39 @@ function renderHouse() {
 }
 
 function renderYard() {
-  const yard = dashboard.demo?.yard;
-  if (!yard) {
-    renderNoDemo("Yard planning", "Start mctrld with --demo to load the synthetic showcase workspace.");
+  const entries = landscapeEntries();
+  if (!entries.length) {
+    renderNoDemo("Yard planning", "Start mctrld with --plugin landscape to load the read-only first Yard slice.");
     return;
   }
+  const initiatives = entries.filter((entry) => entry.kind === "initiative");
+  const actions = entries.filter((entry) => entry.kind === "action");
+  const blocked = actions.filter((entry) => entry.state === "blocked").length;
+  const seasonal = actions.filter((entry) => entry.timing?.kind === "window").length;
+  const primary = initiatives[0];
   app.innerHTML = `
     <div class="section-intro">
       <div>
-        <h2>Seasonal work and long-term design</h2>
-        <p>${escapeHtml(yard.summary)}</p>
+        <h2>${escapeHtml(primary?.title || "Seasonal work and long-term design")}</h2>
+        <p>${escapeHtml(primary?.detail || "Landscape work contributed through the shared agenda contract.")}</p>
       </div>
       <div class="status-note">
-        <strong>${escapeHtml(yard.status)}</strong>
-        <span>Maintenance stays visible without crowding out the larger property plan.</span>
+        <strong>Read-only first slice</strong>
+        <span>These actions are owned by the Landscape plugin; command routing follows in a later PR.</span>
       </div>
     </div>
 
     <div class="metric-grid">
-      ${yard.metrics.map((item) => metric(item.label, item.value, "")).join("")}
+      ${metric("Initiatives", initiatives.length, "Plugin-owned outcomes")}
+      ${metric("Open actions", actions.length, "Projected into the shared agenda")}
+      ${metric("Blocked", blocked, "Waiting for prerequisite measurements")}
+      ${metric("Seasonal windows", seasonal, "Time-bounded preparation")}
     </div>
 
-    <div class="detail-grid">
-      <section class="panel">
-        <div class="panel-header"><h2>Active projects</h2><span>Broad initiatives</span></div>
-        <div class="panel-body">${yard.projects.map(projectRow).join("")}</div>
-      </section>
-      <section class="panel">
-        <div class="panel-header"><h2>Seasonal focus</h2><span>Current window</span></div>
-        <div class="panel-body"><ul class="list">${yard.seasonal.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
-      </section>
-      <section class="panel">
-        <div class="panel-header"><h2>Site constraints</h2><span>Design inputs</span></div>
-        <div class="panel-body"><ul class="list">${yard.constraints.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
-      </section>
-      <section class="panel">
-        <div class="panel-header"><h2>Why this page matters</h2><span>Extension point</span></div>
-        <div class="panel-body">
-          <p class="task-description">The landscape plugin can later own areas, plantings, observations, maintenance windows, research, and photos while projecting urgent work into the shared overview.</p>
-        </div>
-      </section>
-    </div>
+    <section class="panel">
+      <div class="panel-header"><h2>Mission Control action items</h2><span>Landscape provider</span></div>
+      <div class="task-list">${actions.map(agendaRow).join("")}</div>
+    </section>
   `;
 }
 
@@ -249,6 +248,33 @@ function taskRow(task) {
   `;
 }
 
+function landscapeEntries() {
+  return (dashboard.agenda || []).filter((entry) => entry.source?.plugin_id === "landscape");
+}
+
+function agendaRow(entry) {
+  const badgeClass = entry.state === "blocked" ? "is-blocked" : "";
+  const detail = [entry.detail, timingLabel(entry.timing)].filter(Boolean).join(" · ");
+  return `
+    <article class="task-row">
+      <span class="task-toggle is-read-only" aria-hidden="true">·</span>
+      <div>
+        <h3 class="task-title">${escapeHtml(entry.title)}</h3>
+        <p class="task-description">${escapeHtml(detail || "No additional detail")}</p>
+      </div>
+      <span class="state-badge ${badgeClass}">${escapeHtml(entry.state || entry.kind)}</span>
+    </article>
+  `;
+}
+
+function timingLabel(timing) {
+  if (!timing || timing.kind === "anytime") return "Anytime";
+  if (timing.kind === "due-on") return `Due ${timing.due_on}`;
+  if (timing.kind === "due-at") return `Due ${timing.due_at}`;
+  if (timing.kind === "window") return `${timing.starts_at.slice(0, 10)} to ${timing.ends_at.slice(0, 10)}`;
+  return timing.kind;
+}
+
 function previewCard(kicker, title, text, view) {
   return `
     <section class="panel preview-card">
@@ -269,12 +295,8 @@ function scenarioRow(item) {
   return `<article class="scenario"><div class="scenario-head"><h3>${escapeHtml(item.name)}</h3><span class="signal is-${escapeHtml(className)}">${escapeHtml(item.signal)}</span></div><p>${escapeHtml(item.detail)}</p></article>`;
 }
 
-function projectRow(item) {
-  return `<article class="project"><div class="project-head"><h3>${escapeHtml(item.name)}</h3><span class="signal">${escapeHtml(item.state)}</span></div><p>${escapeHtml(item.detail)}</p></article>`;
-}
-
 function wireTaskButtons() {
-  document.querySelectorAll(".task-toggle").forEach((button) => {
+  document.querySelectorAll("button.task-toggle[data-task-id]").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {

@@ -14,6 +14,7 @@ let
       (toString cfg.port)
     ]
     ++ lib.optional cfg.demo "--demo"
+    ++ lib.concatMap (plugin: [ "--plugin" plugin ]) cfg.plugins
   );
 in
 {
@@ -53,8 +54,17 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Opt in to the synthetic House and Yard showcase data. This is disabled
+        Opt in to the synthetic House showcase data. This is disabled
         by default and is not intended for a production data store.
+      '';
+    };
+
+    plugins = lib.mkOption {
+      type = lib.types.listOf (lib.types.enum [ "landscape" ]);
+      default = [ ];
+      description = ''
+        Bundled read-only agenda providers to load explicitly. General plugin
+        lifecycle and third-party activation are not implemented yet.
       '';
     };
   };

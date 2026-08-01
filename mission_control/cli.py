@@ -14,6 +14,11 @@ from rich.console import Console
 
 from . import __version__
 from .agenda import aggregate_agenda, agenda_to_list, project_core_tasks
+from .builtin_plugins import (
+    BUILTIN_AGENDA_PLUGIN_IDS,
+    BuiltinPluginError,
+    load_builtin_agenda_contributions,
+)
 from .database import Database
 from .migrations import MigrationRunner
 from .plugins import (
@@ -115,6 +120,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="json",
         help="output format (default: %(default)s)",
     )
+    agenda_list.add_argument(
+        "--plugin",
+        action="append",
+        choices=BUILTIN_AGENDA_PLUGIN_IDS,
+        default=[],
+        help="include a bundled read-only agenda provider; may be repeated",
+    )
 
     render = subcommands.add_parser("render", help="render read models")
     render_commands = render.add_subparsers(dest="render_command", required=True)
@@ -183,6 +195,14 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(catalog_to_list(catalog), sort_keys=True))
         return 0
 
+    plugin_contributions = ()
+    if args.command == "agenda" and args.agenda_command == "list":
+        try:
+            plugin_contributions = load_builtin_agenda_contributions(args.plugin)
+        except BuiltinPluginError as error:
+            stderr.print(f"error: {error}", markup=False)
+            return 2
+
     runner = MigrationRunner(database)
 
     if args.command == "init":
@@ -205,10 +225,8 @@ def main(argv: list[str] | None = None) -> int:
     repository = TaskRepository(database)
 
     if args.command == "agenda" and args.agenda_command == "list":
-        contribution = project_core_tasks(
-            repository.list(), generated_at=datetime.now(UTC)
-        )
-        agenda_snapshot = aggregate_agenda((contribution,))
+        contribution = project_core_tasks(repository.list(), generated_at=datetime.now(UTC))
+        agenda_snapshot = aggregate_agenda((contribution, *plugin_contributions))
         if args.format == "table":
             stdout.print(agenda_table(agenda_snapshot))
         else:

@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from mission_control.builtin_plugins import load_builtin_agenda_contributions
 from mission_control.database import Database
 from mission_control.server import MissionControlApplication, build_server
 
@@ -47,15 +48,33 @@ def request_json(
 def test_demo_seed_is_idempotent_and_dashboard_is_synthetic(tmp_path):
     database = Database(tmp_path / "mission-control.db")
 
-    first = MissionControlApplication(database, demo=True, write_token="test-token")
-    second = MissionControlApplication(database, demo=True, write_token="test-token")
+    contributions = load_builtin_agenda_contributions(("landscape",))
+    first = MissionControlApplication(
+        database,
+        demo=True,
+        write_token="test-token",
+        agenda_contributions=contributions,
+    )
+    second = MissionControlApplication(
+        database,
+        demo=True,
+        write_token="test-token",
+        agenda_contributions=contributions,
+    )
 
     dashboard = second.dashboard()
     assert dashboard["mode"] == "demo"
-    assert dashboard["summary"]["open"] == 3
-    assert len(dashboard["tasks"]) == 3
+    assert dashboard["summary"]["open"] == 1
+    assert len(dashboard["tasks"]) == 1
     assert dashboard["demo"]["house"]["status"] == "Exploring, not rushing"
-    assert dashboard["demo"]["yard"]["metrics"][1]["value"] == "Equipment access"
+    assert "yard" not in dashboard["demo"]
+    assert {entry["source"]["plugin_id"] for entry in dashboard["agenda"]} == {
+        "core",
+        "landscape",
+    }
+    assert any(
+        entry["id"] == "measure-access-route" for entry in dashboard["agenda"]
+    )
     assert len(first.repository.history(dashboard["tasks"][0]["id"])) >= 1
 
 
@@ -77,13 +96,45 @@ def test_http_dashboard_assets_and_health(tmp_path):
             assert response.headers["Content-Type"].startswith("text/css")
             assert b"--sidebar" in response.read()
 
+        with urlopen(f"{base_url}/assets/app.js") as response:
+            script = response.read()
+            assert b'querySelectorAll("button.task-toggle[data-task-id]")' in script
+
         status, health = request_json(f"{base_url}/api/health")
         assert status == 200
         assert health == {"status": "ok", "version": "0.1.0"}
 
         status, dashboard = request_json(f"{base_url}/api/dashboard")
         assert status == 200
-        assert dashboard["summary"]["open"] == 3
+        assert dashboard["summary"]["open"] == 1
+
+
+def test_landscape_upgrade_preserves_legacy_demo_tasks_for_manual_cleanup(tmp_path):
+    database = Database(tmp_path / "mission-control.db")
+    old_demo = MissionControlApplication(database, write_token="test-token")
+    measure = old_demo.repository.create(
+        "Measure the driveway drop-off for equipment access",
+        "Record the rise, run, and usable landing area before choosing a solution.",
+    )
+    old_demo.repository.update(measure.id, state="ready")
+    lighting = old_demo.repository.create(
+        "Review low-voltage shade lighting options",
+        "Favor an extensible system that can charge from a sunnier location.",
+    )
+    old_demo.repository.update(lighting.id, state="ready")
+
+    upgraded = MissionControlApplication(
+        database,
+        write_token="test-token",
+        agenda_contributions=load_builtin_agenda_contributions(("landscape",)),
+    )
+    dashboard = upgraded.dashboard()
+
+    assert {task["id"] for task in dashboard["tasks"]} == {measure.id, lighting.id}
+    assert {entry["source"]["plugin_id"] for entry in dashboard["agenda"]} == {
+        "core",
+        "landscape",
+    }
 
 
 def test_task_mutations_require_token_and_append_history(tmp_path):

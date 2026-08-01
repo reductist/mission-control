@@ -1,0 +1,57 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "landscape"},
+  "revision": "equipment-access-v1",
+  "generated_at": "2026-07-31T19:45:00-04:00",
+  "entries": [
+    {
+      "id": "equipment-access",
+      "source": {"plugin_id": "landscape", "entity_type": "initiative", "entity_id": "equipment-access"},
+      "title": "Create safe backyard equipment access",
+      "context": "Backyard",
+      "detail": "A direct temporary ramp from the driveway drop-off would require an impractically long run at a safe grade. Measure the site and target equipment before comparing alternatives.",
+      "kind": "initiative",
+      "state": "open"
+    },
+    {
+      "id": "measure-access-route",
+      "source": {"plugin_id": "landscape", "entity_type": "action", "entity_id": "measure-access-route"},
+      "title": "Measure the backyard access route",
+      "context": "Equipment access",
+      "detail": "Record vertical drop, available run, staging and landing area, path width, gate clearance, and turns; photograph the route before foliage changes.",
+      "kind": "action",
+      "state": "ready",
+      "timing": {"kind": "window", "starts_at": "2026-08-01T00:00:00-04:00", "ends_at": "2026-09-15T23:59:59-04:00"}
+    },
+    {
+      "id": "define-equipment-envelope",
+      "source": {"plugin_id": "landscape", "entity_type": "action", "entity_id": "define-equipment-envelope"},
+      "title": "Define the target equipment envelope",
+      "context": "Equipment access",
+      "detail": "Record target equipment width, weight, turning radius, and acceptable operating grade.",
+      "kind": "action",
+      "state": "ready",
+      "timing": {"kind": "anytime"}
+    },
+    {
+      "id": "compare-access-concepts",
+      "source": {"plugin_id": "landscape", "entity_type": "action", "entity_id": "compare-access-concepts"},
+      "title": "Compare safe access concepts",
+      "context": "Equipment access",
+      "detail": "Blocked until the route and equipment envelope are measured; compare alternate alignments and equipment-specific access rather than assuming one long ramp.",
+      "kind": "action",
+      "state": "blocked",
+      "timing": {"kind": "anytime"}
+    },
+    {
+      "id": "prepare-fall-leaf-workflow",
+      "source": {"plugin_id": "landscape", "entity_type": "action", "entity_id": "prepare-fall-leaf-workflow"},
+      "title": "Prepare the fall leaf workflow",
+      "context": "Seasonal maintenance",
+      "detail": "Stage tools and materials before leaf drop; solo removal becomes rain-sensitive within roughly a two-week collection window.",
+      "kind": "action",
+      "state": "ready",
+      "timing": {"kind": "window", "starts_at": "2026-09-01T00:00:00-04:00", "ends_at": "2026-10-15T23:59:59-04:00"}
+    }
+  ]
+}

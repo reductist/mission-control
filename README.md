@@ -34,7 +34,8 @@ The executable implementation provides:
 - ordered SQLite migrations
 - task creation, updates, listing, and immutable event history
 - browser task creation, completion, and reopening through the authoritative task repository
-- a responsive Overview, House, and Yard demo workspace using clearly synthetic showcase data
+- a responsive Overview and synthetic House demo workspace
+- an explicitly selected, read-only Landscape/Yard agenda provider with real equipment-access actions
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
 - frozen registration domain values, enum-backed finite vocabularies, and an immutable discovery catalog
@@ -62,6 +63,7 @@ mcctl --database ./mission-control.db task list --format table
 mcctl --database ./mission-control.db task update TASK_ID --state ready
 mcctl --database ./mission-control.db task history TASK_ID
 mcctl --database ./mission-control.db agenda list
+mcctl --database ./mission-control.db agenda list --plugin landscape
 mcctl --database ./mission-control.db agenda list --format table
 mcctl --database ./mission-control.db render markdown
 mcctl plugin validate ./plugins/reference/registration.json
@@ -77,10 +79,14 @@ pytest
 Run the demo against a disposable database:
 
 ```sh
-mctrld --database ./mission-control-demo.db --demo
+mctrld --database ./mission-control-demo.db --demo --plugin landscape
 ```
 
-Then open `http://127.0.0.1:8000`. The House and Yard content is a packaged synthetic fixture. Tasks are real SQLite records: adding, completing, or reopening one in the browser writes through `TaskRepository` and retains immutable task history.
+Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. Yard reads a validated, read-only Landscape provider snapshot containing the real equipment-access initiative and current action items. Core tasks remain real SQLite records: adding, completing, or reopening one in the browser writes through `TaskRepository` and retains immutable task history. Landscape mutations remain deferred until owner command routing exists.
+
+#### Upgrading an existing Yard demo
+
+An existing demo database may retain the earlier core-owned `Measure the driveway drop-off for equipment access` and `Review low-voltage shade lighting options` tasks. Mission Control does not delete or reclassify stored tasks by title. Complete those two legacy demo tasks before enabling `--plugin landscape` so they do not appear as duplicate active work. Use a fresh database only when the old demo state and history are confirmed disposable.
 
 The current MVP has no user authentication. It binds to loopback by default. Keep it on loopback or reach it through an SSH tunnel or Tailscale Serve; do not expose it directly to an untrusted network. Authentication and production deployment are separate follow-up slices.
 
@@ -104,7 +110,7 @@ Providers retain authoritative ownership of their records, detailed state machin
 
 Unscheduled work is explicit rather than represented by invented or nullable dates. Actions use `anytime`, `due-on`, `due-at`, or `window` timing; events use `all-day` or `timed` timing. Providers receiving an agenda query expand their own recurring definitions into concrete occurrences within that horizon and may separately include initiatives or unscheduled actions.
 
-The current CLI and browser shell project core tasks only because plugin activation and transport are not implemented yet. Future provider snapshots will enter the same pure aggregator. User operations such as complete, defer, approve, or run follow a separate command path back to the authoritative owner; renderers remain incapable of mutation.
+The CLI and browser shell project core tasks plus explicitly selected bundled provider snapshots through the same pure aggregator. General plugin activation and transport are not implemented yet. User operations such as complete, defer, approve, or run follow a separate command path back to the authoritative owner; renderers remain incapable of mutation.
 
 ## CLI presentation boundary
 
@@ -118,8 +124,8 @@ Rich may later provide trees for nested configuration and plugin argument defini
 
 ```text
 ./
-├── mission_control/  Python application package and runtime resources
-├── plugins/          built-in and reference plugin assets
+├── mission_control/  Python package, bundled providers, and runtime resources
+├── plugins/          reference and filesystem-discovered plugin assets
 ├── schema/           canonical language-neutral CUE contracts
 ├── scripts/          schema and repository validation
 ├── tests/            core, contract, integration, and CLI tests
@@ -165,11 +171,11 @@ mcctl task add
 mcctl task update
 mcctl task list [--format json|table]
 mcctl task history
-mcctl agenda list [--format json|table]
+mcctl agenda list [--format json|table] [--plugin landscape]
 mcctl render markdown
 mcctl plugin validate
 mcctl plugin list [--format json|table]
-mctrld [--database PATH] [--host HOST] [--port PORT] [--demo]
+mctrld [--database PATH] [--host HOST] [--port PORT] [--demo] [--plugin landscape]
 ```
 
 Planned additions:
