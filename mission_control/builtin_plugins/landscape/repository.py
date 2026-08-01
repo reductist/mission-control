@@ -45,6 +45,14 @@ PLUGIN_ID: Final = PluginId("landscape")
 INITIAL_IMPORT_ID: Final = "equipment-access-v1"
 
 
+class StaleLandscapeActionRevisionError(ValueError):
+    """A Landscape action changed after the caller's projection was created."""
+
+    def __init__(self, current_revision: str) -> None:
+        super().__init__("Landscape action revision is stale")
+        self.current_revision = current_revision
+
+
 class LandscapeMigrationRunner:
     """Apply only migrations owned by Landscape."""
 
@@ -97,7 +105,11 @@ class LandscapeRepository(Protocol):
     def get_action(self, action_id: str) -> LandscapeAction: ...
 
     def set_action_state(
-        self, action_id: str, state: LandscapeActionState
+        self,
+        action_id: str,
+        state: LandscapeActionState,
+        *,
+        expected_revision: str | None = None,
     ) -> LandscapeAction: ...
 
     def history(
@@ -188,19 +200,29 @@ class SQLiteLandscapeRepository:
         return self._action_from_row(row)
 
     def set_action_state(
-        self, action_id: str, state: LandscapeActionState
+        self,
+        action_id: str,
+        state: LandscapeActionState,
+        *,
+        expected_revision: str | None = None,
     ) -> LandscapeAction:
-        """Persist a state transition primitive for Landscape's future command owner."""
+        """Persist one Landscape-owned action transition atomically."""
 
         if not isinstance(state, LandscapeActionState):
             raise TypeError("Landscape action state must be a LandscapeActionState")
         with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT * FROM landscape_actions WHERE action_id = ?", (action_id,)
             ).fetchone()
             if row is None:
                 raise KeyError(action_id)
             current = self._action_from_row(row)
+            if (
+                expected_revision is not None
+                and expected_revision != current.revision
+            ):
+                raise StaleLandscapeActionRevisionError(current.revision)
             if current.state is state:
                 return current
 
@@ -267,6 +289,7 @@ class SQLiteLandscapeRepository:
                     timing=self._agenda_timing(action.timing),
                     context=action.context,
                     detail=action.detail,
+                    revision=action.revision,
                 )
             )
 

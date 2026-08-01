@@ -8,7 +8,11 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from mission_control.builtin_plugins import load_builtin_agenda_contributions
+from mission_control.builtin_plugins import (
+    load_builtin_agenda_contributions,
+    prepare_builtin_agenda_plugins,
+)
+from mission_control.builtin_plugins.landscape.domain import LandscapeEntityKind
 from mission_control.database import Database
 from mission_control.server import MissionControlApplication, build_server
 
@@ -98,8 +102,9 @@ def test_http_dashboard_assets_and_health(tmp_path):
 
         with urlopen(f"{base_url}/assets/app.js") as response:
             script = response.read()
-            assert b'querySelectorAll("button.task-toggle[data-task-id]")' in script
+            assert b'querySelectorAll("button.task-toggle[data-command]")' in script
             assert b'request("/api/commands"' in script
+            assert b'data-command="complete"' in script
 
         status, health = request_json(f"{base_url}/api/health")
         assert status == 200
@@ -224,6 +229,78 @@ def test_command_endpoint_routes_core_task_state_with_revision_and_auth(tmp_path
         stale = json.load(conflict.value)
         assert stale["status"] == "stale"
         assert stale["current_revision"] == accepted["revision"]
+
+
+def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
+    database = Database(tmp_path / "mission-control.db")
+    prepared = prepare_builtin_agenda_plugins(("landscape",))
+    first = MissionControlApplication(
+        database,
+        write_token="known-token",
+        builtin_plugins=prepared,
+    )
+    initial = next(
+        entry
+        for entry in first.dashboard()["agenda"]
+        if entry["id"] == "measure-access-route"
+    )
+    complete = {
+        "schema_version": "mission-control.command/v1",
+        "command_id": "landscape-complete-1",
+        "target": initial["source"],
+        "expected_revision": initial["revision"],
+        "command": "complete",
+        "arguments": {},
+    }
+
+    with running_server(first) as base_url:
+        _, completed = request_json(
+            f"{base_url}/api/commands",
+            method="POST",
+            body=complete,
+            token="known-token",
+        )
+        assert completed["status"] == "accepted"
+        assert completed["revision"] == "2"
+        assert completed["result"]["action"]["state"] == "done"
+        _, dashboard = request_json(f"{base_url}/api/dashboard")
+        assert "measure-access-route" not in {
+            entry["id"] for entry in dashboard["agenda"]
+        }
+
+    restarted = MissionControlApplication(
+        database,
+        write_token="known-token",
+        builtin_plugins=prepared,
+    )
+    repository = restarted.agenda_providers[0].repository
+    assert repository.get_action("measure-access-route").state.value == "done"
+    assert len(repository.history(LandscapeEntityKind.ACTION, "measure-access-route")) == 2
+    reopen = {
+        **complete,
+        "command_id": "landscape-reopen-1",
+        "expected_revision": completed["revision"],
+        "command": "reopen",
+    }
+
+    with running_server(restarted) as base_url:
+        _, reopened = request_json(
+            f"{base_url}/api/commands",
+            method="POST",
+            body=reopen,
+            token="known-token",
+        )
+        assert reopened["status"] == "accepted"
+        assert reopened["revision"] == "3"
+        _, dashboard = request_json(f"{base_url}/api/dashboard")
+        restored = next(
+            entry
+            for entry in dashboard["agenda"]
+            if entry["id"] == "measure-access-route"
+        )
+        assert restored["state"] == "ready"
+        assert restored["revision"] == "3"
+    assert len(repository.history(LandscapeEntityKind.ACTION, "measure-access-route")) == 3
 
 
 def test_unknown_mutation_fields_are_rejected(tmp_path):

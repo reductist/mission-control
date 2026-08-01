@@ -29,6 +29,7 @@ class PluginSchemaVersion(StrEnum):
 
 class Capability(StrEnum):
     AGENDA = "agenda"
+    COMMANDS = "commands"
     CLI = "cli"
     HTTP = "http"
     JOBS = "jobs"

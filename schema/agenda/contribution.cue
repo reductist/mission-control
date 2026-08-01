@@ -63,6 +63,7 @@ let entryCommon = {
 	title!:   string & != ""
 	context?: string & != ""
 	detail?:  string & != ""
+	revision?: string & != ""
 }
 
 #Initiative: close({

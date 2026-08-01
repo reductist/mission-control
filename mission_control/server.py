@@ -84,15 +84,21 @@ class MissionControlApplication:
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
-        self.command_router = CommandRouter(
-            {"core": CoreTaskCommandOwner(self.repository)}
-        )
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
         self.agenda_providers = activate_builtin_agenda_plugins(
             database, tuple(builtin_plugins)
         )
+        command_owners = {"core": CoreTaskCommandOwner(self.repository)}
+        command_owners.update(
+            {
+                provider.plugin_id.value: provider.command_owner
+                for provider in self.agenda_providers
+                if provider.command_owner is not None
+            }
+        )
+        self.command_router = CommandRouter(command_owners)
         self._demo_fixture = _load_demo_fixture() if demo else None
         if demo:
             _seed_demo_tasks(self.repository)

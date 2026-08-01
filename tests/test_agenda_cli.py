@@ -87,7 +87,7 @@ def test_cli_projects_core_tasks_to_json_and_table(tmp_path, capsys):
             "2026-08-02",
         ]
     ) == 0
-    capsys.readouterr()
+    task = json.loads(capsys.readouterr().out)
 
     assert main(["--database", str(database), "agenda", "list"]) == 0
     machine_output = json.loads(capsys.readouterr().out)
@@ -96,6 +96,7 @@ def test_cli_projects_core_tasks_to_json_and_table(tmp_path, capsys):
             "context": "Core tasks",
             "id": task["id"],
             "kind": "action",
+            "revision": task["updated_at"],
             "source": {
                 "entity_id": task["id"],
                 "entity_type": "task",
