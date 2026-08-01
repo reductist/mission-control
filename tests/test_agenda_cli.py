@@ -159,3 +159,23 @@ def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
         "measure-access-route",
         "compare-access-concepts",
     }
+
+
+def test_invalid_provider_selection_does_not_initialize_database(tmp_path, capsys):
+    database = tmp_path / "must-not-exist.db"
+
+    assert main(
+        [
+            "--database",
+            str(database),
+            "agenda",
+            "list",
+            "--plugin",
+            "landscape",
+            "--plugin",
+            "landscape",
+        ]
+    ) == 2
+
+    assert "selected more than once" in capsys.readouterr().err
+    assert not database.exists()
