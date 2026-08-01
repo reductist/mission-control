@@ -14,6 +14,14 @@ TASK_STATES: Final[tuple[str, ...]] = ("backlog", "ready", "in-progress", "done"
 _UNSET: Final = object()
 
 
+class StaleTaskRevisionError(ValueError):
+    """A task changed after the caller read its projection."""
+
+    def __init__(self, current_revision: str) -> None:
+        super().__init__("task revision is stale")
+        self.current_revision = current_revision
+
+
 @dataclass(frozen=True)
 class Task:
     id: str
@@ -75,6 +83,7 @@ class TaskRepository:
         blocked: bool | object = _UNSET,
         waiting_on: str | None | object = _UNSET,
         review_after: str | None | object = _UNSET,
+        expected_revision: str | object = _UNSET,
     ) -> Task:
         """Update a task and append one event for material changes.
 
@@ -87,6 +96,12 @@ class TaskRepository:
             if row is None:
                 raise KeyError(task_id)
             current = self._task_from_row(row)
+
+            if expected_revision is not _UNSET:
+                if not isinstance(expected_revision, str):
+                    raise TypeError("expected task revision must be a string")
+                if expected_revision != current.updated_at:
+                    raise StaleTaskRevisionError(current.updated_at)
 
             next_values: dict[str, object] = {
                 "title": current.title,

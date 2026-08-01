@@ -1,0 +1,14 @@
+{
+  "schema_version": "mission-control.command-result/v1",
+  "command_id": "b9778cc8-19bb-423d-b772-887e13599044",
+  "target": {
+    "plugin_id": "core",
+    "entity_type": "task",
+    "entity_id": "2aaaf904-df81-4c3b-844e-0f4ed9679c24"
+  },
+  "status": "stale",
+  "error": {
+    "code": "stale-revision",
+    "detail": "The task changed after this view was loaded."
+  }
+}

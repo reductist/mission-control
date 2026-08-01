@@ -29,6 +29,7 @@ const viewCopy = {
 
 let dashboard = null;
 let activeView = "overview";
+let commandSequence = 0;
 
 document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
@@ -238,7 +239,7 @@ function taskRow(task) {
   const detail = task.description || task.waiting_on || "No additional detail";
   return `
     <article class="task-row ${done ? "is-done" : ""}">
-      <button class="task-toggle" type="button" data-task-id="${escapeHtml(task.id)}" data-next-state="${nextState}" aria-label="${done ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : ""}</button>
+      <button class="task-toggle" type="button" data-task-id="${escapeHtml(task.id)}" data-task-revision="${escapeHtml(task.updated_at)}" data-next-state="${nextState}" aria-label="${done ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : ""}</button>
       <div>
         <h3 class="task-title">${escapeHtml(task.title)}</h3>
         <p class="task-description">${escapeHtml(detail)}</p>
@@ -300,9 +301,20 @@ function wireTaskButtons() {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
-        await request(`/api/tasks/${encodeURIComponent(button.dataset.taskId)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ state: button.dataset.nextState }),
+        await request("/api/commands", {
+          method: "POST",
+          body: JSON.stringify({
+            schema_version: "mission-control.command/v1",
+            command_id: `web-${Date.now()}-${++commandSequence}`,
+            target: {
+              plugin_id: "core",
+              entity_type: "task",
+              entity_id: button.dataset.taskId,
+            },
+            expected_revision: button.dataset.taskRevision,
+            command: "set-state",
+            arguments: { state: button.dataset.nextState },
+          }),
         });
         await refresh();
       } catch (error) {

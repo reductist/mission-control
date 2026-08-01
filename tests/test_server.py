@@ -99,6 +99,7 @@ def test_http_dashboard_assets_and_health(tmp_path):
         with urlopen(f"{base_url}/assets/app.js") as response:
             script = response.read()
             assert b'querySelectorAll("button.task-toggle[data-task-id]")' in script
+            assert b'request("/api/commands"' in script
 
         status, health = request_json(f"{base_url}/api/health")
         assert status == 200
@@ -171,6 +172,58 @@ def test_task_mutations_require_token_and_append_history(tmp_path):
             "task.created",
             "task.updated",
         ]
+
+
+def test_command_endpoint_routes_core_task_state_with_revision_and_auth(tmp_path):
+    application = MissionControlApplication(
+        Database(tmp_path / "mission-control.db"),
+        write_token="known-token",
+    )
+    task = application.repository.create("Use public command route")
+    command = {
+        "schema_version": "mission-control.command/v1",
+        "command_id": "command-1",
+        "target": {
+            "plugin_id": "core",
+            "entity_type": "task",
+            "entity_id": task.id,
+        },
+        "expected_revision": task.updated_at,
+        "command": "set-state",
+        "arguments": {"state": "done"},
+    }
+
+    with running_server(application) as base_url:
+        with pytest.raises(HTTPError) as forbidden:
+            request_json(
+                f"{base_url}/api/commands",
+                method="POST",
+                body=command,
+            )
+        assert forbidden.value.code == 403
+        unauthorized = json.load(forbidden.value)
+        assert unauthorized["status"] == "unauthorized"
+
+        _, accepted = request_json(
+            f"{base_url}/api/commands",
+            method="POST",
+            body=command,
+            token="known-token",
+        )
+        assert accepted["status"] == "accepted"
+        assert accepted["result"]["task"]["state"] == "done"
+
+        with pytest.raises(HTTPError) as conflict:
+            request_json(
+                f"{base_url}/api/commands",
+                method="POST",
+                body=command,
+                token="known-token",
+            )
+        assert conflict.value.code == 409
+        stale = json.load(conflict.value)
+        assert stale["status"] == "stale"
+        assert stale["current_revision"] == accepted["revision"]
 
 
 def test_unknown_mutation_fields_are_rejected(tmp_path):

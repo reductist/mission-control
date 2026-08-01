@@ -7,6 +7,8 @@ The current contracts cover:
 - the registration document a plugin presents before Mission Control imports or activates it
 - the query core sends when requesting agenda contributions for an explicit horizon
 - the immutable agenda contribution a provider returns for aggregation and rendering
+- the command envelope a client sends to exactly one authoritative owner
+- the structured outcome returned for accepted, rejected, stale, unauthorized, or failed commands
 
 CUE definitions are closed by default, so misspelled or undeclared keys fail validation rather than silently expanding a public object.
 
@@ -20,7 +22,13 @@ The agenda boundary is deliberately read-only. Providers retain ownership of the
 
 A query carries an explicit time window and separate flags for unscheduled actions and initiatives. Providers expand only their own recurrence rules into concrete occurrences within that horizon. The aggregate validates and combines immutable values; it does not calculate plugin-specific recurrence or mutate provider state.
 
-User commands are a separate future contract. Agenda entries contain source references, not callbacks, SQL handles, executable payloads, or mutation instructions.
+Agenda entries contain source references, not callbacks, SQL handles, executable payloads, or mutation instructions. A client turns intent into a separate command envelope and supplies the revision it read. Core routes the command by the source plugin identifier to exactly one registered owner.
+
+## Command contract
+
+The command envelope owns generic routing metadata only: a command identity, source target, expected revision, namespaced operation name, and JSON arguments interpreted by the owner. Core authenticates the caller, resolves exactly one owner, and returns a closed structured outcome.
+
+The first implementation routes the browser's core-task state change through this boundary. `core/task:set-state` is intentionally non-retryable when the client cannot determine whether a request completed: refresh the projection and submit a new command against its current revision. Durable idempotency records and plugin command registration remain follow-up work.
 
 ## Runtime artifacts
 
@@ -31,6 +39,8 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Plugin registration | `schema/plugin/registration.cue` | `mission_control/schemas/plugin-registration.schema.json` |
 | Agenda contribution | `schema/agenda/contribution.cue` | `mission_control/schemas/agenda-contribution.schema.json` |
 | Agenda query | `schema/agenda/query.cue` | `mission_control/schemas/agenda-query.schema.json` |
+| Command envelope | `schema/command/contract.cue` | `mission_control/schemas/command-envelope.schema.json` |
+| Command result | `schema/command/contract.cue` | `mission_control/schemas/command-result.schema.json` |
 
 The generated artifacts are packaged with the Python application and consumed at untrusted runtime boundaries. They must not be edited by hand.
 
@@ -46,6 +56,16 @@ cue def --force --out jsonschema \
   -e '#AgendaContribution' \
   -o mission_control/schemas/agenda-contribution.schema.json \
   ./schema/agenda
+
+cue def --force --out jsonschema \
+  -e '#CommandEnvelope' \
+  -o mission_control/schemas/command-envelope.schema.json \
+  ./schema/command
+
+cue def --force --out jsonschema \
+  -e '#CommandResult' \
+  -o mission_control/schemas/command-result.schema.json \
+  ./schema/command
 
 cue def --force --out jsonschema \
   -e '#AgendaQuery' \

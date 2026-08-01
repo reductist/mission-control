@@ -8,7 +8,7 @@ from mission_control.cli import main
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.render import render_tasks_markdown
-from mission_control.tasks import TaskRepository
+from mission_control.tasks import StaleTaskRevisionError, TaskRepository
 
 
 def repository_for(tmp_path) -> TaskRepository:
@@ -72,6 +72,19 @@ def test_noop_update_does_not_append_event(tmp_path):
 
     assert repository.update(task.id, title=task.title) == task
     assert len(repository.history(task.id)) == 1
+
+
+def test_expected_revision_rejects_stale_update_without_appending_event(tmp_path):
+    repository = repository_for(tmp_path)
+    task = repository.create("Protect a viewed revision")
+    updated = repository.update(task.id, state="ready", expected_revision=task.updated_at)
+
+    with pytest.raises(StaleTaskRevisionError) as stale:
+        repository.update(task.id, state="done", expected_revision=task.updated_at)
+
+    assert stale.value.current_revision == updated.updated_at
+    assert repository.get(task.id) == updated
+    assert len(repository.history(task.id)) == 2
 
 
 def test_markdown_render_is_deterministic(tmp_path):

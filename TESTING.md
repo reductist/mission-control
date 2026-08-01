@@ -30,6 +30,8 @@ The CUE contracts and generated schemas define the machine-readable test targets
 - generated output is reproducible
 - runtime validators and generated documentation share the same source definitions
 - built-in and reference plugins validate through the same path
+- command envelopes and every structured outcome variant remain closed and versioned
+- stale revisions are rejected before an owner mutation is applied
 
 ### Plugin contract suite
 

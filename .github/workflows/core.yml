@@ -60,6 +60,8 @@ jobs:
               "mission_control/builtin_plugins/landscape/registration.json",
               "mission_control/schemas/agenda-contribution.schema.json",
               "mission_control/schemas/agenda-query.schema.json",
+              "mission_control/schemas/command-envelope.schema.json",
+              "mission_control/schemas/command-result.schema.json",
               "mission_control/schemas/plugin-registration.schema.json",
               "mission_control/web/app.js",
               "mission_control/web/demo.json",

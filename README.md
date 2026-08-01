@@ -41,6 +41,8 @@ The executable implementation provides:
 - frozen registration domain values, enum-backed finite vocabularies, and an immutable discovery catalog
 - explicit available, rejected, and duplicate-ID conflict catalog outcomes
 - a CUE-defined read-only agenda query and contribution boundary
+- CUE-defined command envelope and structured outcome contracts
+- single-owner command routing with optimistic revision checks
 - frozen initiative, action, event, and timing variants
 - deterministic cross-provider agenda aggregation
 - core tasks projected through the same agenda contract intended for plugins
@@ -82,7 +84,7 @@ Run the demo against a disposable database:
 mctrld --database ./mission-control-demo.db --demo --plugin landscape
 ```
 
-Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. Yard reads a validated, read-only Landscape provider snapshot containing the real equipment-access initiative and current action items. Core tasks remain real SQLite records: adding, completing, or reopening one in the browser writes through `TaskRepository` and retains immutable task history. Landscape mutations remain deferred until owner command routing exists.
+Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. Yard reads a validated, read-only Landscape provider snapshot containing the real equipment-access initiative and current action items. Core tasks remain real SQLite records: adding one uses the existing task endpoint, while completing or reopening one sends a versioned command to the authoritative core-task owner and retains immutable task history. Landscape mutations remain deferred until the plugin can register its own command handler and persistent state.
 
 #### Upgrading an existing Yard demo
 
@@ -157,7 +159,7 @@ The core owns stable extension contracts. Each plugin owns its migrations, confi
 
 The first language-agnostic CUE contract defines plugin registration data and generates the JSON Schema packaged with the application. Untyped JSON is accepted only at parser and filesystem boundaries, then converted into frozen `PluginRegistration` values. Discovery builds a new immutable catalog snapshot on each scan; malformed registrations are rejected explicitly and duplicate IDs become conflicts rather than allowing one source to win silently. No plugin implementation code is imported during this process.
 
-The agenda query and contribution contracts are the next language-neutral boundary. Providers expose read-only snapshots made from closed tagged variants; plugin-specific state and recurrence remain inside the owner. Command routing and mutation are deliberately separate work. Broader application, event, health, and lifecycle contracts remain tracked in #3; state-changing command routing is tracked separately in #4.
+The agenda query and contribution contracts keep provider snapshots read-only; plugin-specific state and recurrence remain inside the owner. The experimental command contracts now prove single-owner routing and stale-revision rejection for core-task state changes. Plugin handler registration, durable idempotency, richer authorization, and owner-scoped transactions remain tracked in #4. Broader application, event, health, and lifecycle contracts remain tracked in #3.
 
 ## CLI direction
 
