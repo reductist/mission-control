@@ -17,7 +17,7 @@ package command
 	target!:           #SourceRef
 	expected_revision!: string & != ""
 	command!:          #Identifier
-	arguments!:        {...}
+	arguments!:        {[string]: _}
 })
 
 #CommandError: close({
@@ -35,7 +35,7 @@ let outcomeCommon = {
 	outcomeCommon
 	status!:   "accepted"
 	revision!: string & != ""
-	result?:   {...}
+	result?:   {[string]: _}
 })
 
 #Rejected: close({
