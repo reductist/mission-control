@@ -195,6 +195,14 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(catalog_to_list(catalog), sort_keys=True))
         return 0
 
+    plugin_contributions = ()
+    if args.command == "agenda" and args.agenda_command == "list":
+        try:
+            plugin_contributions = load_builtin_agenda_contributions(args.plugin)
+        except BuiltinPluginError as error:
+            stderr.print(f"error: {error}", markup=False)
+            return 2
+
     runner = MigrationRunner(database)
 
     if args.command == "init":
@@ -218,11 +226,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "agenda" and args.agenda_command == "list":
         contribution = project_core_tasks(repository.list(), generated_at=datetime.now(UTC))
-        try:
-            plugin_contributions = load_builtin_agenda_contributions(args.plugin)
-        except BuiltinPluginError as error:
-            stderr.print(f"error: {error}", markup=False)
-            return 2
         agenda_snapshot = aggregate_agenda((contribution, *plugin_contributions))
         if args.format == "table":
             stdout.print(agenda_table(agenda_snapshot))
