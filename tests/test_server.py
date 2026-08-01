@@ -96,6 +96,10 @@ def test_http_dashboard_assets_and_health(tmp_path):
             assert response.headers["Content-Type"].startswith("text/css")
             assert b"--sidebar" in response.read()
 
+        with urlopen(f"{base_url}/assets/app.js") as response:
+            script = response.read()
+            assert b'querySelectorAll("button.task-toggle[data-task-id]")' in script
+
         status, health = request_json(f"{base_url}/api/health")
         assert status == 200
         assert health == {"status": "ok", "version": "0.1.0"}
