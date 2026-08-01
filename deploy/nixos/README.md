@@ -32,16 +32,18 @@ The default service:
 - stores SQLite data at `/var/lib/mission-control/mission-control.db`
 - uses a systemd dynamic user and managed state directory
 - restarts after unexpected failures
-- does not load demo data
+- does not load demo data or bundled providers
 
 ## Deliberate demo mode
 
-Synthetic House and Yard content remains explicitly opt-in:
+Synthetic House content remains explicitly opt-in. The real read-only Yard
+slice is selected separately through the bundled Landscape provider:
 
 ```nix
 services.mission-control = {
   enable = true;
   demo = true;
+  plugins = [ "landscape" ];
 };
 ```
 
@@ -73,6 +75,7 @@ services.mission-control.databasePath
 services.mission-control.host
 services.mission-control.port
 services.mission-control.demo
+services.mission-control.plugins
 ```
 
 While the service uses `DynamicUser` and `StateDirectory`, `databasePath` must remain under `/var/lib/mission-control`.
