@@ -9,6 +9,7 @@ pkgs.testers.nixosTest {
     services.mission-control = {
       enable = true;
       demo = true;
+      plugins = [ "landscape" ];
     };
 
     environment.systemPackages = [ pkgs.curl ];
@@ -20,6 +21,9 @@ pkgs.testers.nixosTest {
     machine.wait_for_open_port(8000)
     machine.succeed(
       "curl --fail --silent http://127.0.0.1:8000/api/health | grep -q '\"status\": \"ok\"'"
+    )
+    machine.succeed(
+      "curl --fail --silent http://127.0.0.1:8000/api/dashboard | grep -q '\"id\": \"measure-access-route\"'"
     )
     machine.succeed(
       "systemctl show mission-control.service --property=DynamicUser --value | grep -qx yes"
