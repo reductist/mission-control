@@ -109,6 +109,34 @@ def test_http_dashboard_assets_and_health(tmp_path):
         assert dashboard["summary"]["open"] == 1
 
 
+def test_landscape_upgrade_preserves_legacy_demo_tasks_for_manual_cleanup(tmp_path):
+    database = Database(tmp_path / "mission-control.db")
+    old_demo = MissionControlApplication(database, write_token="test-token")
+    measure = old_demo.repository.create(
+        "Measure the driveway drop-off for equipment access",
+        "Record the rise, run, and usable landing area before choosing a solution.",
+    )
+    old_demo.repository.update(measure.id, state="ready")
+    lighting = old_demo.repository.create(
+        "Review low-voltage shade lighting options",
+        "Favor an extensible system that can charge from a sunnier location.",
+    )
+    old_demo.repository.update(lighting.id, state="ready")
+
+    upgraded = MissionControlApplication(
+        database,
+        write_token="test-token",
+        agenda_contributions=load_builtin_agenda_contributions(("landscape",)),
+    )
+    dashboard = upgraded.dashboard()
+
+    assert {task["id"] for task in dashboard["tasks"]} == {measure.id, lighting.id}
+    assert {entry["source"]["plugin_id"] for entry in dashboard["agenda"]} == {
+        "core",
+        "landscape",
+    }
+
+
 def test_task_mutations_require_token_and_append_history(tmp_path):
     application = MissionControlApplication(
         Database(tmp_path / "mission-control.db"),
