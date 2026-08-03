@@ -131,6 +131,13 @@ def activate_builtin_agenda_plugins(
                 raise ValueError(
                     "registered command owner must expose current entity affordances"
                 )
+            declares_closed_items = (
+                Capability.CLOSED_ITEMS in plugin.registration.capabilities
+            )
+            if callable(getattr(provider, "closed_items", None)) is not declares_closed_items:
+                raise ValueError(
+                    "registration and activated closed-items capability must match"
+                )
         except (
             AttributeError,
             ImportError,

@@ -120,6 +120,12 @@ Affordances describe currently available behavior; renderers must not infer
 operations from an entry kind or state string. An empty affordance list is
 valid. Every non-empty affordance list carries the owner's opaque revision.
 
+## Closed-item contribution interface
+
+Plugins declaring the `closed-items` capability may project entities that are currently completed or otherwise closed through `mission-control.closed-items/v1`. Activation rejects a provider whose implementation and registration disagree. This current-state projection remains separate from the active agenda and from immutable owner-domain event history. Each item carries its stable source reference, owner-defined display state, closure timestamp, optional context, opaque revision, and current affordances.
+
+Core validates closed-item affordances against the same registration-time entity capability envelope used by active projections. Renderers offer reopen or another operation only when the item advertises that capability; they do not infer lifecycle behavior from `state`, entity type, or the fact that the item appears in this projection. Mutations use the ordinary command path and the provider remains authoritative for transition legality and persistence.
+
 ## `mcctl` contribution interface
 
 Plugins may register namespaced subcommands beneath `mcctl`. Contributions declare:

@@ -41,6 +41,11 @@ from mission_control.builtin_plugins.landscape.domain import (
     LandscapeTimingKind,
     LandscapeWindow,
 )
+from mission_control.closed_items import (
+    ClosedItem,
+    ClosedItemsContribution,
+    ClosedItemsSchemaVersion,
+)
 from mission_control.database import Database
 from mission_control.plugins import PluginId
 
@@ -141,6 +146,10 @@ class LandscapeRepository(Protocol):
     ) -> tuple[LandscapeEvent, ...]: ...
 
     def agenda_contribution(self, *, generated_at: datetime) -> AgendaContribution: ...
+
+    def closed_items_contribution(
+        self, *, generated_at: datetime
+    ) -> ClosedItemsContribution: ...
 
 
 class SQLiteLandscapeRepository:
@@ -363,6 +372,45 @@ class SQLiteLandscapeRepository:
             revision=revision,
             generated_at=generated_at,
             entries=tuple(entries),
+        )
+
+    def closed_items_contribution(
+        self, *, generated_at: datetime
+    ) -> ClosedItemsContribution:
+        """Project currently completed actions without mixing them into the agenda."""
+
+        completed = tuple(
+            action
+            for action in self.list_actions()
+            if action.state is LandscapeActionState.DONE
+        )
+        items = tuple(
+            ClosedItem(
+                item_id=action.action_id,
+                source=SourceRef(PLUGIN_ID, "action", action.action_id),
+                title=action.title,
+                state=action.state.value,
+                closed_at=action.updated_at,
+                context=action.context,
+                detail=action.detail,
+                revision=action.revision,
+                affordances=action_affordances(action),
+            )
+            for action in completed
+        )
+        revision = hashlib.sha256(
+            json.dumps(
+                [self._action_revision(action) for action in completed],
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        return ClosedItemsContribution(
+            schema_version=ClosedItemsSchemaVersion.V1,
+            provider=ProviderRef(PLUGIN_ID),
+            revision=revision,
+            generated_at=generated_at,
+            items=items,
         )
 
     @classmethod

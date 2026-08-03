@@ -40,6 +40,7 @@ import "strings"
 
 #Capability:
 	"agenda" |
+	"closed-items" |
 	"commands" |
 	"cli" |
 	"http" |

@@ -140,6 +140,13 @@ def test_state_and_history_survive_restart_without_seed_overwrite(tmp_path) -> N
     assert "measure-access-route" not in {
         entry["id"] for entry in restarted.dashboard()["agenda"]
     }
+    closed = restarted.dashboard()["closed_items"]
+    item = next(entry for entry in closed if entry["id"] == "measure-access-route")
+    assert item["revision"] == "2"
+    assert item["state"] == "done"
+    assert item["affordances"] == [
+        {"capability": "lifecycle.reopen", "command": "reopen"}
+    ]
 
 
 def test_projection_revision_changes_with_persisted_state(tmp_path) -> None:
@@ -154,6 +161,12 @@ def test_projection_revision_changes_with_persisted_state(tmp_path) -> None:
     assert {entry.entry_id for entry in before.entries} - {
         entry.entry_id for entry in after.entries
     } == {"measure-access-route"}
+
+    closed = repository.closed_items_contribution(generated_at=generated_at)
+    assert [item.item_id for item in closed.items] == ["measure-access-route"]
+    reopened = repository.reopen_action("measure-access-route")
+    assert reopened.revision == "3"
+    assert repository.closed_items_contribution(generated_at=generated_at).items == ()
 
 
 def test_action_projection_exposes_opaque_revision_and_rejects_stale_writes(
@@ -192,6 +205,10 @@ def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> No
     assert all(
         entry["source"]["plugin_id"] != "landscape"
         for entry in disabled.dashboard()["agenda"]
+    )
+    assert all(
+        entry["source"]["plugin_id"] != "landscape"
+        for entry in disabled.dashboard()["closed_items"]
     )
 
     reenabled = MissionControlApplication(database, builtin_plugins=prepared)

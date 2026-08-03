@@ -42,6 +42,12 @@ from mission_control.commands import (
     outcome_to_dict,
     parse_command,
 )
+from mission_control.closed_items import (
+    aggregate_closed_items,
+    closed_items_to_list,
+    project_core_closed_items,
+    validate_closed_items_capabilities,
+)
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.tasks import TASK_STATES, Task, TaskRepository
@@ -124,6 +130,20 @@ class MissionControlApplication:
         ):
             validate_agenda_capabilities(plugin.registration, contribution)
 
+        closed_contributions = [
+            project_core_closed_items(tasks, generated_at=generated_at)
+        ]
+        for plugin, provider in zip(
+            self.builtin_plugins, self.agenda_providers, strict=True
+        ):
+            project_closed = getattr(provider, "closed_items", None)
+            if not callable(project_closed):
+                continue
+            contribution = project_closed(generated_at=generated_at)
+            validate_closed_items_capabilities(plugin.registration, contribution)
+            closed_contributions.append(contribution)
+        closed_items = aggregate_closed_items(closed_contributions)
+
         agenda = aggregate_agenda(
             (
                 project_core_tasks(tasks, generated_at=generated_at),
@@ -139,10 +159,11 @@ class MissionControlApplication:
                 "open": len(active),
                 "in_progress": sum(task.state == "in-progress" for task in tasks),
                 "blocked": sum(task.blocked for task in active),
-                "completed": sum(task.state == "done" for task in tasks),
+                "completed": len(closed_items.items),
             },
             "tasks": [_task_to_dict(task) for task in _sort_tasks(tasks)],
             "agenda": agenda_to_list(agenda),
+            "closed_items": closed_items_to_list(closed_items),
             "demo": self._demo_fixture,
         }
 

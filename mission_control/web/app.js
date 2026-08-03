@@ -25,6 +25,11 @@ const viewCopy = {
     title: "Maintain now, design deliberately",
     description: "Balance seasonal maintenance with projects that make the property easier to use and care for.",
   },
+  history: {
+    eyebrow: "Completed work",
+    title: "Closed, not lost",
+    description: "Review completed work and use owner-declared actions when something needs to return.",
+  },
 };
 
 let dashboard = null;
@@ -62,7 +67,10 @@ async function request(path, options = {}) {
   const response = await fetch(path, { ...options, headers });
   const document = await response.json();
   if (!response.ok) {
-    throw new Error(document?.error?.detail || `Request failed (${response.status})`);
+    const error = new Error(document?.error?.detail || `Request failed (${response.status})`);
+    error.status = response.status;
+    error.document = document;
+    throw error;
   }
   return document;
 }
@@ -89,6 +97,8 @@ function render() {
     renderHouse();
   } else if (activeView === "yard") {
     renderYard();
+  } else if (activeView === "history") {
+    renderHistory();
   } else {
     renderOverview();
   }
@@ -97,8 +107,7 @@ function render() {
 function renderOverview() {
   const summary = dashboard.summary;
   const activeTasks = dashboard.tasks.filter((task) => task.state !== "done");
-  const completedTasks = dashboard.tasks.filter((task) => task.state === "done").slice(0, 2);
-  const visibleTasks = [...activeTasks, ...completedTasks].slice(0, 7);
+  const visibleTasks = activeTasks.slice(0, 7);
   const house = dashboard.demo?.house;
   const yardEntries = landscapeEntries();
   const yardInitiative = yardEntries.find((entry) => entry.kind === "initiative");
@@ -144,6 +153,29 @@ function renderOverview() {
   document.querySelectorAll(".text-button[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
+}
+
+function renderHistory() {
+  const items = dashboard.closed_items || [];
+  const reopenable = items.filter((item) => (item.affordances || []).some(
+    (affordance) => affordance.capability === "lifecycle.reopen",
+  )).length;
+  const providers = new Set(items.map((item) => item.source?.plugin_id)).size;
+  app.innerHTML = `
+    <div class="metric-grid history-metrics">
+      ${metric("Closed items", items.length, "Outside the active agenda")}
+      ${metric("Reopenable", reopenable, "Declared by authoritative owners")}
+      ${metric("Sources", providers, "Core and enabled plugins")}
+    </div>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Completed and closed</h2><span>Newest first</span></div>
+      <div class="closed-list">
+        ${items.length ? items.map(closedItemRow).join("") : '<div class="empty">No completed or closed items yet.</div>'}
+      </div>
+    </section>
+  `;
+  wireCommandButtons();
 }
 
 function renderHouse() {
@@ -275,6 +307,48 @@ function landscapeActionRow(entry) {
   `;
 }
 
+function closedItemRow(item) {
+  const reopen = (item.affordances || []).find(
+    (affordance) => affordance.capability === "lifecycle.reopen",
+  );
+  const coreNextState = item.source?.plugin_id === "core" ? ' data-next-state="ready"' : "";
+  const control = reopen && item.revision
+    ? `<button class="secondary-button" type="button" data-plugin-id="${escapeHtml(item.source.plugin_id)}" data-entity-type="${escapeHtml(item.source.entity_type)}" data-entity-id="${escapeHtml(item.source.entity_id)}" data-revision="${escapeHtml(item.revision)}" data-command="${escapeHtml(reopen.command)}" data-capability="${escapeHtml(reopen.capability)}"${coreNextState}>Reopen</button>`
+    : '<span class="read-only-label">Read only</span>';
+  const provenance = [pluginLabel(item.source?.plugin_id), `Closed ${formatDateTime(item.closed_at)}`]
+    .filter(Boolean)
+    .join(" · ");
+  return `
+    <article class="closed-row">
+      <div>
+        <div class="closed-title-line">
+          <h3 class="task-title">${escapeHtml(item.title)}</h3>
+          <span class="state-badge">${escapeHtml(item.state)}</span>
+        </div>
+        <p class="task-description">${escapeHtml(item.detail || "No additional detail")}</p>
+        <p class="item-meta">${escapeHtml(provenance)}</p>
+      </div>
+      ${control}
+    </article>
+  `;
+}
+
+function pluginLabel(pluginId) {
+  if (pluginId === "core") return "Core";
+  if (pluginId === "landscape") return "Yard";
+  return pluginId || "Unknown source";
+}
+
+function formatDateTime(value) {
+  if (!value) return "at an unknown time";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
+
 function timingLabel(timing) {
   if (!timing || timing.kind === "anytime") return "Anytime";
   if (timing.kind === "due-on") return `Due ${timing.due_on}`;
@@ -304,7 +378,7 @@ function scenarioRow(item) {
 }
 
 function wireCommandButtons() {
-  document.querySelectorAll("button.task-toggle[data-command]").forEach((button) => {
+  document.querySelectorAll("button[data-command]").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
@@ -327,11 +401,26 @@ function wireCommandButtons() {
           }),
         });
         await refresh();
+        showNotice("The item was updated from its authoritative owner.");
       } catch (error) {
-        renderError(error);
+        if (error.status === 409) {
+          await refresh();
+          showNotice("That item changed after this view loaded. The view has been refreshed; review the current state before retrying.", "warning");
+        } else {
+          renderError(error);
+        }
       }
     });
   });
+}
+
+function showNotice(message, tone = "success") {
+  const existing = document.querySelector(".notice");
+  if (existing) existing.remove();
+  app.insertAdjacentHTML(
+    "afterbegin",
+    `<div class="notice is-${escapeHtml(tone)}" role="status">${escapeHtml(message)}</div>`,
+  );
 }
 
 async function addTask(event) {

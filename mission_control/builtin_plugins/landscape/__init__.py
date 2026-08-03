@@ -15,6 +15,7 @@ from mission_control.builtin_plugins.landscape.repository import (
     SQLiteLandscapeRepository,
 )
 from mission_control.commands import CommandOwner
+from mission_control.closed_items import ClosedItemsContribution
 from mission_control.database import Database
 from mission_control.plugins import PluginId
 
@@ -27,6 +28,9 @@ class LandscapeAgendaProvider:
 
     def contribution(self, *, generated_at: datetime) -> AgendaContribution:
         return self.repository.agenda_contribution(generated_at=generated_at)
+
+    def closed_items(self, *, generated_at: datetime) -> ClosedItemsContribution:
+        return self.repository.closed_items_contribution(generated_at=generated_at)
 
 
 def activate(database: Database, seed: AgendaContribution) -> LandscapeAgendaProvider:

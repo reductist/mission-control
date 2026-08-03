@@ -13,10 +13,12 @@ COMMAND_GENERATED="$GENERATED_DIR/command-envelope.runtime-check.schema.json"
 COMMAND_RUNTIME="./mission_control/schemas/command-envelope.schema.json"
 COMMAND_RESULT_GENERATED="$GENERATED_DIR/command-result.runtime-check.schema.json"
 COMMAND_RESULT_RUNTIME="./mission_control/schemas/command-result.schema.json"
+CLOSED_ITEMS_GENERATED="$GENERATED_DIR/closed-items-contribution.runtime-check.schema.json"
+CLOSED_ITEMS_RUNTIME="./mission_control/schemas/closed-items-contribution.schema.json"
 
 cd "$ROOT_DIR"
 mkdir -p "$GENERATED_DIR"
-trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED"' EXIT
+trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED" "$CLOSED_ITEMS_GENERATED"' EXIT
 
 cue def --force --out jsonschema -e '#PluginRegistration' \
   -o "$PLUGIN_GENERATED" \
@@ -33,6 +35,9 @@ cue def --force --out jsonschema -e '#CommandEnvelope' \
 cue def --force --out jsonschema -e '#CommandResult' \
   -o "$COMMAND_RESULT_GENERATED" \
   ./schema/command
+cue def --force --out jsonschema -e '#ClosedItemsContribution' \
+  -o "$CLOSED_ITEMS_GENERATED" \
+  ./schema/closed-items
 
 compare_schema() {
   local generated="$1"
@@ -67,6 +72,7 @@ compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
 compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
 compare_schema "$COMMAND_RESULT_GENERATED" "$COMMAND_RESULT_RUNTIME" "command result"
+compare_schema "$CLOSED_ITEMS_GENERATED" "$CLOSED_ITEMS_RUNTIME" "closed items contribution"
 
 validate_success() {
   local definition="$1"
@@ -97,6 +103,8 @@ validate_success '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
   ./schema/examples/valid-core-task-command.json
 validate_success '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
   ./schema/examples/valid-command-result.json
+validate_success '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_GENERATED" \
+  ./schema/examples/valid-landscape-closed-items.json
 
 expect_failure() {
   local definition="$1"
@@ -128,6 +136,8 @@ expect_failure '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
   ./schema/examples/invalid-command-key.json
 expect_failure '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
   ./schema/examples/invalid-command-result.json
+expect_failure '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_GENERATED" \
+  ./schema/examples/invalid-closed-item-key.json
 
 for fixture in \
   ./schema/examples/invalid-agenda-kind.json \
