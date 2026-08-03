@@ -4,6 +4,7 @@ import json
 import sqlite3
 from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime
+from importlib.resources import files
 
 import pytest
 
@@ -13,6 +14,7 @@ from mission_control.builtin_plugins.landscape.domain import (
     LandscapeEntityKind,
 )
 from mission_control.builtin_plugins.landscape.repository import (
+    CorruptLandscapeRecordError,
     LandscapeMigrationRunner,
     LandscapeRepository,
     SQLiteLandscapeRepository,
@@ -41,7 +43,7 @@ def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
     assert MigrationRunner(database).apply() == [1]
     runner = LandscapeMigrationRunner(database)
 
-    assert runner.apply() == [1]
+    assert runner.apply() == [1, 2]
     assert runner.apply() == []
 
     with database.connect() as connection:
@@ -51,7 +53,24 @@ def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
         landscape_version = connection.execute(
             "SELECT max(version) FROM landscape_schema_migrations"
         ).fetchone()[0]
-    assert (core_version, landscape_version) == (1, 1)
+    assert (core_version, landscape_version) == (1, 2)
+
+
+def test_landscape_text_bounds_migrate_existing_state_without_loss(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    MigrationRunner(database).apply()
+    migration = files("mission_control.builtin_plugins.landscape").joinpath(
+        "migrations", "0001_initial.sql"
+    )
+    with database.connect() as connection:
+        connection.executescript(migration.read_text(encoding="utf-8"))
+
+    repository = SQLiteLandscapeRepository(database)
+    repository.import_agenda_seed(prepared_landscape()[0].seed)
+    before = repository.list_actions()
+
+    assert LandscapeMigrationRunner(database).apply() == [2]
+    assert repository.list_actions() == before
 
 
 def test_packaged_seed_imports_once_into_immutable_domain_values(tmp_path) -> None:
@@ -96,9 +115,7 @@ def test_state_and_history_survive_restart_without_seed_overwrite(tmp_path) -> N
     prepared = prepared_landscape()
     first = MissionControlApplication(database, builtin_plugins=prepared)
     first_repository = first.agenda_providers[0].repository
-    changed = first_repository.set_action_state(
-        "measure-access-route", LandscapeActionState.DONE
-    )
+    changed = first_repository.complete_action("measure-access-route")
     assert changed.version == 2
     assert (
         len(
@@ -130,7 +147,7 @@ def test_projection_revision_changes_with_persisted_state(tmp_path) -> None:
     generated_at = datetime.now(UTC)
     before = repository.agenda_contribution(generated_at=generated_at)
 
-    repository.set_action_state("measure-access-route", LandscapeActionState.DONE)
+    repository.complete_action("measure-access-route")
     after = repository.agenda_contribution(generated_at=generated_at)
 
     assert before.revision != after.revision
@@ -150,17 +167,15 @@ def test_action_projection_exposes_opaque_revision_and_rejects_stale_writes(
     )
     assert entry.revision == before.revision == "1"
 
-    changed = repository.set_action_state(
+    changed = repository.complete_action(
         before.action_id,
-        LandscapeActionState.DONE,
         expected_revision=before.revision,
     )
     assert changed.revision == "2"
 
     with pytest.raises(StaleLandscapeActionRevisionError) as stale:
-        repository.set_action_state(
+        repository.reopen_action(
             before.action_id,
-            LandscapeActionState.READY,
             expected_revision=before.revision,
         )
     assert stale.value.current_revision == changed.revision
@@ -171,9 +186,7 @@ def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> No
     database = Database(tmp_path / "mission-control.db")
     prepared = prepared_landscape()
     enabled = MissionControlApplication(database, builtin_plugins=prepared)
-    enabled.agenda_providers[0].repository.set_action_state(
-        "measure-access-route", LandscapeActionState.DONE
-    )
+    enabled.agenda_providers[0].repository.complete_action("measure-access-route")
 
     disabled = MissionControlApplication(database)
     assert all(
@@ -203,3 +216,31 @@ def test_landscape_events_are_immutable_at_the_database_boundary(tmp_path) -> No
         )
 
     assert json.loads(event.payload_json)["state"] == "ready"
+
+
+def test_database_mirrors_critical_landscape_text_bounds(tmp_path) -> None:
+    initialized_repository(tmp_path)
+
+    with (
+        Database(tmp_path / "mission-control.db").connect() as connection,
+        pytest.raises(sqlite3.IntegrityError, match="invalid Landscape action text"),
+    ):
+        connection.execute(
+            "UPDATE landscape_actions SET title = ? WHERE action_id = ?",
+            ("x" * 257, "measure-access-route"),
+        )
+
+
+def test_corrupt_persisted_landscape_data_fails_explicitly(tmp_path) -> None:
+    repository = initialized_repository(tmp_path)
+    with Database(tmp_path / "mission-control.db").connect() as connection:
+        connection.execute(
+            "UPDATE landscape_actions SET updated_at = ? WHERE action_id = ?",
+            ("2026-01-01T00:00:00", "measure-access-route"),
+        )
+
+    with pytest.raises(
+        CorruptLandscapeRecordError,
+        match=r"invalid persisted Landscape action 'measure-access-route'.*timezone-aware",
+    ):
+        repository.get_action("measure-access-route")

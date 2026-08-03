@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from typing import Final, Protocol
@@ -34,6 +35,7 @@ from mission_control.builtin_plugins.landscape.domain import (
     LandscapeEvent,
     LandscapeInitiative,
     LandscapeInitiativeState,
+    LandscapeInvariantError,
     LandscapeTiming,
     LandscapeTimingKind,
     LandscapeWindow,
@@ -51,6 +53,21 @@ class StaleLandscapeActionRevisionError(ValueError):
     def __init__(self, current_revision: str) -> None:
         super().__init__("Landscape action revision is stale")
         self.current_revision = current_revision
+
+
+class CorruptLandscapeRecordError(RuntimeError):
+    """Persisted Landscape data could not form a valid domain value."""
+
+    def __init__(
+        self, entity_kind: LandscapeEntityKind, entity_id: object, detail: str
+    ) -> None:
+        self.entity_kind = entity_kind
+        self.entity_id = str(entity_id)
+        self.detail = detail
+        super().__init__(
+            f"invalid persisted Landscape {entity_kind.value} "
+            f"{self.entity_id!r}: {detail}"
+        )
 
 
 class LandscapeMigrationRunner:
@@ -104,10 +121,16 @@ class LandscapeRepository(Protocol):
 
     def get_action(self, action_id: str) -> LandscapeAction: ...
 
-    def set_action_state(
+    def complete_action(
         self,
         action_id: str,
-        state: LandscapeActionState,
+        *,
+        expected_revision: str | None = None,
+    ) -> LandscapeAction: ...
+
+    def reopen_action(
+        self,
+        action_id: str,
         *,
         expected_revision: str | None = None,
     ) -> LandscapeAction: ...
@@ -199,17 +222,43 @@ class SQLiteLandscapeRepository:
             raise KeyError(action_id)
         return self._action_from_row(row)
 
-    def set_action_state(
+    def complete_action(
         self,
         action_id: str,
-        state: LandscapeActionState,
         *,
         expected_revision: str | None = None,
     ) -> LandscapeAction:
-        """Persist one Landscape-owned action transition atomically."""
+        """Complete one action through its authoritative domain transition."""
 
-        if not isinstance(state, LandscapeActionState):
-            raise TypeError("Landscape action state must be a LandscapeActionState")
+        return self._transition_action(
+            action_id,
+            lambda action, at: action.complete(at=at),
+            expected_revision=expected_revision,
+        )
+
+    def reopen_action(
+        self,
+        action_id: str,
+        *,
+        expected_revision: str | None = None,
+    ) -> LandscapeAction:
+        """Reopen one action through its authoritative domain transition."""
+
+        return self._transition_action(
+            action_id,
+            lambda action, at: action.reopen(at=at),
+            expected_revision=expected_revision,
+        )
+
+    def _transition_action(
+        self,
+        action_id: str,
+        transition: Callable[[LandscapeAction, datetime], LandscapeAction],
+        *,
+        expected_revision: str | None,
+    ) -> LandscapeAction:
+        """Persist one already-defined domain transition atomically."""
+
         with self.database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -218,34 +267,38 @@ class SQLiteLandscapeRepository:
             if row is None:
                 raise KeyError(action_id)
             current = self._action_from_row(row)
-            if (
-                expected_revision is not None
-                and expected_revision != current.revision
-            ):
+            if expected_revision is not None and expected_revision != current.revision:
                 raise StaleLandscapeActionRevisionError(current.revision)
-            if current.state is state:
-                return current
 
-            occurred_at = datetime.now(UTC).isoformat()
-            next_version = current.version + 1
-            connection.execute(
+            updated = transition(current, datetime.now(UTC))
+            result = connection.execute(
                 "UPDATE landscape_actions SET state = ?, version = ?, updated_at = ? "
-                "WHERE action_id = ?",
-                (state.value, next_version, occurred_at, action_id),
+                "WHERE action_id = ? AND version = ?",
+                (
+                    updated.state.value,
+                    updated.version,
+                    updated.updated_at.isoformat(),
+                    action_id,
+                    current.version,
+                ),
             )
+            if result.rowcount != 1:
+                latest = connection.execute(
+                    "SELECT version FROM landscape_actions WHERE action_id = ?",
+                    (action_id,),
+                ).fetchone()
+                if latest is None:
+                    raise KeyError(action_id)
+                raise StaleLandscapeActionRevisionError(str(latest["version"]))
             self._insert_event(
                 connection,
                 LandscapeEntityKind.ACTION,
                 action_id,
                 "landscape.action-state-changed",
-                {"from": current.state.value, "to": state.value},
-                occurred_at,
+                {"from": current.state.value, "to": updated.state.value},
+                updated.updated_at.isoformat(),
             )
-            updated = connection.execute(
-                "SELECT * FROM landscape_actions WHERE action_id = ?", (action_id,)
-            ).fetchone()
-            assert updated is not None
-            return self._action_from_row(updated)
+            return updated
 
     def history(
         self, entity_kind: LandscapeEntityKind, entity_id: str
@@ -314,16 +367,27 @@ class SQLiteLandscapeRepository:
     def _insert_initiative(
         cls, connection: sqlite3.Connection, entry: Initiative, occurred_at: str
     ) -> None:
+        timestamp = datetime.fromisoformat(occurred_at)
+        initiative = LandscapeInitiative(
+            initiative_id=entry.source.entity_id,
+            title=entry.title,
+            state=LandscapeInitiativeState(entry.state.value),
+            context=entry.context,
+            detail=entry.detail,
+            version=1,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
         try:
             connection.execute(
                 "INSERT INTO landscape_initiatives(initiative_id, title, state, context, "
                 "detail, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
                 (
-                    entry.source.entity_id,
-                    entry.title,
-                    entry.state.value,
-                    entry.context,
-                    entry.detail,
+                    initiative.initiative_id,
+                    initiative.title,
+                    initiative.state.value,
+                    initiative.context,
+                    initiative.detail,
                     occurred_at,
                     occurred_at,
                 ),
@@ -335,9 +399,9 @@ class SQLiteLandscapeRepository:
         cls._insert_event(
             connection,
             LandscapeEntityKind.INITIATIVE,
-            entry.source.entity_id,
+            initiative.initiative_id,
             "landscape.initiative-imported",
-            {"state": entry.state.value},
+            {"state": initiative.state.value},
             occurred_at,
         )
 
@@ -345,17 +409,30 @@ class SQLiteLandscapeRepository:
     def _insert_action(
         cls, connection: sqlite3.Connection, entry: Action, occurred_at: str
     ) -> None:
+        timestamp = datetime.fromisoformat(occurred_at)
+        timing = cls._landscape_timing(entry.timing)
+        action = LandscapeAction(
+            action_id=entry.source.entity_id,
+            title=entry.title,
+            state=LandscapeActionState(entry.state.value),
+            timing=timing,
+            context=entry.context,
+            detail=entry.detail,
+            version=1,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
         due_on: str | None = None
         due_at: str | None = None
         starts_at: str | None = None
         ends_at: str | None = None
-        if isinstance(entry.timing, DueOnTiming):
-            due_on = entry.timing.due_on.isoformat()
-        elif isinstance(entry.timing, DueAtTiming):
-            due_at = entry.timing.due_at.isoformat()
-        elif isinstance(entry.timing, WindowTiming):
-            starts_at = entry.timing.starts_at.isoformat()
-            ends_at = entry.timing.ends_at.isoformat()
+        if isinstance(timing, LandscapeDueOn):
+            due_on = timing.due_on.isoformat()
+        elif isinstance(timing, LandscapeDueAt):
+            due_at = timing.due_at.isoformat()
+        elif isinstance(timing, LandscapeWindow):
+            starts_at = timing.starts_at.isoformat()
+            ends_at = timing.ends_at.isoformat()
 
         try:
             connection.execute(
@@ -363,16 +440,16 @@ class SQLiteLandscapeRepository:
                 "due_on, due_at, starts_at, ends_at, context, detail, version, created_at, "
                 "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
                 (
-                    entry.source.entity_id,
-                    entry.title,
-                    entry.state.value,
-                    entry.timing.kind.value,
+                    action.action_id,
+                    action.title,
+                    action.state.value,
+                    action.timing.kind.value,
                     due_on,
                     due_at,
                     starts_at,
                     ends_at,
-                    entry.context,
-                    entry.detail,
+                    action.context,
+                    action.detail,
                     occurred_at,
                     occurred_at,
                 ),
@@ -384,9 +461,9 @@ class SQLiteLandscapeRepository:
         cls._insert_event(
             connection,
             LandscapeEntityKind.ACTION,
-            entry.source.entity_id,
+            action.action_id,
             "landscape.action-imported",
-            {"state": entry.state.value, "timing": entry.timing.kind.value},
+            {"state": action.state.value, "timing": action.timing.kind.value},
             occurred_at,
         )
 
@@ -414,30 +491,44 @@ class SQLiteLandscapeRepository:
 
     @staticmethod
     def _initiative_from_row(row: sqlite3.Row) -> LandscapeInitiative:
-        return LandscapeInitiative(
-            initiative_id=row["initiative_id"],
-            title=row["title"],
-            state=LandscapeInitiativeState(row["state"]),
-            context=row["context"],
-            detail=row["detail"],
-            version=row["version"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
-        )
+        try:
+            return LandscapeInitiative(
+                initiative_id=row["initiative_id"],
+                title=row["title"],
+                state=LandscapeInitiativeState(row["state"]),
+                context=row["context"],
+                detail=row["detail"],
+                version=row["version"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+        except (LandscapeInvariantError, TypeError, ValueError) as error:
+            raise CorruptLandscapeRecordError(
+                LandscapeEntityKind.INITIATIVE,
+                row["initiative_id"],
+                str(error),
+            ) from error
 
     @classmethod
     def _action_from_row(cls, row: sqlite3.Row) -> LandscapeAction:
-        return LandscapeAction(
-            action_id=row["action_id"],
-            title=row["title"],
-            state=LandscapeActionState(row["state"]),
-            timing=cls._timing_from_row(row),
-            context=row["context"],
-            detail=row["detail"],
-            version=row["version"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
-        )
+        try:
+            return LandscapeAction(
+                action_id=row["action_id"],
+                title=row["title"],
+                state=LandscapeActionState(row["state"]),
+                timing=cls._timing_from_row(row),
+                context=row["context"],
+                detail=row["detail"],
+                version=row["version"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+        except (LandscapeInvariantError, TypeError, ValueError) as error:
+            raise CorruptLandscapeRecordError(
+                LandscapeEntityKind.ACTION,
+                row["action_id"],
+                str(error),
+            ) from error
 
     @staticmethod
     def _timing_from_row(row: sqlite3.Row) -> LandscapeTiming:
@@ -458,15 +549,39 @@ class SQLiteLandscapeRepository:
 
     @staticmethod
     def _event_from_row(row: sqlite3.Row) -> LandscapeEvent:
-        return LandscapeEvent(
-            sequence=row["sequence"],
-            event_id=row["event_id"],
-            entity_kind=LandscapeEntityKind(row["entity_kind"]),
-            entity_id=row["entity_id"],
-            event_type=row["event_type"],
-            payload_json=row["payload_json"],
-            occurred_at=datetime.fromisoformat(row["occurred_at"]),
-        )
+        try:
+            return LandscapeEvent(
+                sequence=row["sequence"],
+                event_id=row["event_id"],
+                entity_kind=LandscapeEntityKind(row["entity_kind"]),
+                entity_id=row["entity_id"],
+                event_type=row["event_type"],
+                payload_json=row["payload_json"],
+                occurred_at=datetime.fromisoformat(row["occurred_at"]),
+            )
+        except (LandscapeInvariantError, TypeError, ValueError) as error:
+            kind = LandscapeEntityKind.ACTION
+            try:
+                kind = LandscapeEntityKind(row["entity_kind"])
+            except ValueError:
+                pass
+            raise CorruptLandscapeRecordError(
+                kind,
+                row["entity_id"],
+                str(error),
+            ) from error
+
+    @staticmethod
+    def _landscape_timing(timing: object) -> LandscapeTiming:
+        if isinstance(timing, AnytimeTiming):
+            return LandscapeAnytime()
+        if isinstance(timing, DueOnTiming):
+            return LandscapeDueOn(timing.due_on)
+        if isinstance(timing, DueAtTiming):
+            return LandscapeDueAt(timing.due_at)
+        if isinstance(timing, WindowTiming):
+            return LandscapeWindow(timing.starts_at, timing.ends_at)
+        raise TypeError(f"unsupported Landscape agenda timing: {timing!r}")
 
     @staticmethod
     def _agenda_timing(timing: LandscapeTiming):
