@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from .database import Database
+from mission_control.database import Database
 
 
 class MigrationRunner:

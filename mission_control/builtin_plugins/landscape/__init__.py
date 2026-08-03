@@ -6,17 +6,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import ClassVar
 
-from ...agenda import AgendaContribution
-from ...commands import CommandOwner
-from ...database import Database
-from ...plugins import PluginId
-from .commands import LandscapeCommandOwner
-from .repository import (
+from mission_control.agenda import AgendaContribution
+from mission_control.builtin_plugins.landscape.commands import LandscapeCommandOwner
+from mission_control.builtin_plugins.landscape.repository import (
     PLUGIN_ID,
     LandscapeMigrationRunner,
     LandscapeRepository,
     SQLiteLandscapeRepository,
 )
+from mission_control.commands import CommandOwner
+from mission_control.database import Database
+from mission_control.plugins import PluginId
 
 
 @dataclass(frozen=True, slots=True)

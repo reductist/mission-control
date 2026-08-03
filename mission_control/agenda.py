@@ -15,8 +15,8 @@ from typing import Any, ClassVar, TypeAlias, cast
 
 from jsonschema import Draft202012Validator
 
-from .plugins import PluginId
-from .tasks import Task
+from mission_control.plugins import PluginId
+from mission_control.tasks import Task
 
 
 class AgendaContributionError(ValueError):

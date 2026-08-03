@@ -9,7 +9,7 @@ from rich import box
 from rich.table import Table
 from rich.text import Text
 
-from .agenda import (
+from mission_control.agenda import (
     Action,
     AgendaEntry,
     AggregatedAgenda,
@@ -22,14 +22,14 @@ from .agenda import (
     TimedTiming,
     WindowTiming,
 )
-from .plugins import (
+from mission_control.plugins import (
     AvailablePlugin,
     ConflictedPlugin,
     PluginCatalog,
     PluginCatalogEntry,
     RejectedPlugin,
 )
-from .tasks import Task
+from mission_control.tasks import Task
 
 
 def _text(value: object | None, *, style: str | None = None) -> Text:

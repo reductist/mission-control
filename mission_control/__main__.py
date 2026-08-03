@@ -1,3 +1,3 @@
-from .cli import main
+from mission_control.cli import main
 
 raise SystemExit(main())

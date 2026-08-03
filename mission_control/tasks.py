@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Final
 from uuid import uuid4
 
-from .database import Database
+from mission_control.database import Database
 
 TASK_STATES: Final[tuple[str, ...]] = ("backlog", "ready", "in-progress", "done")
 _UNSET: Final = object()

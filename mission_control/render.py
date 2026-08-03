@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from .tasks import TASK_STATES, Task
+from mission_control.tasks import TASK_STATES, Task
 
 _STATE_HEADINGS = {
     "backlog": "Backlog",

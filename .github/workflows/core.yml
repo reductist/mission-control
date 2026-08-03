@@ -44,6 +44,9 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+      - name: Enforce Python import convention
+        run: python -m ruff check .
+
       - name: Build wheel
         run: python -m pip wheel . --no-deps --wheel-dir dist
 
