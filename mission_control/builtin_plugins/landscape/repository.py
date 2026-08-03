@@ -25,6 +25,7 @@ from mission_control.agenda import (
     SourceRef,
     WindowTiming,
 )
+from mission_control.builtin_plugins.landscape.capabilities import action_affordances
 from mission_control.builtin_plugins.landscape.domain import (
     LandscapeAction,
     LandscapeActionState,
@@ -343,6 +344,7 @@ class SQLiteLandscapeRepository:
                     context=action.context,
                     detail=action.detail,
                     revision=action.revision,
+                    affordances=action_affordances(action),
                 )
             )
 

@@ -257,8 +257,11 @@ function landscapeEntries() {
 function landscapeActionRow(entry) {
   const badgeClass = entry.state === "blocked" ? "is-blocked" : "";
   const detail = [entry.detail, timingLabel(entry.timing)].filter(Boolean).join(" · ");
-  const control = entry.source.plugin_id === "landscape" && entry.kind === "action" && entry.revision
-    ? `<button class="task-toggle" type="button" data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}" data-revision="${escapeHtml(entry.revision)}" data-command="complete" aria-label="Complete ${escapeHtml(entry.title)}"></button>`
+  const complete = (entry.affordances || []).find(
+    (affordance) => affordance.capability === "lifecycle.complete",
+  );
+  const control = complete && entry.revision
+    ? `<button class="task-toggle" type="button" data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}" data-revision="${escapeHtml(entry.revision)}" data-command="${escapeHtml(complete.command)}" data-capability="${escapeHtml(complete.capability)}" aria-label="Complete ${escapeHtml(entry.title)}"></button>`
     : '<span class="task-toggle is-read-only" aria-hidden="true">·</span>';
   return `
     <article class="task-row">

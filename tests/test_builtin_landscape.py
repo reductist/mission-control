@@ -13,7 +13,7 @@ from mission_control.builtin_plugins import (
     prepare_builtin_agenda_plugins,
 )
 from mission_control.database import Database
-from mission_control.plugins import Capability
+from mission_control.plugins import Capability, StandardEntityCapability
 
 
 def test_landscape_provider_validates_real_equipment_access_work(
@@ -53,6 +53,19 @@ def test_landscape_declares_its_public_command_capability() -> None:
         Capability.AGENDA,
         Capability.COMMANDS,
     )
+    envelopes = {
+        entity.entity_type: tuple(
+            capability.value for capability in entity.capabilities
+        )
+        for entity in prepared.registration.entity_types
+    }
+    assert envelopes == {
+        "action": (
+            StandardEntityCapability.LIFECYCLE_COMPLETE.value,
+            StandardEntityCapability.LIFECYCLE_REOPEN.value,
+        ),
+        "initiative": (),
+    }
 
 
 def test_activation_rejects_command_capability_drift(
@@ -71,6 +84,27 @@ def test_activation_rejects_command_capability_drift(
     with pytest.raises(
         BuiltinPluginError,
         match="registration and activated command capability must match",
+    ):
+        activate_builtin_agenda_plugins(
+            Database(tmp_path / "mission-control.db"), (prepared,)
+        )
+
+
+def test_activation_requires_state_dependent_affordances(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    owner_without_affordances = SimpleNamespace(handle=lambda _command, _context: None)
+    provider = SimpleNamespace(
+        plugin_id=prepared.registration.plugin_id,
+        command_owner=owner_without_affordances,
+    )
+    implementation = SimpleNamespace(activate=lambda _database, _seed: provider)
+    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
+
+    with pytest.raises(
+        BuiltinPluginError,
+        match="must expose current entity affordances",
     ):
         activate_builtin_agenda_plugins(
             Database(tmp_path / "mission-control.db"), (prepared,)
@@ -128,4 +162,21 @@ def test_registration_and_provider_ids_must_match(
         BuiltinPluginError,
         match="registration and agenda provider ids must match",
     ):
+        load_builtin_agenda_contributions(("landscape",))
+
+
+def test_registration_must_declare_every_projected_entity_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_document = builtin_plugins._document
+
+    def incomplete_registration(plugin_id: str, name: str) -> object:
+        document = deepcopy(original_document(plugin_id, name))
+        if name == "registration.json":
+            del document["entity_types"]["action"]
+        return document
+
+    monkeypatch.setattr(builtin_plugins, "_document", incomplete_registration)
+
+    with pytest.raises(BuiltinPluginError, match="entity type 'action' is not declared"):
         load_builtin_agenda_contributions(("landscape",))

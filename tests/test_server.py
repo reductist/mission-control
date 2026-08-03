@@ -104,7 +104,7 @@ def test_http_dashboard_assets_and_health(tmp_path):
             script = response.read()
             assert b'querySelectorAll("button.task-toggle[data-command]")' in script
             assert b'request("/api/commands"' in script
-            assert b'data-command="complete"' in script
+            assert b'affordance.capability === "lifecycle.complete"' in script
 
         status, health = request_json(f"{base_url}/api/health")
         assert status == 200
@@ -244,6 +244,9 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         for entry in first.dashboard()["agenda"]
         if entry["id"] == "measure-access-route"
     )
+    assert initial["affordances"] == [
+        {"capability": "lifecycle.complete", "command": "complete"}
+    ]
     complete = {
         "schema_version": "mission-control.command/v1",
         "command_id": "landscape-complete-1",
@@ -300,6 +303,9 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         )
         assert restored["state"] == "ready"
         assert restored["revision"] == "3"
+        assert restored["affordances"] == [
+            {"capability": "lifecycle.complete", "command": "complete"}
+        ]
     assert len(repository.history(LandscapeEntityKind.ACTION, "measure-access-route")) == 3
 
 

@@ -14,7 +14,12 @@ from typing import Any, Protocol, TypeAlias, cast
 from jsonschema import Draft202012Validator
 
 from mission_control.agenda import SourceRef
-from mission_control.plugins import PluginId
+from mission_control.plugins import (
+    EntityAffordance,
+    PluginId,
+    PluginRegistration,
+    entity_type_registration,
+)
 from mission_control.tasks import TASK_STATES, StaleTaskRevisionError, TaskRepository
 
 
@@ -130,6 +135,12 @@ CommandOutcome: TypeAlias = (
 @dataclass(frozen=True, slots=True)
 class CommandContext:
     actor: str
+
+
+@dataclass(frozen=True, slots=True)
+class CommandTargetState:
+    revision: str
+    affordances: tuple[EntityAffordance, ...]
 
 
 class CommandOwner(Protocol):
@@ -287,8 +298,14 @@ def _source_to_dict(source: SourceRef) -> dict[str, str]:
 class CommandRouter:
     """Dispatch a validated command to exactly one registered owner."""
 
-    def __init__(self, owners: Mapping[str, CommandOwner]) -> None:
+    def __init__(
+        self,
+        owners: Mapping[str, CommandOwner],
+        *,
+        registrations: Mapping[str, PluginRegistration] | None = None,
+    ) -> None:
         self._owners = dict(owners)
+        self._registrations = dict(registrations or {})
 
     def dispatch(
         self,
@@ -317,6 +334,13 @@ class CommandRouter:
                 ),
             )
         try:
+            registration = self._registrations.get(command.target.plugin_id.value)
+            if registration is not None:
+                policy_outcome = self._enforce_entity_capabilities(
+                    command, owner, registration
+                )
+                if policy_outcome is not None:
+                    return policy_outcome
             outcome = owner.handle(command, context)
             if not isinstance(
                 outcome,
@@ -338,6 +362,81 @@ class CommandRouter:
                     "The command owner failed without applying a successful outcome.",
                 ),
             )
+
+    @staticmethod
+    def _enforce_entity_capabilities(
+        command: CommandEnvelope,
+        owner: CommandOwner,
+        registration: PluginRegistration,
+    ) -> CommandOutcome | None:
+        declared = entity_type_registration(
+            registration, command.target.entity_type
+        )
+        if declared is None:
+            return _rejected(
+                command,
+                "undeclared-target",
+                f"Plugin {registration.plugin_id.value!r} did not register entity type "
+                f"{command.target.entity_type!r}.",
+            )
+
+        resolver = getattr(owner, "command_state", None)
+        if not callable(resolver):
+            raise TypeError("registered plugin owner does not expose command state")
+        state = resolver(command.target)
+        if state is None:
+            return _rejected(
+                command,
+                "unknown-target",
+                "No command state is available for this target.",
+            )
+        if not isinstance(state, CommandTargetState):
+            raise TypeError("owner returned unsupported command state")
+
+        envelope = {capability.value for capability in declared.capabilities}
+        seen_capabilities: set[str] = set()
+        seen_commands: set[str] = set()
+        for affordance in state.affordances:
+            if not isinstance(affordance, EntityAffordance):
+                raise TypeError("owner returned an unsupported affordance")
+            capability = affordance.capability.value
+            if (
+                capability not in envelope
+                or capability in seen_capabilities
+                or affordance.command in seen_commands
+            ):
+                return Failed(
+                    command.command_id,
+                    command.target,
+                    CommandError(
+                        "capability-contract-violation",
+                        "The plugin exposed command behavior outside its registered "
+                        "entity capability envelope.",
+                    ),
+                )
+            seen_capabilities.add(capability)
+            seen_commands.add(affordance.command)
+
+        if command.expected_revision != state.revision:
+            return Stale(
+                command.command_id,
+                command.target,
+                state.revision,
+                CommandError(
+                    "stale-revision",
+                    "The target changed after this view was loaded; refresh before "
+                    "retrying.",
+                ),
+            )
+
+        if command.command not in seen_commands:
+            return _rejected(
+                command,
+                "unavailable-command",
+                f"Command {command.command!r} is not currently available for this "
+                "target.",
+            )
+        return None
 
 
 class CoreTaskCommandOwner:

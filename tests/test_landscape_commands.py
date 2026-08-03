@@ -75,14 +75,14 @@ def test_landscape_owner_returns_stale_and_legal_transition_outcomes(tmp_path) -
         command_document("3", operation="reopen"), authorized=True
     )
     assert status.value == 400
-    assert invalid["error"]["code"] == "invalid-transition"
+    assert invalid["error"]["code"] == "unavailable-command"
 
 
 def test_landscape_owner_rejects_foreign_targets_arguments_and_commands(tmp_path) -> None:
     app = application(tmp_path)
     cases = (
         (command_document("1", entity_type="initiative"), "unknown-target"),
-        (command_document("1", operation="archive"), "unknown-command"),
+        (command_document("1", operation="archive"), "unavailable-command"),
         (command_document("1", arguments={"force": True}), "invalid-arguments"),
     )
 
