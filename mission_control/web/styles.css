@@ -280,6 +280,43 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
 .error-box { padding: 18px; border: 1px solid var(--danger); border-radius: var(--radius); color: var(--danger); background: var(--panel); }
 .empty { padding: 24px 18px; color: var(--muted); font-size: 13px; }
 
+.history-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.closed-list { display: grid; }
+.closed-row {
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.closed-row:last-child { border-bottom: 0; }
+.closed-title-line { display: flex; align-items: baseline; gap: 9px; }
+.closed-title-line .task-title { margin-bottom: 5px; }
+.item-meta { margin: 7px 0 0; color: var(--muted); font: 10px/1.4 var(--mono); }
+.secondary-button {
+  padding: 8px 11px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: 600 11px/1 var(--mono);
+}
+.secondary-button:hover { background: var(--accent-soft); }
+.read-only-label { color: var(--muted); font: 10px/1 var(--mono); text-transform: uppercase; }
+.notice {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.notice.is-warning { border-color: var(--warning); }
+
 @media (max-width: 900px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .content-grid, .section-intro, .detail-grid { grid-template-columns: 1fr; }
@@ -289,7 +326,7 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; padding: 14px 16px; gap: 14px; }
   .brand { display: none; }
-  nav { grid-template-columns: repeat(3, 1fr); }
+  nav { grid-template-columns: repeat(4, 1fr); }
   .nav-item { justify-content: center; }
   .nav-item span { display: none; }
   .sidebar-status { display: none; }
@@ -300,4 +337,7 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   .task-row { grid-template-columns: 28px minmax(0, 1fr); }
   .task-row .state-badge { grid-column: 2; justify-self: start; }
   .quick-add { grid-template-columns: 1fr; }
+  .history-metrics { grid-template-columns: 1fr; }
+  .closed-row { grid-template-columns: 1fr; }
+  .closed-row .secondary-button, .closed-row .read-only-label { justify-self: start; }
 }

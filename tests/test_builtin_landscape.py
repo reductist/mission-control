@@ -51,6 +51,7 @@ def test_landscape_declares_its_public_command_capability() -> None:
 
     assert prepared.registration.capabilities == (
         Capability.AGENDA,
+        Capability.CLOSED_ITEMS,
         Capability.COMMANDS,
     )
     envelopes = {
@@ -105,6 +106,29 @@ def test_activation_requires_state_dependent_affordances(
     with pytest.raises(
         BuiltinPluginError,
         match="must expose current entity affordances",
+    ):
+        activate_builtin_agenda_plugins(
+            Database(tmp_path / "mission-control.db"), (prepared,)
+        )
+
+
+def test_activation_requires_declared_closed_item_projection(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    provider = SimpleNamespace(
+        plugin_id=prepared.registration.plugin_id,
+        command_owner=SimpleNamespace(
+            command_state=lambda _target: None,
+            handle=lambda _command, _context: None,
+        ),
+    )
+    implementation = SimpleNamespace(activate=lambda _database, _seed: provider)
+    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
+
+    with pytest.raises(
+        BuiltinPluginError,
+        match="activated closed-items capability must match",
     ):
         activate_builtin_agenda_plugins(
             Database(tmp_path / "mission-control.db"), (prepared,)

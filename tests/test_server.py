@@ -102,9 +102,11 @@ def test_http_dashboard_assets_and_health(tmp_path):
 
         with urlopen(f"{base_url}/assets/app.js") as response:
             script = response.read()
-            assert b'querySelectorAll("button.task-toggle[data-command]")' in script
+            assert b'querySelectorAll("button[data-command]")' in script
             assert b'request("/api/commands"' in script
             assert b'affordance.capability === "lifecycle.complete"' in script
+            assert b'affordance.capability === "lifecycle.reopen"' in script
+            assert b"error.status === 409" in script
 
         status, health = request_json(f"{base_url}/api/health")
         assert status == 200
@@ -113,6 +115,7 @@ def test_http_dashboard_assets_and_health(tmp_path):
         status, dashboard = request_json(f"{base_url}/api/dashboard")
         assert status == 200
         assert dashboard["summary"]["open"] == 1
+        assert "closed_items" in dashboard
 
 
 def test_landscape_upgrade_preserves_legacy_demo_tasks_for_manual_cleanup(tmp_path):
@@ -231,6 +234,57 @@ def test_command_endpoint_routes_core_task_state_with_revision_and_auth(tmp_path
         assert stale["current_revision"] == accepted["revision"]
 
 
+def test_completed_core_task_moves_to_history_and_reopens_through_command(tmp_path):
+    application = MissionControlApplication(
+        Database(tmp_path / "mission-control.db"),
+        write_token="known-token",
+    )
+    task = application.repository.create("Restore this from History")
+    complete = {
+        "schema_version": "mission-control.command/v1",
+        "command_id": "core-complete-history-1",
+        "target": {
+            "plugin_id": "core",
+            "entity_type": "task",
+            "entity_id": task.id,
+        },
+        "expected_revision": task.updated_at,
+        "command": "set-state",
+        "arguments": {"state": "done"},
+    }
+
+    with running_server(application) as base_url:
+        _, completed = request_json(
+            f"{base_url}/api/commands",
+            method="POST",
+            body=complete,
+            token="known-token",
+        )
+        _, dashboard = request_json(f"{base_url}/api/dashboard")
+        item = next(entry for entry in dashboard["closed_items"] if entry["id"] == task.id)
+        assert item["revision"] == completed["revision"]
+        assert item["affordances"] == [
+            {"capability": "lifecycle.reopen", "command": "set-state"}
+        ]
+        assert task.id not in {entry["id"] for entry in dashboard["agenda"]}
+
+        _, reopened = request_json(
+            f"{base_url}/api/commands",
+            method="POST",
+            body={
+                **complete,
+                "command_id": "core-reopen-history-1",
+                "expected_revision": item["revision"],
+                "arguments": {"state": "ready"},
+            },
+            token="known-token",
+        )
+        assert reopened["status"] == "accepted"
+        _, dashboard = request_json(f"{base_url}/api/dashboard")
+        assert task.id not in {item["id"] for item in dashboard["closed_items"]}
+        assert task.id in {entry["id"] for entry in dashboard["agenda"]}
+
+
 def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
     database = Database(tmp_path / "mission-control.db")
     prepared = prepare_builtin_agenda_plugins(("landscape",))
@@ -270,6 +324,15 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         assert "measure-access-route" not in {
             entry["id"] for entry in dashboard["agenda"]
         }
+        closed_item = next(
+            item
+            for item in dashboard["closed_items"]
+            if item["id"] == "measure-access-route"
+        )
+        assert closed_item["revision"] == "2"
+        assert closed_item["affordances"] == [
+            {"capability": "lifecycle.reopen", "command": "reopen"}
+        ]
 
     restarted = MissionControlApplication(
         database,
@@ -306,6 +369,9 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         assert restored["affordances"] == [
             {"capability": "lifecycle.complete", "command": "complete"}
         ]
+        assert "measure-access-route" not in {
+            item["id"] for item in dashboard["closed_items"]
+        }
     assert len(repository.history(LandscapeEntityKind.ACTION, "measure-access-route")) == 3
 
 

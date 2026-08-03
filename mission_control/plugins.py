@@ -29,6 +29,7 @@ class PluginSchemaVersion(StrEnum):
 
 class Capability(StrEnum):
     AGENDA = "agenda"
+    CLOSED_ITEMS = "closed-items"
     COMMANDS = "commands"
     CLI = "cli"
     HTTP = "http"

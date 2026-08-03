@@ -1,0 +1,20 @@
+{
+  "schema_version": "mission-control.closed-items/v1",
+  "provider": {"plugin_id": "landscape"},
+  "revision": "invalid-closed-v1",
+  "generated_at": "2026-08-03T02:10:00+00:00",
+  "items": [
+    {
+      "id": "measure-access-route",
+      "source": {
+        "plugin_id": "landscape",
+        "entity_type": "action",
+        "entity_id": "measure-access-route"
+      },
+      "title": "Measure the backyard access route",
+      "state": "done",
+      "closed_at": "2026-08-03T01:56:34+00:00",
+      "reopen": true
+    }
+  ]
+}

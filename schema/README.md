@@ -7,6 +7,7 @@ The current contracts cover:
 - the registration document a plugin presents before Mission Control imports or activates it
 - the query core sends when requesting agenda contributions for an explicit horizon
 - the immutable agenda contribution a provider returns for aggregation and rendering
+- the immutable closed-item contribution a provider returns for completed/history views
 - the command envelope a client sends to exactly one authoritative owner
 - the structured outcome returned for accepted, rejected, stale, unauthorized, or failed commands
 
@@ -30,6 +31,12 @@ The command envelope owns generic routing metadata only: a command identity, sou
 
 The first implementation routes the browser's core-task state change and Landscape lifecycle operations through this boundary. Registration bounds the maximum capabilities of each plugin-owned entity type, while authoritative command state exposes the currently legal subset. `core/task:set-state` is intentionally non-retryable when the client cannot determine whether a request completed: refresh the projection and submit a new command against its current revision. Durable idempotency records remain follow-up work.
 
+## Closed-item contract
+
+Closed items are projected separately so the default agenda remains focused on active work. A plugin must declare the top-level `closed-items` capability before activation. Its provider decides which entities are currently closed, supplies the opaque revision and display state, and advertises only the affordances legal in that state. Core validates those affordances against registration, aggregates provider snapshots, and never infers that every closed entity is reopenable.
+
+This is a current-state read model, not the immutable event stream or the planned richer entity activity view. Reopening still travels through the ordinary command envelope to the authoritative owner.
+
 ## Runtime artifacts
 
 The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
@@ -39,6 +46,7 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Plugin registration | `schema/plugin/registration.cue` | `mission_control/schemas/plugin-registration.schema.json` |
 | Agenda contribution | `schema/agenda/contribution.cue` | `mission_control/schemas/agenda-contribution.schema.json` |
 | Agenda query | `schema/agenda/query.cue` | `mission_control/schemas/agenda-query.schema.json` |
+| Closed-item contribution | `schema/closed-items/contribution.cue` | `mission_control/schemas/closed-items-contribution.schema.json` |
 | Command envelope | `schema/command/contract.cue` | `mission_control/schemas/command-envelope.schema.json` |
 | Command result | `schema/command/contract.cue` | `mission_control/schemas/command-result.schema.json` |
 
@@ -71,6 +79,11 @@ cue def --force --out jsonschema \
   -e '#AgendaQuery' \
   -o mission_control/schemas/agenda-query.schema.json \
   ./schema/agenda
+
+cue def --force --out jsonschema \
+  -e '#ClosedItemsContribution' \
+  -o mission_control/schemas/closed-items-contribution.schema.json \
+  ./schema/closed-items
 ```
 
 Formatting is not part of the contract; CI compares generated and packaged schemas as decoded JSON values.
