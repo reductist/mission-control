@@ -211,4 +211,4 @@ These are deployment adapters. They produce or consume the same validated applic
 7. Backup/restore automation and migration from GitHub tracking data.
 8. Machine-readable public schemas and generated interface documentation as tracked in #3.
 
-See `ARCHITECTURE.md`, `INTERFACES.md`, and `TESTING.md` for the boundaries this implementation must preserve.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the near-term product sequence. See `ARCHITECTURE.md`, `INTERFACES.md`, and `TESTING.md` for the boundaries this implementation must preserve.
