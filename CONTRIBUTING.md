@@ -18,6 +18,7 @@ nix flake check
 
 - preserve a functional core and imperative shell
 - parse untrusted data into precise immutable values
+- keep authoritative domain values valid by construction
 - use explicit states and closed tagged variants
 - keep JSON as the stable machine interface
 - keep renderers incapable of state mutation

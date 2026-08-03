@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from mission_control.builtin_plugins.landscape.domain import LandscapeInvariantError
+from mission_control.builtin_plugins.landscape.repository import (
+    LandscapeRepository,
+    StaleLandscapeActionRevisionError,
+)
 from mission_control.commands import (
     Accepted,
     CommandContext,
@@ -13,11 +18,6 @@ from mission_control.commands import (
     Rejected,
     Stale,
     freeze_json_object,
-)
-from mission_control.builtin_plugins.landscape.domain import LandscapeActionState
-from mission_control.builtin_plugins.landscape.repository import (
-    LandscapeRepository,
-    StaleLandscapeActionRevisionError,
 )
 
 
@@ -67,31 +67,22 @@ class LandscapeCommandOwner:
         if command.expected_revision != current.revision:
             return self._stale(command, current.revision)
 
-        if operation is LandscapeActionCommand.COMPLETE:
-            if current.state is LandscapeActionState.DONE:
-                return self._rejected(
-                    command,
-                    "invalid-transition",
-                    "A completed Landscape action cannot be completed again.",
-                )
-            next_state = LandscapeActionState.DONE
-        else:
-            if current.state is not LandscapeActionState.DONE:
-                return self._rejected(
-                    command,
-                    "invalid-transition",
-                    "Only a completed Landscape action can be reopened.",
-                )
-            next_state = LandscapeActionState.READY
-
         try:
-            updated = self.repository.set_action_state(
-                current.action_id,
-                next_state,
-                expected_revision=command.expected_revision,
-            )
+            if operation is LandscapeActionCommand.COMPLETE:
+                updated = self.repository.complete_action(
+                    current.action_id,
+                    expected_revision=command.expected_revision,
+                )
+            else:
+                updated = self.repository.reopen_action(
+                    current.action_id,
+                    expected_revision=command.expected_revision,
+                )
         except StaleLandscapeActionRevisionError as error:
             return self._stale(command, error.current_revision)
+        except LandscapeInvariantError as error:
+            detail = f"{error.detail[:1].upper()}{error.detail[1:]}."
+            return self._rejected(command, error.code, detail)
 
         return Accepted(
             command.command_id,
@@ -109,9 +100,7 @@ class LandscapeCommandOwner:
         )
 
     @staticmethod
-    def _rejected(
-        command: CommandEnvelope, code: str, detail: str
-    ) -> Rejected:
+    def _rejected(command: CommandEnvelope, code: str, detail: str) -> Rejected:
         return Rejected(
             command.command_id,
             command.target,
