@@ -11,14 +11,14 @@ from importlib import import_module
 from importlib.resources import files
 from typing import Protocol
 
-from ..agenda import (
+from mission_control.agenda import (
     AgendaContribution,
     AgendaContributionError,
     parse_agenda_contribution,
 )
-from ..commands import CommandOwner
-from ..database import Database
-from ..plugins import (
+from mission_control.commands import CommandOwner
+from mission_control.database import Database
+from mission_control.plugins import (
     Capability,
     PluginId,
     PluginRegistration,

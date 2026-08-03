@@ -10,7 +10,7 @@ from importlib.resources import files
 from typing import Final, Protocol
 from uuid import uuid4
 
-from ...agenda import (
+from mission_control.agenda import (
     Action,
     ActionState,
     AgendaContribution,
@@ -24,9 +24,7 @@ from ...agenda import (
     SourceRef,
     WindowTiming,
 )
-from ...database import Database
-from ...plugins import PluginId
-from .domain import (
+from mission_control.builtin_plugins.landscape.domain import (
     LandscapeAction,
     LandscapeActionState,
     LandscapeAnytime,
@@ -40,6 +38,8 @@ from .domain import (
     LandscapeTimingKind,
     LandscapeWindow,
 )
+from mission_control.database import Database
+from mission_control.plugins import PluginId
 
 PLUGIN_ID: Final = PluginId("landscape")
 INITIAL_IMPORT_ID: Final = "equipment-access-v1"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from ...commands import (
+from mission_control.commands import (
     Accepted,
     CommandContext,
     CommandEnvelope,
@@ -14,8 +14,8 @@ from ...commands import (
     Stale,
     freeze_json_object,
 )
-from .domain import LandscapeActionState
-from .repository import (
+from mission_control.builtin_plugins.landscape.domain import LandscapeActionState
+from mission_control.builtin_plugins.landscape.repository import (
     LandscapeRepository,
     StaleLandscapeActionRevisionError,
 )

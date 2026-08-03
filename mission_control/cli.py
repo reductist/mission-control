@@ -12,17 +12,17 @@ from pathlib import Path
 
 from rich.console import Console
 
-from . import __version__
-from .agenda import aggregate_agenda, agenda_to_list, project_core_tasks
-from .builtin_plugins import (
+from mission_control import __version__
+from mission_control.agenda import aggregate_agenda, agenda_to_list, project_core_tasks
+from mission_control.builtin_plugins import (
     BUILTIN_AGENDA_PLUGIN_IDS,
     BuiltinPluginError,
     activate_builtin_agenda_plugins,
     prepare_builtin_agenda_plugins,
 )
-from .database import Database
-from .migrations import MigrationRunner
-from .plugins import (
+from mission_control.database import Database
+from mission_control.migrations import MigrationRunner
+from mission_control.plugins import (
     PluginDiscoveryError,
     PluginRegistrationError,
     catalog_to_list,
@@ -30,9 +30,9 @@ from .plugins import (
     registration_to_dict,
     scan_plugin_catalog,
 )
-from .presentation import agenda_table, plugin_catalog_table, task_table
-from .render import render_tasks_markdown
-from .tasks import TASK_STATES, TaskRepository
+from mission_control.presentation import agenda_table, plugin_catalog_table, task_table
+from mission_control.render import render_tasks_markdown
+from mission_control.tasks import TASK_STATES, TaskRepository
 
 OUTPUT_FORMATS = ("json", "table")
 

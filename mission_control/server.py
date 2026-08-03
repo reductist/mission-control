@@ -18,21 +18,21 @@ from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
-from . import __version__
-from .agenda import (
+from mission_control import __version__
+from mission_control.agenda import (
     AgendaContribution,
     agenda_to_list,
     aggregate_agenda,
     project_core_tasks,
 )
-from .builtin_plugins import (
+from mission_control.builtin_plugins import (
     BUILTIN_AGENDA_PLUGIN_IDS,
     BuiltinPluginError,
     PreparedBuiltinAgendaPlugin,
     activate_builtin_agenda_plugins,
     prepare_builtin_agenda_plugins,
 )
-from .commands import (
+from mission_control.commands import (
     CommandContext,
     CommandContractError,
     CommandRouter,
@@ -41,9 +41,9 @@ from .commands import (
     outcome_to_dict,
     parse_command,
 )
-from .database import Database
-from .migrations import MigrationRunner
-from .tasks import TASK_STATES, Task, TaskRepository
+from mission_control.database import Database
+from mission_control.migrations import MigrationRunner
+from mission_control.tasks import TASK_STATES, Task, TaskRepository
 
 MAX_REQUEST_BYTES = 64 * 1024
 _TASK_PATH = re.compile(r"^/api/tasks/([^/]+)$")

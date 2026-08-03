@@ -16,7 +16,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8.0"]
+test = [
+  "pytest>=8.0",
+  "ruff>=0.12,<1",
+]
 
 [project.scripts]
 mcctl = "mission_control.cli:main"
@@ -28,6 +31,12 @@ packages = ["mission_control"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+
+[tool.ruff.lint]
+select = ["TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
 
 [project.urls]
 Homepage = "https://github.com/reductist/mission-control"

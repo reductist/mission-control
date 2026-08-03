@@ -13,9 +13,9 @@ from typing import Any, Protocol, TypeAlias, cast
 
 from jsonschema import Draft202012Validator
 
-from .agenda import SourceRef
-from .plugins import PluginId
-from .tasks import TASK_STATES, StaleTaskRevisionError, TaskRepository
+from mission_control.agenda import SourceRef
+from mission_control.plugins import PluginId
+from mission_control.tasks import TASK_STATES, StaleTaskRevisionError, TaskRepository
 
 
 class CommandContractError(ValueError):
