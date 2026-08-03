@@ -87,6 +87,12 @@ class LandscapeAction:
     created_at: datetime
     updated_at: datetime
 
+    @property
+    def revision(self) -> str:
+        """Return the opaque public concurrency token for this action."""
+
+        return str(self.version)
+
 
 @dataclass(frozen=True, slots=True)
 class LandscapeEvent:

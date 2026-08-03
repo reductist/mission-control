@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pytest
 
 import mission_control.builtin_plugins as builtin_plugins
 from mission_control.builtin_plugins import (
     BuiltinPluginError,
+    activate_builtin_agenda_plugins,
     load_builtin_agenda_contributions,
+    prepare_builtin_agenda_plugins,
 )
+from mission_control.database import Database
+from mission_control.plugins import Capability
 
 
 def test_landscape_provider_validates_real_equipment_access_work(
@@ -39,6 +44,37 @@ def test_landscape_provider_validates_real_equipment_access_work(
 def test_builtin_provider_selection_rejects_duplicates() -> None:
     with pytest.raises(BuiltinPluginError, match="selected more than once"):
         load_builtin_agenda_contributions(("landscape", "landscape"))
+
+
+def test_landscape_declares_its_public_command_capability() -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+
+    assert prepared.registration.capabilities == (
+        Capability.AGENDA,
+        Capability.COMMANDS,
+    )
+
+
+def test_activation_rejects_command_capability_drift(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    read_only_provider = SimpleNamespace(
+        plugin_id=prepared.registration.plugin_id,
+        command_owner=None,
+    )
+    implementation = SimpleNamespace(
+        activate=lambda _database, _seed: read_only_provider
+    )
+    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
+
+    with pytest.raises(
+        BuiltinPluginError,
+        match="registration and activated command capability must match",
+    ):
+        activate_builtin_agenda_plugins(
+            Database(tmp_path / "mission-control.db"), (prepared,)
+        )
 
 
 def test_invalid_registration_is_reported_as_a_named_builtin_error(

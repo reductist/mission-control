@@ -225,6 +225,13 @@ def _thaw_json(value: JsonValue) -> object:
     return value
 
 
+def freeze_json_object(value: Mapping[str, object]) -> JsonObject:
+    """Freeze a trusted JSON-shaped result without exposing mutable containers."""
+
+    _assert_json_input(value)
+    return cast(JsonObject, _freeze_json(dict(value)))
+
+
 def parse_command(document: object) -> CommandEnvelope:
     """Parse an untrusted command into an immutable value."""
 
@@ -392,7 +399,7 @@ class CoreTaskCommandOwner:
             command.command_id,
             command.target,
             task.updated_at,
-            cast(JsonObject, _freeze_json({"task": asdict(task)})),
+            freeze_json_object({"task": asdict(task)}),
         )
 
 

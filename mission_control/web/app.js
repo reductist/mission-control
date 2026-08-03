@@ -124,7 +124,7 @@ function renderOverview() {
           <span>${visibleCount} visible</span>
         </div>
         <div class="task-list">
-          ${visibleCount ? `${visibleYardActions.map(agendaRow).join("")}${visibleCoreTasks.map(taskRow).join("")}` : '<div class="empty">No tasks yet. Add the first shared task below.</div>'}
+          ${visibleCount ? `${visibleYardActions.map(landscapeActionRow).join("")}${visibleCoreTasks.map(taskRow).join("")}` : '<div class="empty">No tasks yet. Add the first shared task below.</div>'}
         </div>
         <form class="quick-add" id="quick-add-form">
           <input id="quick-add-title" name="title" required maxlength="160" placeholder="Add a shared task…" aria-label="New task title">
@@ -139,7 +139,7 @@ function renderOverview() {
     </div>
   `;
 
-  wireTaskButtons();
+  wireCommandButtons();
   document.querySelector("#quick-add-form").addEventListener("submit", addTask);
   document.querySelectorAll(".text-button[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
@@ -194,7 +194,7 @@ function renderHouse() {
 function renderYard() {
   const entries = landscapeEntries();
   if (!entries.length) {
-    renderNoDemo("Yard planning", "Start mctrld with --plugin landscape to load the read-only first Yard slice.");
+    renderNoDemo("Yard planning", "Start mctrld with --plugin landscape to load the Yard workspace.");
     return;
   }
   const initiatives = entries.filter((entry) => entry.kind === "initiative");
@@ -209,8 +209,8 @@ function renderYard() {
         <p>${escapeHtml(primary?.detail || "Landscape work contributed through the shared agenda contract.")}</p>
       </div>
       <div class="status-note">
-        <strong>Read-only first slice</strong>
-        <span>These actions are owned by the Landscape plugin; command routing follows in a later PR.</span>
+        <strong>Landscape-owned state</strong>
+        <span>Actions complete through Landscape's command handler and refresh from its durable projection.</span>
       </div>
     </div>
 
@@ -223,9 +223,10 @@ function renderYard() {
 
     <section class="panel">
       <div class="panel-header"><h2>Mission Control action items</h2><span>Landscape provider</span></div>
-      <div class="task-list">${actions.map(agendaRow).join("")}</div>
+      <div class="task-list">${actions.map(landscapeActionRow).join("")}</div>
     </section>
   `;
+  wireCommandButtons();
 }
 
 function metric(label, value, detail) {
@@ -239,7 +240,7 @@ function taskRow(task) {
   const detail = task.description || task.waiting_on || "No additional detail";
   return `
     <article class="task-row ${done ? "is-done" : ""}">
-      <button class="task-toggle" type="button" data-task-id="${escapeHtml(task.id)}" data-task-revision="${escapeHtml(task.updated_at)}" data-next-state="${nextState}" aria-label="${done ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : ""}</button>
+      <button class="task-toggle" type="button" data-plugin-id="core" data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-revision="${escapeHtml(task.updated_at)}" data-command="set-state" data-next-state="${nextState}" aria-label="${done ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : ""}</button>
       <div>
         <h3 class="task-title">${escapeHtml(task.title)}</h3>
         <p class="task-description">${escapeHtml(detail)}</p>
@@ -253,12 +254,15 @@ function landscapeEntries() {
   return (dashboard.agenda || []).filter((entry) => entry.source?.plugin_id === "landscape");
 }
 
-function agendaRow(entry) {
+function landscapeActionRow(entry) {
   const badgeClass = entry.state === "blocked" ? "is-blocked" : "";
   const detail = [entry.detail, timingLabel(entry.timing)].filter(Boolean).join(" · ");
+  const control = entry.source.plugin_id === "landscape" && entry.kind === "action" && entry.revision
+    ? `<button class="task-toggle" type="button" data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}" data-revision="${escapeHtml(entry.revision)}" data-command="complete" aria-label="Complete ${escapeHtml(entry.title)}"></button>`
+    : '<span class="task-toggle is-read-only" aria-hidden="true">·</span>';
   return `
     <article class="task-row">
-      <span class="task-toggle is-read-only" aria-hidden="true">·</span>
+      ${control}
       <div>
         <h3 class="task-title">${escapeHtml(entry.title)}</h3>
         <p class="task-description">${escapeHtml(detail || "No additional detail")}</p>
@@ -296,24 +300,27 @@ function scenarioRow(item) {
   return `<article class="scenario"><div class="scenario-head"><h3>${escapeHtml(item.name)}</h3><span class="signal is-${escapeHtml(className)}">${escapeHtml(item.signal)}</span></div><p>${escapeHtml(item.detail)}</p></article>`;
 }
 
-function wireTaskButtons() {
-  document.querySelectorAll("button.task-toggle[data-task-id]").forEach((button) => {
+function wireCommandButtons() {
+  document.querySelectorAll("button.task-toggle[data-command]").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
+        const commandArguments = button.dataset.nextState
+          ? { state: button.dataset.nextState }
+          : {};
         await request("/api/commands", {
           method: "POST",
           body: JSON.stringify({
             schema_version: "mission-control.command/v1",
             command_id: `web-${Date.now()}-${++commandSequence}`,
             target: {
-              plugin_id: "core",
-              entity_type: "task",
-              entity_id: button.dataset.taskId,
+              plugin_id: button.dataset.pluginId,
+              entity_type: button.dataset.entityType,
+              entity_id: button.dataset.entityId,
             },
-            expected_revision: button.dataset.taskRevision,
-            command: "set-state",
-            arguments: { state: button.dataset.nextState },
+            expected_revision: button.dataset.revision,
+            command: button.dataset.command,
+            arguments: commandArguments,
           }),
         });
         await refresh();

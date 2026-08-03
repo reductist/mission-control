@@ -16,9 +16,11 @@ from ..agenda import (
     AgendaContributionError,
     parse_agenda_contribution,
 )
+from ..commands import CommandOwner
 from ..database import Database
 from ..plugins import (
     Capability,
+    PluginId,
     PluginRegistration,
     PluginRegistrationError,
     parse_plugin_registration,
@@ -33,6 +35,9 @@ BUILTIN_AGENDA_PLUGIN_IDS = ("landscape",)
 
 
 class BuiltinAgendaProvider(Protocol):
+    plugin_id: PluginId
+    command_owner: CommandOwner | None
+
     def contribution(self, *, generated_at: datetime) -> AgendaContribution: ...
 
 
@@ -111,7 +116,21 @@ def activate_builtin_agenda_plugins(
         try:
             implementation = import_module(f"{__package__}.{plugin_id}")
             provider = implementation.activate(database, plugin.seed)
-        except (ImportError, OSError, TypeError, ValueError, sqlite3.Error) as error:
+            if provider.plugin_id != plugin.registration.plugin_id:
+                raise ValueError("registration and activated provider ids must match")
+            declares_commands = Capability.COMMANDS in plugin.registration.capabilities
+            if (provider.command_owner is not None) is not declares_commands:
+                raise ValueError(
+                    "registration and activated command capability must match"
+                )
+        except (
+            AttributeError,
+            ImportError,
+            OSError,
+            TypeError,
+            ValueError,
+            sqlite3.Error,
+        ) as error:
             raise BuiltinPluginError(f"{plugin_id}: {error}") from error
         providers.append(provider)
     return tuple(providers)

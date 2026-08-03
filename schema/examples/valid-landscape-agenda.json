@@ -25,6 +25,7 @@
       },
       "title": "Measure driveway drop-off",
       "context": "Equipment access",
+      "revision": "action-3",
       "kind": "action",
       "state": "ready",
       "timing": {"kind": "anytime"}

@@ -16,6 +16,7 @@ from mission_control.builtin_plugins.landscape.repository import (
     LandscapeMigrationRunner,
     LandscapeRepository,
     SQLiteLandscapeRepository,
+    StaleLandscapeActionRevisionError,
 )
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
@@ -136,6 +137,34 @@ def test_projection_revision_changes_with_persisted_state(tmp_path) -> None:
     assert {entry.entry_id for entry in before.entries} - {
         entry.entry_id for entry in after.entries
     } == {"measure-access-route"}
+
+
+def test_action_projection_exposes_opaque_revision_and_rejects_stale_writes(
+    tmp_path,
+) -> None:
+    repository = initialized_repository(tmp_path)
+    before = repository.get_action("measure-access-route")
+    projected = repository.agenda_contribution(generated_at=datetime.now(UTC))
+    entry = next(
+        item for item in projected.entries if item.entry_id == "measure-access-route"
+    )
+    assert entry.revision == before.revision == "1"
+
+    changed = repository.set_action_state(
+        before.action_id,
+        LandscapeActionState.DONE,
+        expected_revision=before.revision,
+    )
+    assert changed.revision == "2"
+
+    with pytest.raises(StaleLandscapeActionRevisionError) as stale:
+        repository.set_action_state(
+            before.action_id,
+            LandscapeActionState.READY,
+            expected_revision=before.revision,
+        )
+    assert stale.value.current_revision == changed.revision
+    assert len(repository.history(LandscapeEntityKind.ACTION, before.action_id)) == 2
 
 
 def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> None:

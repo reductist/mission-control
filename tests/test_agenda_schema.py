@@ -40,6 +40,19 @@ def test_packaged_contribution_schema_rejects_unknown_keys():
         parse_agenda_contribution(document)
 
 
+def test_packaged_contribution_schema_accepts_opaque_entry_revisions():
+    document = valid_contribution()
+    document["entries"][0]["revision"] = "owner-token-7"  # type: ignore[index]
+
+    parsed = parse_agenda_contribution(document)
+
+    assert parsed.entries[0].revision == "owner-token-7"
+
+    document["entries"][0]["revision"] = ""  # type: ignore[index]
+    with pytest.raises(AgendaContributionError, match="not valid under"):
+        parse_agenda_contribution(document)
+
+
 def test_packaged_contribution_schema_rejects_impossible_timing_shape():
     document = valid_contribution()
     document["entries"][0]["timing"] = {  # type: ignore[index]

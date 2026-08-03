@@ -35,14 +35,14 @@ The executable implementation provides:
 - task creation, updates, listing, and immutable event history
 - browser task creation, completion, and reopening through the authoritative task repository
 - a responsive Overview and synthetic House demo workspace
-- an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, and read-only agenda projections
+- an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, agenda projections, and owner-routed completion
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
 - frozen registration domain values, enum-backed finite vocabularies, and an immutable discovery catalog
 - explicit available, rejected, and duplicate-ID conflict catalog outcomes
 - a CUE-defined read-only agenda query and contribution boundary
 - CUE-defined command envelope and structured outcome contracts
-- single-owner command routing with optimistic revision checks
+- single-owner command routing for core and Landscape with optimistic revision checks
 - frozen initiative, action, event, and timing variants
 - deterministic cross-provider agenda aggregation
 - core tasks projected through the same agenda contract intended for plugins
@@ -84,7 +84,7 @@ Run the demo against a disposable database:
 mctrld --database ./mission-control-demo.db --demo --plugin landscape
 ```
 
-Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Core task completion and reopening already use the owner-routed command endpoint. Landscape's repository has the corresponding persistence primitive, while public Landscape command registration remains the next slice.
+Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Core task and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Landscape registers its command owner only while the plugin is enabled.
 
 #### Upgrading an existing Yard demo
 
@@ -160,7 +160,7 @@ The core owns stable extension contracts. Each plugin owns its migrations, confi
 
 The first language-agnostic CUE contract defines plugin registration data and generates the JSON Schema packaged with the application. Untyped JSON is accepted only at parser and filesystem boundaries, then converted into frozen `PluginRegistration` values. Discovery builds a new immutable catalog snapshot on each scan; malformed registrations are rejected explicitly and duplicate IDs become conflicts rather than allowing one source to win silently. No plugin implementation code is imported during this process.
 
-The agenda query and contribution contracts keep provider snapshots read-only; plugin-specific state and recurrence remain inside the owner. Landscape now demonstrates independently migrated plugin state, idempotent packaged-data import, immutable plugin history, and projection from the authoritative repository. The experimental command contracts prove single-owner routing and stale-revision rejection for core-task state changes. Landscape handler registration, durable command idempotency, richer authorization, and owner-scoped transactions remain tracked in #4. Broader application, event, health, and lifecycle contracts remain tracked in #3.
+The agenda query and contribution contracts keep provider snapshots read-only; plugin-specific state and recurrence remain inside the owner. Optional opaque entry revisions let mutable owners support optimistic commands without exposing repository internals. Landscape now demonstrates independently migrated plugin state, idempotent packaged-data import, immutable plugin history, projection from the authoritative repository, and complete/reopen operations through an ordinary plugin command handler. Durable command idempotency, richer authorization, and structured CLI command exposure remain tracked in #4. Broader application, event, health, and lifecycle contracts remain tracked in #3.
 
 ## CLI direction
 

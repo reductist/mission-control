@@ -128,6 +128,7 @@ class Initiative:
     state: InitiativeState
     context: str | None = None
     detail: str | None = None
+    revision: str | None = None
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.INITIATIVE
 
 
@@ -140,6 +141,7 @@ class Action:
     timing: ActionTiming
     context: str | None = None
     detail: str | None = None
+    revision: str | None = None
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.ACTION
 
 
@@ -151,6 +153,7 @@ class Event:
     timing: EventTiming
     context: str | None = None
     detail: str | None = None
+    revision: str | None = None
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.EVENT
 
 
@@ -314,6 +317,7 @@ def _parse_entry(raw: Mapping[str, Any], index: int) -> AgendaEntry:
         "title": raw["title"],
         "context": raw.get("context"),
         "detail": raw.get("detail"),
+        "revision": raw.get("revision"),
     }
     match kind:
         case AgendaEntryKind.INITIATIVE:
@@ -429,6 +433,8 @@ def agenda_entry_to_dict(entry: AgendaEntry) -> dict[str, object]:
         result["context"] = entry.context
     if entry.detail is not None:
         result["detail"] = entry.detail
+    if entry.revision is not None:
+        result["revision"] = entry.revision
 
     if isinstance(entry, Initiative):
         result["state"] = entry.state.value
@@ -568,6 +574,7 @@ def project_core_tasks(
                 timing=timing,
                 context="Core tasks",
                 detail="; ".join(detail_parts) or None,
+                revision=task.updated_at,
             )
         )
 
