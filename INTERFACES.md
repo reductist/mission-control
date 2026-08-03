@@ -24,6 +24,7 @@ A manifest is readable without importing plugin runtime code and declares:
 - plugin version
 - supported core interface range
 - required and optional capabilities
+- entity types and their maximum behavior capability envelopes
 - configuration schema identifier
 - migration set identifier
 - registered event types
@@ -31,6 +32,12 @@ A manifest is readable without importing plugin runtime code and declares:
 - runtime entry point
 
 Unknown required capabilities or incompatible interface ranges cause validation to fail before startup.
+
+Entity capabilities are distinct from coarse plugin contributions. A plugin may
+declare `commands` because it owns command handlers while separately declaring
+that its `action` entities may support `lifecycle.complete` and
+`lifecycle.reopen`. Standard entity capabilities use core-defined semantics;
+plugin-specific behavior must use the declaring plugin's namespace.
 
 ## Configuration interface
 
@@ -82,9 +89,23 @@ Plugins expose domain operations through registered command and query handlers. 
 
 Plugins may not reach into private core modules or mutate projections outside their registered operation boundaries.
 
+Registration defines the maximum capability envelope for each plugin-owned
+entity type. A current entity projection exposes zero or more affordances from
+that envelope, each mapping one capability to a command. The authoritative
+owner exposes the same state-dependent command view for dispatch, including for
+entities not present in an active agenda projection. Core rejects undeclared
+entity types, affordances outside the envelope, stale revisions, and commands
+that are not currently available before invoking the owner. The owner rechecks
+revision and domain transition legality transactionally.
+
+Capabilities do not grant filesystem, network, subprocess, secret, or database
+access. Those are operational permissions and require a separate permissions
+model. In-process plugins remain trusted code; capability enforcement is a
+public-contract boundary, not a security sandbox.
+
 The experimental `mission-control.command/v1` envelope routes by a stable source target containing `plugin_id`, `entity_type`, and `entity_id`. It carries the caller's expected revision so the owner can reject stale intent before mutation. Arguments remain owner-specific JSON and are never interpreted by the aggregate renderer.
 
-The `mission-control.command-result/v1` tagged result reports `accepted`, `rejected`, `conflicted`, `stale`, `unauthorized`, or `failed`. Operator-facing failures are normalized and must not expose raw tracebacks. The initial `core/task:set-state` slice proves the boundary; plugin capability registration, durable idempotency, and actor-aware event envelopes remain experimental follow-up work.
+The `mission-control.command-result/v1` tagged result reports `accepted`, `rejected`, `conflicted`, `stale`, `unauthorized`, or `failed`. Operator-facing failures are normalized and must not expose raw tracebacks. The transitional `core/task:set-state` slice and Landscape lifecycle capabilities prove the boundary; durable idempotency and actor-aware event envelopes remain experimental follow-up work.
 
 ## Agenda contribution interface
 
@@ -94,6 +115,10 @@ contract. The provider retains authoritative ownership of detailed state,
 recurrence, and transitions. Agenda renderers and aggregators cannot mutate a
 provider; complete, defer, approve, and run operations use the separate command
 interface and route to exactly one authoritative owner.
+
+Affordances describe currently available behavior; renderers must not infer
+operations from an entry kind or state string. An empty affordance list is
+valid. Every non-empty affordance list carries the owner's opaque revision.
 
 ## `mcctl` contribution interface
 

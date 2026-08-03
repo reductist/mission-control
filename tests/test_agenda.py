@@ -9,6 +9,7 @@ from mission_control.agenda import (
     Action,
     ActionState,
     AgendaAggregationError,
+    AgendaCapabilityError,
     AgendaContributionError,
     AnytimeTiming,
     DueOnTiming,
@@ -19,6 +20,13 @@ from mission_control.agenda import (
     parse_agenda_contribution,
     parse_agenda_query,
     project_core_tasks,
+    validate_agenda_capabilities,
+)
+from mission_control.plugins import (
+    EntityAffordance,
+    EntityCapability,
+    parse_plugin_registration,
+    registration_to_dict,
 )
 from mission_control.tasks import Task
 
@@ -81,6 +89,94 @@ def test_parse_tagged_agenda_variants_into_frozen_values():
     assert isinstance(contribution.entries[2], Event)
     with pytest.raises(FrozenInstanceError):
         contribution.revision = "changed"  # type: ignore[misc]
+
+
+def test_parse_and_serialize_state_dependent_affordances():
+    document = contribution_document()
+    action = document["entries"][1]  # type: ignore[index]
+    action["revision"] = "7"
+    action["affordances"] = [
+        {"capability": "lifecycle.complete", "command": "complete"}
+    ]
+
+    contribution = parse_agenda_contribution(document)
+    parsed = contribution.entries[1]
+
+    assert parsed.affordances == (
+        EntityAffordance(EntityCapability("lifecycle.complete"), "complete"),
+    )
+    assert agenda_to_list(aggregate_agenda((contribution,)))[1]["affordances"] == [
+        {"capability": "lifecycle.complete", "command": "complete"}
+    ]
+
+
+def test_affordances_require_revision_and_unambiguous_mappings():
+    document = contribution_document()
+    action = document["entries"][1]  # type: ignore[index]
+    action["affordances"] = [
+        {"capability": "lifecycle.complete", "command": "complete"}
+    ]
+    with pytest.raises(AgendaContributionError, match="require an opaque revision"):
+        parse_agenda_contribution(document)
+
+    action["revision"] = "1"
+    action["affordances"].append(  # type: ignore[union-attr]
+        {"capability": "lifecycle.complete", "command": "finish"}
+    )
+    with pytest.raises(AgendaContributionError, match="advertised more than once"):
+        parse_agenda_contribution(document)
+
+
+def test_registration_envelopes_bound_projected_entity_types_and_affordances():
+    registration = parse_plugin_registration(
+        {
+            "schema_version": "mission-control.plugin/v1",
+            "id": "landscape",
+            "name": "Landscape",
+            "version": "1",
+            "plugin_api": ">=1 <2",
+            "capabilities": ["agenda", "commands"],
+            "entity_types": {
+                "initiative": {"capabilities": []},
+                "task": {"capabilities": ["lifecycle.complete"]},
+                "visit": {"capabilities": []},
+            },
+        }
+    )
+    document = contribution_document()
+    action = document["entries"][1]  # type: ignore[index]
+    action["revision"] = "1"
+    action["affordances"] = [
+        {"capability": "lifecycle.complete", "command": "complete"}
+    ]
+    contribution = parse_agenda_contribution(document)
+
+    validate_agenda_capabilities(registration, contribution)
+
+    registration_without_task = parse_plugin_registration(
+        {
+            **registration_to_dict(registration),
+            "entity_types": {
+                "initiative": {"capabilities": []},
+                "visit": {"capabilities": []},
+            },
+        }
+    )
+    with pytest.raises(AgendaCapabilityError, match="entity type 'task'"):
+        validate_agenda_capabilities(registration_without_task, contribution)
+
+    registration_without_complete = parse_plugin_registration(
+        {
+            **registration_to_dict(registration),
+            "entity_types": {
+                "initiative": {"capabilities": []},
+                "task": {"capabilities": []},
+                "visit": {"capabilities": []},
+            },
+        }
+    )
+    with pytest.raises(AgendaCapabilityError, match="exceeds the registered"):
+        validate_agenda_capabilities(registration_without_complete, contribution)
 
 
 def test_query_horizon_and_selection_flags_are_explicit():

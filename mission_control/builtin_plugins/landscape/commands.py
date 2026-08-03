@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from mission_control.agenda import SourceRef
+from mission_control.builtin_plugins.landscape.capabilities import action_affordances
 from mission_control.builtin_plugins.landscape.domain import LandscapeInvariantError
 from mission_control.builtin_plugins.landscape.repository import (
+    PLUGIN_ID,
     LandscapeRepository,
     StaleLandscapeActionRevisionError,
 )
@@ -15,6 +18,7 @@ from mission_control.commands import (
     CommandEnvelope,
     CommandError,
     CommandOutcome,
+    CommandTargetState,
     Rejected,
     Stale,
     freeze_json_object,
@@ -31,6 +35,17 @@ class LandscapeCommandOwner:
 
     def __init__(self, repository: LandscapeRepository) -> None:
         self.repository = repository
+
+    def command_state(self, target: SourceRef) -> CommandTargetState | None:
+        """Resolve current state for core's capability and revision checks."""
+
+        if target.plugin_id != PLUGIN_ID or target.entity_type != "action":
+            return None
+        try:
+            action = self.repository.get_action(target.entity_id)
+        except KeyError:
+            return None
+        return CommandTargetState(action.revision, action_affordances(action))
 
     def handle(
         self, command: CommandEnvelope, context: CommandContext

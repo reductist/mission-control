@@ -12,12 +12,14 @@ from mission_control.plugins import (
     ArgumentType,
     ArrayArgument,
     Capability,
+    EntityCapability,
     JsonArray,
     ObjectArgument,
     PluginRegistrationError,
     load_registration,
     parse_plugin_registration,
     registration_to_dict,
+    StandardEntityCapability,
 )
 
 
@@ -57,6 +59,46 @@ def test_parser_detaches_from_mutable_source_data():
     assert registration_to_dict(accepted)["arguments"]["message"]["description"] != (
         source["arguments"]["message"]["description"]  # type: ignore[index]
     )
+
+
+def test_entity_capability_envelopes_are_immutable_and_round_trip():
+    source = reference_document()
+    source["entity_types"] = {
+        "action": {
+            "capabilities": [
+                "lifecycle.complete",
+                "lifecycle.reopen",
+                "reference.record-result",
+            ]
+        }
+    }
+
+    registration = parse_plugin_registration(source)
+
+    assert registration.entity_types[0].entity_type == "action"
+    assert registration.entity_types[0].capabilities == (
+        EntityCapability(StandardEntityCapability.LIFECYCLE_COMPLETE.value),
+        EntityCapability(StandardEntityCapability.LIFECYCLE_REOPEN.value),
+        EntityCapability("reference.record-result"),
+    )
+    assert registration_to_dict(registration) == source
+
+
+@pytest.mark.parametrize(
+    ("capabilities", "message"),
+    [
+        (["other.record-result"], "must use namespace 'reference'"),
+        (["lifecycle.complete", "lifecycle.complete"], "duplicate entity capability"),
+    ],
+)
+def test_registration_rejects_invalid_entity_capability_envelopes(
+    capabilities, message
+):
+    source = reference_document()
+    source["entity_types"] = {"action": {"capabilities": capabilities}}
+
+    with pytest.raises(PluginRegistrationError, match=message):
+        parse_plugin_registration(source)
 
 
 def test_nested_argument_definitions_and_array_defaults_become_immutable():

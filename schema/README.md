@@ -22,13 +22,13 @@ The agenda boundary is deliberately read-only. Providers retain ownership of the
 
 A query carries an explicit time window and separate flags for unscheduled actions and initiatives. Providers expand only their own recurrence rules into concrete occurrences within that horizon. The aggregate validates and combines immutable values; it does not calculate plugin-specific recurrence or mutate provider state.
 
-Agenda entries contain source references, not callbacks, SQL handles, executable payloads, or mutation instructions. A client turns intent into a separate command envelope and supplies the revision it read. Core routes the command by the source plugin identifier to exactly one registered owner.
+Agenda entries contain source references, not callbacks, SQL handles, or executable payloads. An entry may advertise a closed list of state-dependent affordances, each mapping a registered entity capability to a command name. A client turns one advertised affordance into a separate command envelope and supplies the revision it read. Core routes the command by the source plugin identifier to exactly one registered owner.
 
 ## Command contract
 
 The command envelope owns generic routing metadata only: a command identity, source target, expected revision, namespaced operation name, and JSON arguments interpreted by the owner. Core authenticates the caller, resolves exactly one owner, and returns a closed structured outcome.
 
-The first implementation routes the browser's core-task state change through this boundary. `core/task:set-state` is intentionally non-retryable when the client cannot determine whether a request completed: refresh the projection and submit a new command against its current revision. Durable idempotency records and plugin command registration remain follow-up work.
+The first implementation routes the browser's core-task state change and Landscape lifecycle operations through this boundary. Registration bounds the maximum capabilities of each plugin-owned entity type, while authoritative command state exposes the currently legal subset. `core/task:set-state` is intentionally non-retryable when the client cannot determine whether a request completed: refresh the projection and submit a new command against its current revision. Durable idempotency records remain follow-up work.
 
 ## Runtime artifacts
 
@@ -102,7 +102,8 @@ CUE answers **what exchanged data is valid**. Runtime behavior remains defined b
 - provider-owned recurrence expansion
 - temporal ordering such as an event ending after it starts
 - provider/source ownership and duplicate-identity detection
-- transactions, authorization, and command routing
+- registration envelopes, current affordances, and command routing
+- transactions and authorization
 
 Generated language bindings may later consume JSON Schema or OpenAPI artifacts. Bindings alone do not make plugins language-neutral; an out-of-process transport will still be required for plugins implemented outside the host runtime.
 

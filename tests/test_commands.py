@@ -11,6 +11,7 @@ from mission_control.commands import (
     CommandError,
     CommandRouter,
     CommandStatus,
+    CommandTargetState,
     CoreTaskCommandOwner,
     Failed,
     JsonObject,
@@ -22,6 +23,11 @@ from mission_control.commands import (
 )
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
+from mission_control.plugins import (
+    EntityAffordance,
+    EntityCapability,
+    parse_plugin_registration,
+)
 from mission_control.tasks import TaskRepository
 
 
@@ -149,3 +155,85 @@ def test_router_rejects_an_outcome_for_a_different_command():
     assert isinstance(outcome, Failed)
     assert outcome.command_id == command.command_id
     assert outcome.target == command.target
+
+
+def test_router_enforces_registered_and_current_plugin_capabilities():
+    registration = parse_plugin_registration(
+        {
+            "schema_version": "mission-control.plugin/v1",
+            "id": "example",
+            "name": "Example",
+            "version": "1",
+            "plugin_api": ">=1 <2",
+            "capabilities": ["commands"],
+            "entity_types": {
+                "action": {"capabilities": ["lifecycle.complete"]}
+            },
+        }
+    )
+
+    class Owner:
+        state = CommandTargetState(
+            "2",
+            (
+                EntityAffordance(
+                    EntityCapability("lifecycle.complete"), "complete"
+                ),
+            ),
+        )
+
+        def command_state(self, target):
+            return self.state
+
+        def handle(self, command, context):
+            return Accepted(command.command_id, command.target, "3")
+
+    owner = Owner()
+    router = CommandRouter(
+        {"example": owner}, registrations={"example": registration}
+    )
+
+    document = command_document(plugin_id="example", revision="2")
+    document["target"]["entity_type"] = "action"  # type: ignore[index]
+    document["command"] = "complete"
+    document["arguments"] = {}
+    accepted = router.dispatch(
+        parse_command(document), context=CommandContext("test")
+    )
+    assert isinstance(accepted, Accepted)
+
+    stale_document = {**document, "expected_revision": "1", "command": "archive"}
+    stale = router.dispatch(
+        parse_command(stale_document), context=CommandContext("test")
+    )
+    assert isinstance(stale, Stale)
+
+    unavailable_document = {**document, "command": "archive"}
+    unavailable = router.dispatch(
+        parse_command(unavailable_document), context=CommandContext("test")
+    )
+    assert isinstance(unavailable, Rejected)
+    assert unavailable.error.code == "unavailable-command"
+
+    undeclared_document = command_document(plugin_id="example", revision="2")
+    undeclared_document["command"] = "complete"
+    undeclared_document["arguments"] = {}
+    undeclared = router.dispatch(
+        parse_command(undeclared_document), context=CommandContext("test")
+    )
+    assert isinstance(undeclared, Rejected)
+    assert undeclared.error.code == "undeclared-target"
+
+    owner.state = CommandTargetState(
+        "2",
+        (
+            EntityAffordance(
+                EntityCapability("lifecycle.reopen"), "reopen"
+            ),
+        ),
+    )
+    violation = router.dispatch(
+        parse_command(document), context=CommandContext("test")
+    )
+    assert isinstance(violation, Failed)
+    assert violation.error.code == "capability-contract-violation"

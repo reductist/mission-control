@@ -38,6 +38,18 @@ class Capability(StrEnum):
     HEALTH = "health"
 
 
+class StandardEntityCapability(StrEnum):
+    ENTITY_ANNOTATE = "entity.annotate"
+    ENTITY_ATTACH = "entity.attach"
+    ACTIVITY_READ = "activity.read"
+    LIFECYCLE_COMPLETE = "lifecycle.complete"
+    LIFECYCLE_REOPEN = "lifecycle.reopen"
+    LIFECYCLE_ACKNOWLEDGE = "lifecycle.acknowledge"
+    LIFECYCLE_DISMISS = "lifecycle.dismiss"
+    ENTITY_EDIT = "entity.edit"
+    ENTITY_DELETE = "entity.delete"
+
+
 class ArgumentType(StrEnum):
     STRING = "string"
     INTEGER = "integer"
@@ -56,6 +68,23 @@ class CatalogState(StrEnum):
 @dataclass(frozen=True, slots=True, order=True)
 class PluginId:
     value: str
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class EntityCapability:
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
+class EntityTypeRegistration:
+    entity_type: str
+    capabilities: tuple[EntityCapability, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class EntityAffordance:
+    capability: EntityCapability
+    command: str
 
 
 JsonScalar: TypeAlias = None | bool | int | float | str
@@ -161,6 +190,7 @@ class PluginRegistration:
     version: str
     plugin_api: str
     capabilities: tuple[Capability, ...]
+    entity_types: tuple[EntityTypeRegistration, ...] = ()
     arguments: tuple[PluginArgument, ...] = ()
 
 
@@ -370,15 +400,51 @@ def parse_plugin_registration(document: object) -> PluginRegistration:
         PluginArgument(name, _parse_argument(definition))
         for name, definition in sorted(raw.get("arguments", {}).items())
     )
+    plugin_id = PluginId(raw["id"])
+    entity_types = tuple(
+        EntityTypeRegistration(
+            entity_type,
+            _parse_entity_capabilities(
+                definition["capabilities"],
+                plugin_id=plugin_id,
+                entity_type=entity_type,
+            ),
+        )
+        for entity_type, definition in sorted(raw.get("entity_types", {}).items())
+    )
     return PluginRegistration(
         schema_version=PluginSchemaVersion(raw["schema_version"]),
-        plugin_id=PluginId(raw["id"]),
+        plugin_id=plugin_id,
         name=raw["name"],
         version=raw["version"],
         plugin_api=raw["plugin_api"],
         capabilities=tuple(Capability(value) for value in raw["capabilities"]),
+        entity_types=entity_types,
         arguments=arguments,
     )
+
+
+def _parse_entity_capabilities(
+    values: list[str],
+    *,
+    plugin_id: PluginId,
+    entity_type: str,
+) -> tuple[EntityCapability, ...]:
+    capabilities: list[EntityCapability] = []
+    seen: set[str] = set()
+    standard = {item.value for item in StandardEntityCapability}
+    for index, value in enumerate(values):
+        path = f"entity_types.{entity_type}.capabilities.{index}"
+        if value in seen:
+            raise PluginRegistrationError(f"{path}: duplicate entity capability {value!r}")
+        if value not in standard and value.split(".", 1)[0] != plugin_id.value:
+            raise PluginRegistrationError(
+                f"{path}: plugin-specific capability must use namespace "
+                f"{plugin_id.value!r}"
+            )
+        seen.add(value)
+        capabilities.append(EntityCapability(value))
+    return tuple(capabilities)
 
 
 def load_registration(path: str | Path) -> PluginRegistration:
@@ -472,12 +538,36 @@ def registration_to_dict(registration: PluginRegistration) -> dict[str, Any]:
         "plugin_api": registration.plugin_api,
         "capabilities": [value.value for value in registration.capabilities],
     }
+    if registration.entity_types:
+        result["entity_types"] = {
+            entity.entity_type: {
+                "capabilities": [
+                    capability.value for capability in entity.capabilities
+                ]
+            }
+            for entity in registration.entity_types
+        }
     if registration.arguments:
         result["arguments"] = {
             argument.name: argument_to_dict(argument.definition)
             for argument in registration.arguments
         }
     return result
+
+
+def entity_type_registration(
+    registration: PluginRegistration, entity_type: str
+) -> EntityTypeRegistration | None:
+    """Return one declared entity envelope without exposing mutable maps."""
+
+    return next(
+        (
+            item
+            for item in registration.entity_types
+            if item.entity_type == entity_type
+        ),
+        None,
+    )
 
 
 def discover_registration_sources(

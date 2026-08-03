@@ -2,10 +2,30 @@
 
 package agenda
 
-#PluginID: string & =~"^[a-z][a-z0-9-]*$"
+#PluginID:   string & =~"^[a-z][a-z0-9-]*$"
 #Identifier: string & =~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
-#Timestamp: string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
-#Date: string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+#Timestamp:  string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
+#Date:       string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+
+#StandardEntityCapability:
+	"entity.annotate" |
+	"entity.attach" |
+	"activity.read" |
+	"lifecycle.complete" |
+	"lifecycle.reopen" |
+	"lifecycle.acknowledge" |
+	"lifecycle.dismiss" |
+	"entity.edit" |
+	"entity.delete"
+
+#EntityCapability:
+	#StandardEntityCapability |
+	string & =~"^[a-z][a-z0-9-]*\\.[A-Za-z0-9][A-Za-z0-9._:-]*$"
+
+#EntityAffordance: close({
+	capability!: #EntityCapability
+	command!:    #Identifier
+})
 
 #ProviderRef: close({
 	plugin_id!: #PluginID
@@ -18,7 +38,7 @@ package agenda
 })
 
 #InitiativeState: "open" | "blocked" | "waiting"
-#ActionState: "ready" | "blocked" | "waiting"
+#ActionState:     "ready" | "blocked" | "waiting"
 
 #Anytime: close({
 	kind!: "anytime"
@@ -58,12 +78,13 @@ package agenda
 // entryCommon is expanded into each public variant so generated JSON Schema
 // contains every shared property locally beside additionalProperties: false.
 let entryCommon = {
-	id!:      #Identifier
-	source!:  #SourceRef
-	title!:   string & != ""
-	context?: string & != ""
-	detail?:  string & != ""
-	revision?: string & != ""
+	id!:       #Identifier
+	source!:   #SourceRef
+	title!:    string & !=""
+	context?:  string & !=""
+	detail?:   string & !=""
+	revision?: string & !=""
+	affordances?: [...#EntityAffordance]
 }
 
 #Initiative: close({
@@ -90,7 +111,7 @@ let entryCommon = {
 #AgendaContribution: close({
 	schema_version!: "mission-control.agenda/v1"
 	provider!:       #ProviderRef
-	revision!:       string & != ""
+	revision!:       string & !=""
 	generated_at!:   #Timestamp
-	entries!:        [...#AgendaEntry]
+	entries!: [...#AgendaEntry]
 })

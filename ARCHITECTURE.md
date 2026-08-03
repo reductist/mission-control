@@ -27,7 +27,8 @@ The core owns:
 - core schema migrations
 - application configuration validation
 - plugin discovery and lifecycle contracts
-- capability registration
+- plugin contribution registration and per-entity capability envelopes
+- validation of state-dependent affordances before command dispatch
 - authorization boundaries exposed to plugins
 - failure containment and health aggregation
 
@@ -41,6 +42,7 @@ Each plugin owns:
 - its configuration schema and defaults
 - its database migrations and namespaced data
 - its event types and payload schemas
+- its entity types, maximum capability envelopes, and current affordances
 - optional API, `mcctl`, background-job, and UI contributions
 - permissions required by each contribution
 - health reporting, shutdown, disable, and cleanup behavior
@@ -56,7 +58,7 @@ All plugins, including built-in plugins, follow the same lifecycle:
 2. Validate identity, version, compatibility, permissions, and configuration.
 3. Plan and transactionally apply namespaced migrations.
 4. Import and initialize the plugin through the public runtime interface.
-5. Register declared capabilities.
+5. Register declared contribution and per-entity capability envelopes.
 6. Start background work only after the application becomes ready.
 7. Stop jobs and unregister contributions during disable or shutdown.
 8. Preserve plugin data when disabled unless an explicit destructive removal is requested.

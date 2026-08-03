@@ -23,6 +23,7 @@ nix flake check
 - keep JSON as the stable machine interface
 - keep renderers incapable of state mutation
 - route commands to exactly one authoritative owner
+- declare maximum entity capabilities at registration and project only current affordances
 - keep CUE as the canonical language-neutral public-contract source
 - do not add a framework or abstraction without a demonstrated requirement
 

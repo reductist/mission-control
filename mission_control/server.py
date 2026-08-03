@@ -24,6 +24,7 @@ from mission_control.agenda import (
     agenda_to_list,
     aggregate_agenda,
     project_core_tasks,
+    validate_agenda_capabilities,
 )
 from mission_control.builtin_plugins import (
     BUILTIN_AGENDA_PLUGIN_IDS,
@@ -87,8 +88,9 @@ class MissionControlApplication:
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
+        self.builtin_plugins = tuple(builtin_plugins)
         self.agenda_providers = activate_builtin_agenda_plugins(
-            database, tuple(builtin_plugins)
+            database, self.builtin_plugins
         )
         command_owners = {"core": CoreTaskCommandOwner(self.repository)}
         command_owners.update(
@@ -98,7 +100,13 @@ class MissionControlApplication:
                 if provider.command_owner is not None
             }
         )
-        self.command_router = CommandRouter(command_owners)
+        self.command_router = CommandRouter(
+            command_owners,
+            registrations={
+                plugin.registration.plugin_id.value: plugin.registration
+                for plugin in self.builtin_plugins
+            },
+        )
         self._demo_fixture = _load_demo_fixture() if demo else None
         if demo:
             _seed_demo_tasks(self.repository)
@@ -107,14 +115,20 @@ class MissionControlApplication:
         tasks = self.repository.list()
         active = [task for task in tasks if task.state != "done"]
         generated_at = datetime.now(UTC)
+        builtin_contributions = tuple(
+            provider.contribution(generated_at=generated_at)
+            for provider in self.agenda_providers
+        )
+        for plugin, contribution in zip(
+            self.builtin_plugins, builtin_contributions, strict=True
+        ):
+            validate_agenda_capabilities(plugin.registration, contribution)
+
         agenda = aggregate_agenda(
             (
                 project_core_tasks(tasks, generated_at=generated_at),
                 *self.agenda_contributions,
-                *(
-                    provider.contribution(generated_at=generated_at)
-                    for provider in self.agenda_providers
-                ),
+                *builtin_contributions,
             )
         )
         return {

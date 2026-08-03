@@ -15,6 +15,7 @@ from mission_control.agenda import (
     AgendaContribution,
     AgendaContributionError,
     parse_agenda_contribution,
+    validate_agenda_capabilities,
 )
 from mission_control.commands import CommandOwner
 from mission_control.database import Database
@@ -65,6 +66,7 @@ def _prepare_agenda_plugin(plugin_id: str) -> PreparedBuiltinAgendaPlugin:
         contribution = parse_agenda_contribution(_document(plugin_id, "agenda.json"))
         if registration.plugin_id != contribution.provider.plugin_id:
             raise ValueError("registration and agenda provider ids must match")
+        validate_agenda_capabilities(registration, contribution)
         return PreparedBuiltinAgendaPlugin(registration, contribution)
     except (
         OSError,
@@ -122,6 +124,12 @@ def activate_builtin_agenda_plugins(
             if (provider.command_owner is not None) is not declares_commands:
                 raise ValueError(
                     "registration and activated command capability must match"
+                )
+            if declares_commands and not callable(
+                getattr(provider.command_owner, "command_state", None)
+            ):
+                raise ValueError(
+                    "registered command owner must expose current entity affordances"
                 )
         except (
             AttributeError,

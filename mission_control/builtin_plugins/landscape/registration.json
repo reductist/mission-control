@@ -4,5 +4,16 @@
   "name": "Yard",
   "version": "0.1.0",
   "plugin_api": ">=1.0.0 <2.0.0",
-  "capabilities": ["agenda", "commands"]
+  "capabilities": ["agenda", "commands"],
+  "entity_types": {
+    "initiative": {
+      "capabilities": []
+    },
+    "action": {
+      "capabilities": [
+        "lifecycle.complete",
+        "lifecycle.reopen"
+      ]
+    }
+  }
 }

@@ -15,7 +15,13 @@ from typing import Any, ClassVar, TypeAlias, cast
 
 from jsonschema import Draft202012Validator
 
-from mission_control.plugins import PluginId
+from mission_control.plugins import (
+    EntityAffordance,
+    EntityCapability,
+    PluginId,
+    PluginRegistration,
+    entity_type_registration,
+)
 from mission_control.tasks import Task
 
 
@@ -25,6 +31,10 @@ class AgendaContributionError(ValueError):
 
 class AgendaAggregationError(ValueError):
     """Agenda provider snapshots cannot be combined without ambiguity."""
+
+
+class AgendaCapabilityError(AgendaContributionError):
+    """A provider projection exceeds its registered entity capability envelope."""
 
 
 class AgendaSchemaVersion(StrEnum):
@@ -129,6 +139,7 @@ class Initiative:
     context: str | None = None
     detail: str | None = None
     revision: str | None = None
+    affordances: tuple[EntityAffordance, ...] = ()
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.INITIATIVE
 
 
@@ -142,6 +153,7 @@ class Action:
     context: str | None = None
     detail: str | None = None
     revision: str | None = None
+    affordances: tuple[EntityAffordance, ...] = ()
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.ACTION
 
 
@@ -154,6 +166,7 @@ class Event:
     context: str | None = None
     detail: str | None = None
     revision: str | None = None
+    affordances: tuple[EntityAffordance, ...] = ()
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.EVENT
 
 
@@ -277,6 +290,35 @@ def _parse_source(raw: Mapping[str, Any]) -> SourceRef:
     )
 
 
+def _parse_affordances(
+    raw: list[Mapping[str, Any]], *, index: int, revision: str | None
+) -> tuple[EntityAffordance, ...]:
+    if raw and revision is None:
+        raise AgendaContributionError(
+            f"entries.{index}.affordances: mutable affordances require an opaque revision"
+        )
+
+    affordances: list[EntityAffordance] = []
+    capabilities: set[str] = set()
+    commands: set[str] = set()
+    for affordance_index, item in enumerate(raw):
+        capability = item["capability"]
+        command = item["command"]
+        path = f"entries.{index}.affordances.{affordance_index}"
+        if capability in capabilities:
+            raise AgendaContributionError(
+                f"{path}.capability: capability {capability!r} is advertised more than once"
+            )
+        if command in commands:
+            raise AgendaContributionError(
+                f"{path}.command: command {command!r} is advertised more than once"
+            )
+        capabilities.add(capability)
+        commands.add(command)
+        affordances.append(EntityAffordance(EntityCapability(capability), command))
+    return tuple(affordances)
+
+
 def _parse_action_timing(raw: Mapping[str, Any], path: str) -> ActionTiming:
     kind = ActionTimingKind(raw["kind"])
     match kind:
@@ -311,13 +353,17 @@ def _parse_event_timing(raw: Mapping[str, Any], path: str) -> EventTiming:
 
 def _parse_entry(raw: Mapping[str, Any], index: int) -> AgendaEntry:
     kind = AgendaEntryKind(raw["kind"])
+    revision = raw.get("revision")
     common = {
         "entry_id": raw["id"],
         "source": _parse_source(raw["source"]),
         "title": raw["title"],
         "context": raw.get("context"),
         "detail": raw.get("detail"),
-        "revision": raw.get("revision"),
+        "revision": revision,
+        "affordances": _parse_affordances(
+            raw.get("affordances", []), index=index, revision=revision
+        ),
     }
     match kind:
         case AgendaEntryKind.INITIATIVE:
@@ -382,6 +428,36 @@ def parse_agenda_contribution(document: object) -> AgendaContribution:
     )
 
 
+def validate_agenda_capabilities(
+    registration: PluginRegistration, contribution: AgendaContribution
+) -> None:
+    """Reject projected entities or affordances outside registration's envelope."""
+
+    if contribution.provider.plugin_id != registration.plugin_id:
+        raise AgendaCapabilityError(
+            "agenda provider does not match the plugin registration"
+        )
+
+    for entry in contribution.entries:
+        declared = entity_type_registration(
+            registration, entry.source.entity_type
+        )
+        if declared is None:
+            raise AgendaCapabilityError(
+                f"entry {entry.entry_id!r}: entity type "
+                f"{entry.source.entity_type!r} is not declared by "
+                f"plugin {registration.plugin_id.value!r}"
+            )
+        envelope = {capability.value for capability in declared.capabilities}
+        for affordance in entry.affordances:
+            if affordance.capability.value not in envelope:
+                raise AgendaCapabilityError(
+                    f"entry {entry.entry_id!r}: affordance "
+                    f"{affordance.capability.value!r} exceeds the registered "
+                    f"capability envelope for {entry.source.entity_type!r}"
+                )
+
+
 def _datetime_text(value: datetime) -> str:
     return value.isoformat()
 
@@ -435,6 +511,14 @@ def agenda_entry_to_dict(entry: AgendaEntry) -> dict[str, object]:
         result["detail"] = entry.detail
     if entry.revision is not None:
         result["revision"] = entry.revision
+    if entry.affordances:
+        result["affordances"] = [
+            {
+                "capability": affordance.capability.value,
+                "command": affordance.command,
+            }
+            for affordance in entry.affordances
+        ]
 
     if isinstance(entry, Initiative):
         result["state"] = entry.state.value
