@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from mission_control.agenda import SourceRef
 from mission_control.plugins import (
     EntityAffordance,
+    EntityCapability,
     PluginId,
     PluginRegistration,
     entity_type_registration,
@@ -243,6 +244,12 @@ def freeze_json_object(value: Mapping[str, object]) -> JsonObject:
     return cast(JsonObject, _freeze_json(dict(value)))
 
 
+def thaw_json_object(value: JsonObject) -> object:
+    """Return a detached JSON object for a validated command handler."""
+
+    return _thaw_json(value)
+
+
 def parse_command(document: object) -> CommandEnvelope:
     """Parse an untrusted command into an immutable value."""
 
@@ -303,9 +310,11 @@ class CommandRouter:
         owners: Mapping[str, CommandOwner],
         *,
         registrations: Mapping[str, PluginRegistration] | None = None,
+        capability_handlers: Mapping[str, CommandOwner] | None = None,
     ) -> None:
         self._owners = dict(owners)
         self._registrations = dict(registrations or {})
+        self._capability_handlers = dict(capability_handlers or {})
 
     def dispatch(
         self,
@@ -335,13 +344,19 @@ class CommandRouter:
             )
         try:
             registration = self._registrations.get(command.target.plugin_id.value)
+            capability: EntityCapability | None = None
             if registration is not None:
-                policy_outcome = self._enforce_entity_capabilities(
+                policy_outcome, capability = self._enforce_entity_capabilities(
                     command, owner, registration
                 )
                 if policy_outcome is not None:
                     return policy_outcome
-            outcome = owner.handle(command, context)
+            handler = (
+                self._capability_handlers.get(capability.value)
+                if capability is not None
+                else None
+            )
+            outcome = (handler or owner).handle(command, context)
             if not isinstance(
                 outcome,
                 (Accepted, Rejected, Conflicted, Stale, Unauthorized, Failed),
@@ -368,7 +383,7 @@ class CommandRouter:
         command: CommandEnvelope,
         owner: CommandOwner,
         registration: PluginRegistration,
-    ) -> CommandOutcome | None:
+    ) -> tuple[CommandOutcome | None, EntityCapability | None]:
         declared = entity_type_registration(
             registration, command.target.entity_type
         )
@@ -378,7 +393,7 @@ class CommandRouter:
                 "undeclared-target",
                 f"Plugin {registration.plugin_id.value!r} did not register entity type "
                 f"{command.target.entity_type!r}.",
-            )
+            ), None
 
         resolver = getattr(owner, "command_state", None)
         if not callable(resolver):
@@ -389,7 +404,7 @@ class CommandRouter:
                 command,
                 "unknown-target",
                 "No command state is available for this target.",
-            )
+            ), None
         if not isinstance(state, CommandTargetState):
             raise TypeError("owner returned unsupported command state")
 
@@ -413,7 +428,7 @@ class CommandRouter:
                         "The plugin exposed command behavior outside its registered "
                         "entity capability envelope.",
                     ),
-                )
+                ), None
             seen_capabilities.add(capability)
             seen_commands.add(affordance.command)
 
@@ -427,16 +442,24 @@ class CommandRouter:
                     "The target changed after this view was loaded; refresh before "
                     "retrying.",
                 ),
-            )
+            ), None
 
-        if command.command not in seen_commands:
+        matching = next(
+            (
+                affordance
+                for affordance in state.affordances
+                if affordance.command == command.command
+            ),
+            None,
+        )
+        if matching is None:
             return _rejected(
                 command,
                 "unavailable-command",
                 f"Command {command.command!r} is not currently available for this "
                 "target.",
-            )
-        return None
+            ), None
+        return None, matching.capability
 
 
 class CoreTaskCommandOwner:

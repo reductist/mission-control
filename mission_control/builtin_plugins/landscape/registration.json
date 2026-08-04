@@ -4,13 +4,17 @@
   "name": "Yard",
   "version": "0.1.0",
   "plugin_api": ">=1.0.0 <2.0.0",
-  "capabilities": ["agenda", "closed-items", "commands"],
+  "capabilities": ["agenda", "closed-items", "commands", "entity-details"],
   "entity_types": {
     "initiative": {
-      "capabilities": []
+      "capabilities": [
+        "activity.read"
+      ]
     },
     "action": {
       "capabilities": [
+        "entity.annotate",
+        "activity.read",
         "lifecycle.complete",
         "lifecycle.reopen"
       ]

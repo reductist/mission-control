@@ -31,6 +31,7 @@ class Capability(StrEnum):
     AGENDA = "agenda"
     CLOSED_ITEMS = "closed-items"
     COMMANDS = "commands"
+    ENTITY_DETAILS = "entity-details"
     CLI = "cli"
     HTTP = "http"
     JOBS = "jobs"

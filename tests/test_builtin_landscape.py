@@ -53,6 +53,7 @@ def test_landscape_declares_its_public_command_capability() -> None:
         Capability.AGENDA,
         Capability.CLOSED_ITEMS,
         Capability.COMMANDS,
+        Capability.ENTITY_DETAILS,
     )
     envelopes = {
         entity.entity_type: tuple(
@@ -62,10 +63,12 @@ def test_landscape_declares_its_public_command_capability() -> None:
     }
     assert envelopes == {
         "action": (
+            StandardEntityCapability.ENTITY_ANNOTATE.value,
+            StandardEntityCapability.ACTIVITY_READ.value,
             StandardEntityCapability.LIFECYCLE_COMPLETE.value,
             StandardEntityCapability.LIFECYCLE_REOPEN.value,
         ),
-        "initiative": (),
+        "initiative": (StandardEntityCapability.ACTIVITY_READ.value,),
     }
 
 
@@ -129,6 +132,30 @@ def test_activation_requires_declared_closed_item_projection(
     with pytest.raises(
         BuiltinPluginError,
         match="activated closed-items capability must match",
+    ):
+        activate_builtin_agenda_plugins(
+            Database(tmp_path / "mission-control.db"), (prepared,)
+        )
+
+
+def test_activation_requires_declared_entity_detail_projection(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    provider = SimpleNamespace(
+        plugin_id=prepared.registration.plugin_id,
+        command_owner=SimpleNamespace(
+            command_state=lambda _target: None,
+            handle=lambda _command, _context: None,
+        ),
+        closed_items=lambda **_kwargs: None,
+    )
+    implementation = SimpleNamespace(activate=lambda _database, _seed: provider)
+    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
+
+    with pytest.raises(
+        BuiltinPluginError,
+        match="activated entity-details capability must match",
     ):
         activate_builtin_agenda_plugins(
             Database(tmp_path / "mission-control.db"), (prepared,)

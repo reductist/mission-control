@@ -16,16 +16,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from mission_control import __version__
 from mission_control.agenda import (
     AgendaContribution,
+    SourceRef,
     agenda_to_list,
     aggregate_agenda,
     project_core_tasks,
     validate_agenda_capabilities,
 )
+from mission_control.annotations import AnnotationCommandHandler, AnnotationRepository
 from mission_control.builtin_plugins import (
     BUILTIN_AGENDA_PLUGIN_IDS,
     BuiltinPluginError,
@@ -49,11 +51,22 @@ from mission_control.closed_items import (
     validate_closed_items_capabilities,
 )
 from mission_control.database import Database
+from mission_control.entity_details import (
+    compose_entity_detail,
+    entity_detail_to_dict,
+    validate_entity_detail_capabilities,
+)
 from mission_control.migrations import MigrationRunner
+from mission_control.plugins import (
+    PluginId,
+    StandardEntityCapability,
+    entity_type_registration,
+)
 from mission_control.tasks import TASK_STATES, Task, TaskRepository
 
 MAX_REQUEST_BYTES = 64 * 1024
 _TASK_PATH = re.compile(r"^/api/tasks/([^/]+)$")
+_ENTITY_PATH = re.compile(r"^/api/entities/([^/]+)/([^/]+)/([^/]+)$")
 _STATIC_ASSETS = {
     "/assets/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/assets/styles.css": ("styles.css", "text/css; charset=utf-8"),
@@ -91,6 +104,7 @@ class MissionControlApplication:
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
+        self.annotation_repository = AnnotationRepository(database)
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
@@ -98,6 +112,15 @@ class MissionControlApplication:
         self.agenda_providers = activate_builtin_agenda_plugins(
             database, self.builtin_plugins
         )
+        self.registrations = {
+            plugin.registration.plugin_id.value: plugin.registration
+            for plugin in self.builtin_plugins
+        }
+        self.entity_detail_providers = {
+            provider.plugin_id.value: provider
+            for provider in self.agenda_providers
+            if callable(getattr(provider, "entity_detail", None))
+        }
         command_owners = {"core": CoreTaskCommandOwner(self.repository)}
         command_owners.update(
             {
@@ -108,9 +131,11 @@ class MissionControlApplication:
         )
         self.command_router = CommandRouter(
             command_owners,
-            registrations={
-                plugin.registration.plugin_id.value: plugin.registration
-                for plugin in self.builtin_plugins
+            registrations=self.registrations,
+            capability_handlers={
+                "entity.annotate": AnnotationCommandHandler(
+                    self.annotation_repository
+                )
             },
         )
         self._demo_fixture = _load_demo_fixture() if demo else None
@@ -217,7 +242,7 @@ class MissionControlApplication:
         except CommandContractError as error:
             raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-command", str(error)) from error
 
-        context = CommandContext(actor="local-write-token") if authorized else None
+        context = CommandContext(actor="local-operator") if authorized else None
         outcome = self.command_router.dispatch(command, context=context)
         status = {
             CommandStatus.ACCEPTED: HTTPStatus.OK,
@@ -228,6 +253,40 @@ class MissionControlApplication:
             CommandStatus.FAILED: HTTPStatus.INTERNAL_SERVER_ERROR,
         }[outcome.status]
         return status, outcome_to_dict(outcome)
+
+    def entity_detail(
+        self, plugin_id: str, entity_type: str, entity_id: str
+    ) -> dict[str, object]:
+        target = SourceRef(PluginId(plugin_id), entity_type, entity_id)
+        provider = self.entity_detail_providers.get(plugin_id)
+        registration = self.registrations.get(plugin_id)
+        if provider is None or registration is None:
+            raise ApiError(
+                HTTPStatus.NOT_FOUND,
+                "entity-not-found",
+                "entity detail is not available",
+            )
+        project = getattr(provider, "entity_detail")
+        detail = project(target)
+        if detail is None:
+            raise ApiError(
+                HTTPStatus.NOT_FOUND,
+                "entity-not-found",
+                "entity detail is not available",
+            )
+        validate_entity_detail_capabilities(registration, detail)
+        declared = entity_type_registration(registration, entity_type)
+        assert declared is not None
+        can_read_activity = any(
+            capability.value == StandardEntityCapability.ACTIVITY_READ.value
+            for capability in declared.capabilities
+        )
+        composed = compose_entity_detail(
+            detail,
+            self.annotation_repository.list(target) if can_read_activity else (),
+        )
+        validate_entity_detail_capabilities(registration, composed)
+        return entity_detail_to_dict(composed)
 
     def index_document(self) -> bytes:
         source = _web_resource("index.html").read_text(encoding="utf-8")
@@ -277,6 +336,23 @@ def _handler_for(application: MissionControlApplication):
                 return
             if path == "/api/dashboard":
                 self._send_json(HTTPStatus.OK, application.dashboard())
+                return
+            entity_match = _ENTITY_PATH.fullmatch(path)
+            if entity_match is not None:
+                try:
+                    segments = tuple(unquote(part) for part in entity_match.groups())
+                    if any(not part or "/" in part for part in segments):
+                        raise ApiError(
+                            HTTPStatus.BAD_REQUEST,
+                            "invalid-entity-reference",
+                            "entity reference contains unsupported characters",
+                        )
+                    self._send_json(
+                        HTTPStatus.OK,
+                        application.entity_detail(*segments),
+                    )
+                except ApiError as error:
+                    self._send_error(error)
                 return
             asset = _STATIC_ASSETS.get(path)
             if asset is not None:

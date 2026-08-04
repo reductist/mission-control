@@ -20,11 +20,15 @@ REOPEN = EntityAffordance(
     EntityCapability(StandardEntityCapability.LIFECYCLE_REOPEN.value),
     "reopen",
 )
+ANNOTATE = EntityAffordance(
+    EntityCapability(StandardEntityCapability.ENTITY_ANNOTATE.value),
+    "add-note",
+)
 
 
 def action_affordances(action: LandscapeAction) -> tuple[EntityAffordance, ...]:
     """Expose exactly the lifecycle operation legal in the current state."""
 
     if action.state is LandscapeActionState.DONE:
-        return (REOPEN,)
-    return (COMPLETE,)
+        return (ANNOTATE, REOPEN)
+    return (ANNOTATE, COMPLETE)

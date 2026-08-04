@@ -190,6 +190,12 @@ class LandscapeInitiative:
             updated_at=self.updated_at,
         )
 
+    @property
+    def revision(self) -> str:
+        """Return the opaque public concurrency token for this initiative."""
+
+        return str(self.version)
+
 
 @dataclass(frozen=True, slots=True)
 class LandscapeAction:

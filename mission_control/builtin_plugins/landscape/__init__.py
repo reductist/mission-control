@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import ClassVar
 
-from mission_control.agenda import AgendaContribution
+from mission_control.agenda import AgendaContribution, SourceRef
 from mission_control.builtin_plugins.landscape.commands import LandscapeCommandOwner
+from mission_control.builtin_plugins.landscape.details import entity_detail
 from mission_control.builtin_plugins.landscape.repository import (
     PLUGIN_ID,
     LandscapeMigrationRunner,
@@ -17,6 +18,7 @@ from mission_control.builtin_plugins.landscape.repository import (
 from mission_control.commands import CommandOwner
 from mission_control.closed_items import ClosedItemsContribution
 from mission_control.database import Database
+from mission_control.entity_details import EntityDetail
 from mission_control.plugins import PluginId
 
 
@@ -31,6 +33,9 @@ class LandscapeAgendaProvider:
 
     def closed_items(self, *, generated_at: datetime) -> ClosedItemsContribution:
         return self.repository.closed_items_contribution(generated_at=generated_at)
+
+    def entity_detail(self, target: SourceRef) -> EntityDetail | None:
+        return entity_detail(self.repository, target)
 
 
 def activate(database: Database, seed: AgendaContribution) -> LandscapeAgendaProvider:

@@ -39,7 +39,15 @@ class LandscapeCommandOwner:
     def command_state(self, target: SourceRef) -> CommandTargetState | None:
         """Resolve current state for core's capability and revision checks."""
 
-        if target.plugin_id != PLUGIN_ID or target.entity_type != "action":
+        if target.plugin_id != PLUGIN_ID:
+            return None
+        if target.entity_type == "initiative":
+            try:
+                initiative = self.repository.get_initiative(target.entity_id)
+            except KeyError:
+                return None
+            return CommandTargetState(initiative.revision, ())
+        if target.entity_type != "action":
             return None
         try:
             action = self.repository.get_action(target.entity_id)

@@ -138,6 +138,16 @@ def activate_builtin_agenda_plugins(
                 raise ValueError(
                     "registration and activated closed-items capability must match"
                 )
+            declares_entity_details = (
+                Capability.ENTITY_DETAILS in plugin.registration.capabilities
+            )
+            exposes_entity_details = callable(
+                getattr(provider, "entity_detail", None)
+            )
+            if exposes_entity_details is not declares_entity_details:
+                raise ValueError(
+                    "registration and activated entity-details capability must match"
+                )
         except (
             AttributeError,
             ImportError,

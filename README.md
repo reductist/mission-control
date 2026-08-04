@@ -34,7 +34,7 @@ The executable implementation provides:
 - ordered SQLite migrations
 - task creation, updates, listing, and immutable event history
 - browser task creation, completion, and reopening through authoritative owners
-- responsive Overview, completed History, and synthetic House demo workspaces
+- responsive Overview, completed History, entity detail/activity, and synthetic House demo workspaces
 - an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, agenda projections, and owner-routed completion
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
@@ -42,6 +42,7 @@ The executable implementation provides:
 - explicit available, rejected, and duplicate-ID conflict catalog outcomes
 - a CUE-defined read-only agenda query and contribution boundary
 - a CUE-defined closed-item contribution boundary kept separate from the active agenda
+- a CUE-defined entity detail and immutable activity boundary
 - CUE-defined command envelope and structured outcome contracts
 - single-owner command routing for core and Landscape with optimistic revision checks
 - frozen initiative, action, event, and timing variants
@@ -85,7 +86,7 @@ Run the demo against a disposable database:
 mctrld --database ./mission-control-demo.db --demo --plugin landscape
 ```
 
-Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Core task and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Landscape registers its command owner only while the plugin is enabled.
+Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details and event history or add a durable measurement/observation note. Core task and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Landscape registers its command owner and detail provider only while the plugin is enabled.
 
 #### Upgrading an existing Yard demo
 
@@ -148,6 +149,7 @@ This standalone repository owns application code, schemas, tests, plugins, packa
 - Schema changes use ordered, explicit migrations.
 - Landscape migrations and tables are namespaced and recorded independently from core migrations.
 - Every material task mutation appends an immutable event.
+- Core-owned entity notes are append-only, immutable activity records keyed by a stable plugin entity reference.
 - The `tasks` table is the current projection used for efficient reads.
 - Supported task states are `backlog`, `ready`, `in-progress`, and `done`.
 - Task metadata includes `blocked`, `waiting_on`, and `review_after`.
@@ -161,7 +163,7 @@ The core owns stable extension contracts. Each plugin owns its migrations, confi
 
 The first language-agnostic CUE contract defines plugin registration data and generates the JSON Schema packaged with the application. Untyped JSON is accepted only at parser and filesystem boundaries, then converted into frozen `PluginRegistration` values. Discovery builds a new immutable catalog snapshot on each scan; malformed registrations are rejected explicitly and duplicate IDs become conflicts rather than allowing one source to win silently. No plugin implementation code is imported during this process.
 
-The agenda query and contribution contracts keep active provider snapshots read-only; the closed-item contract gives completed/history views a separate current-state projection. Plugin-specific state and recurrence remain inside the owner. Optional opaque revisions let mutable owners support optimistic commands without exposing repository internals. Landscape now demonstrates independently migrated plugin state, idempotent packaged-data import, immutable plugin history, active and closed projections from the authoritative repository, and complete/reopen operations through an ordinary plugin command handler. Durable command idempotency, richer authorization, and structured CLI command exposure remain tracked in #4. Broader application, event, health, and lifecycle contracts remain tracked in #3.
+The agenda query and contribution contracts keep active provider snapshots read-only; the closed-item contract gives completed/history views a separate current-state projection. The entity-detail contract composes plugin-owned current state and domain history with core-owned annotations at read time, without copying the entity into core. Plugin-specific state and recurrence remain inside the owner. Optional opaque revisions let mutable owners support optimistic commands without exposing repository internals. Landscape now demonstrates independently migrated plugin state, idempotent packaged-data import, immutable plugin history, active and closed projections, detail/activity projection, shared annotations, and complete/reopen operations through an ordinary plugin command handler. Durable command idempotency, richer authorization, and structured CLI command exposure remain tracked in #4. Broader application, event, health, and lifecycle contracts remain tracked in #3.
 
 ## CLI direction
 

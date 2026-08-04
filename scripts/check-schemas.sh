@@ -15,10 +15,12 @@ COMMAND_RESULT_GENERATED="$GENERATED_DIR/command-result.runtime-check.schema.jso
 COMMAND_RESULT_RUNTIME="./mission_control/schemas/command-result.schema.json"
 CLOSED_ITEMS_GENERATED="$GENERATED_DIR/closed-items-contribution.runtime-check.schema.json"
 CLOSED_ITEMS_RUNTIME="./mission_control/schemas/closed-items-contribution.schema.json"
+ENTITY_DETAIL_GENERATED="$GENERATED_DIR/entity-detail.runtime-check.schema.json"
+ENTITY_DETAIL_RUNTIME="./mission_control/schemas/entity-detail.schema.json"
 
 cd "$ROOT_DIR"
 mkdir -p "$GENERATED_DIR"
-trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED" "$CLOSED_ITEMS_GENERATED"' EXIT
+trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED" "$CLOSED_ITEMS_GENERATED" "$ENTITY_DETAIL_GENERATED"' EXIT
 
 cue def --force --out jsonschema -e '#PluginRegistration' \
   -o "$PLUGIN_GENERATED" \
@@ -38,6 +40,9 @@ cue def --force --out jsonschema -e '#CommandResult' \
 cue def --force --out jsonschema -e '#ClosedItemsContribution' \
   -o "$CLOSED_ITEMS_GENERATED" \
   ./schema/closed-items
+cue def --force --out jsonschema -e '#EntityDetail' \
+  -o "$ENTITY_DETAIL_GENERATED" \
+  ./schema/entity-detail
 
 compare_schema() {
   local generated="$1"
@@ -73,6 +78,7 @@ compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
 compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
 compare_schema "$COMMAND_RESULT_GENERATED" "$COMMAND_RESULT_RUNTIME" "command result"
 compare_schema "$CLOSED_ITEMS_GENERATED" "$CLOSED_ITEMS_RUNTIME" "closed items contribution"
+compare_schema "$ENTITY_DETAIL_GENERATED" "$ENTITY_DETAIL_RUNTIME" "entity detail"
 
 validate_success() {
   local definition="$1"
@@ -105,6 +111,8 @@ validate_success '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
   ./schema/examples/valid-command-result.json
 validate_success '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_GENERATED" \
   ./schema/examples/valid-landscape-closed-items.json
+validate_success '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
+  ./schema/examples/valid-landscape-entity-detail.json
 
 expect_failure() {
   local definition="$1"
@@ -138,6 +146,8 @@ expect_failure '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
   ./schema/examples/invalid-command-result.json
 expect_failure '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_GENERATED" \
   ./schema/examples/invalid-closed-item-key.json
+expect_failure '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
+  ./schema/examples/invalid-entity-detail-key.json
 
 for fixture in \
   ./schema/examples/invalid-agenda-kind.json \

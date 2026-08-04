@@ -1,0 +1,13 @@
+{
+  "schema_version": "mission-control.entity-detail/v1",
+  "source": {
+    "plugin_id": "landscape",
+    "entity_type": "action",
+    "entity_id": "measure-access-route"
+  },
+  "title": "Measure the backyard access route",
+  "attributes": [],
+  "affordances": [],
+  "activity": [],
+  "copied_plugin_state": true
+}

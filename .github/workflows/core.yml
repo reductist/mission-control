@@ -59,14 +59,17 @@ jobs:
           wheel = next(Path("dist").glob("mission_control-*.whl"))
           expected = {
               "mission_control/migrations/0001_initial.sql",
+              "mission_control/migrations/0002_entity_notes.sql",
               "mission_control/builtin_plugins/landscape/agenda.json",
               "mission_control/builtin_plugins/landscape/migrations/0001_initial.sql",
               "mission_control/builtin_plugins/landscape/migrations/0002_domain_text_bounds.sql",
               "mission_control/builtin_plugins/landscape/registration.json",
               "mission_control/schemas/agenda-contribution.schema.json",
               "mission_control/schemas/agenda-query.schema.json",
+              "mission_control/schemas/closed-items-contribution.schema.json",
               "mission_control/schemas/command-envelope.schema.json",
               "mission_control/schemas/command-result.schema.json",
+              "mission_control/schemas/entity-detail.schema.json",
               "mission_control/schemas/plugin-registration.schema.json",
               "mission_control/web/app.js",
               "mission_control/web/demo.json",
