@@ -27,7 +27,11 @@ from mission_control.agenda import (
     project_core_tasks,
     validate_agenda_capabilities,
 )
-from mission_control.annotations import AnnotationCommandHandler, AnnotationRepository
+from mission_control.annotations import (
+    AnnotationCommandHandler,
+    AnnotationLifecycleCommandHandler,
+    AnnotationRepository,
+)
 from mission_control.builtin_plugins import (
     BUILTIN_AGENDA_PLUGIN_IDS,
     BuiltinPluginError,
@@ -41,6 +45,7 @@ from mission_control.commands import (
     CommandRouter,
     CommandStatus,
     CoreTaskCommandOwner,
+    EntityTypeCommandOwner,
     outcome_to_dict,
     parse_command,
 )
@@ -58,6 +63,7 @@ from mission_control.entity_details import (
 )
 from mission_control.migrations import MigrationRunner
 from mission_control.plugins import (
+    EntityCapability,
     PluginId,
     StandardEntityCapability,
     entity_type_registration,
@@ -121,7 +127,16 @@ class MissionControlApplication:
             for provider in self.agenda_providers
             if callable(getattr(provider, "entity_detail", None))
         }
-        command_owners = {"core": CoreTaskCommandOwner(self.repository)}
+        command_owners = {
+            "core": EntityTypeCommandOwner(
+                {
+                    "task": CoreTaskCommandOwner(self.repository),
+                    "annotation": AnnotationLifecycleCommandHandler(
+                        self.annotation_repository
+                    ),
+                }
+            )
+        }
         command_owners.update(
             {
                 provider.plugin_id.value: provider.command_owner
@@ -133,8 +148,12 @@ class MissionControlApplication:
             command_owners,
             registrations=self.registrations,
             capability_handlers={
-                "entity.annotate": AnnotationCommandHandler(
-                    self.annotation_repository
+                "entity.annotate": AnnotationCommandHandler(self.annotation_repository)
+            },
+            entity_type_capabilities={
+                ("core", "annotation"): (
+                    EntityCapability(StandardEntityCapability.LIFECYCLE_DISMISS.value),
+                    EntityCapability(StandardEntityCapability.LIFECYCLE_REOPEN.value),
                 )
             },
         )
@@ -197,7 +216,9 @@ class MissionControlApplication:
         title = payload.get("title")
         description = payload.get("description", "")
         if not isinstance(title, str):
-            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-title", "title must be a string")
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST, "invalid-title", "title must be a string"
+            )
         if not isinstance(description, str):
             raise ApiError(
                 HTTPStatus.BAD_REQUEST,
@@ -207,7 +228,9 @@ class MissionControlApplication:
         try:
             return _task_to_dict(self.repository.create(title, description))
         except (TypeError, ValueError) as error:
-            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-task", str(error)) from error
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST, "invalid-task", str(error)
+            ) from error
 
     def update_task(self, task_id: str, document: object) -> dict[str, object]:
         payload = _object_payload(
@@ -230,9 +253,13 @@ class MissionControlApplication:
         try:
             return _task_to_dict(self.repository.update(task_id, **payload))
         except KeyError as error:
-            raise ApiError(HTTPStatus.NOT_FOUND, "task-not-found", "task not found") from error
+            raise ApiError(
+                HTTPStatus.NOT_FOUND, "task-not-found", "task not found"
+            ) from error
         except (TypeError, ValueError) as error:
-            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-task", str(error)) from error
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST, "invalid-task", str(error)
+            ) from error
 
     def execute_command(
         self, document: object, *, authorized: bool
@@ -240,7 +267,9 @@ class MissionControlApplication:
         try:
             command = parse_command(document)
         except CommandContractError as error:
-            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-command", str(error)) from error
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST, "invalid-command", str(error)
+            ) from error
 
         context = CommandContext(actor="local-operator") if authorized else None
         outcome = self.command_router.dispatch(command, context=context)
@@ -274,7 +303,9 @@ class MissionControlApplication:
                 "entity-not-found",
                 "entity detail is not available",
             )
-        validate_entity_detail_capabilities(registration, detail)
+        validate_entity_detail_capabilities(
+            registration, detail, expected_source=target
+        )
         declared = entity_type_registration(registration, entity_type)
         assert declared is not None
         can_read_activity = any(
@@ -284,8 +315,16 @@ class MissionControlApplication:
         composed = compose_entity_detail(
             detail,
             self.annotation_repository.list(target) if can_read_activity else (),
+            self.annotation_repository.status_history(target)
+            if can_read_activity
+            else (),
         )
-        validate_entity_detail_capabilities(registration, composed)
+        validate_entity_detail_capabilities(
+            registration,
+            composed,
+            allow_core_notes=True,
+            expected_source=target,
+        )
         return entity_detail_to_dict(composed)
 
     def index_document(self) -> bytes:
@@ -371,14 +410,18 @@ def _handler_for(application: MissionControlApplication):
                 self._handle_command()
                 return
             if path != "/api/tasks":
-                self._send_error(ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found"))
+                self._send_error(
+                    ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found")
+                )
                 return
             self._handle_mutation(lambda payload: application.create_task(payload))
 
         def do_PATCH(self) -> None:  # noqa: N802 - stdlib handler interface
             match = _TASK_PATH.fullmatch(urlsplit(self.path).path)
             if match is None:
-                self._send_error(ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found"))
+                self._send_error(
+                    ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found")
+                )
                 return
             task_id = match.group(1)
             self._handle_mutation(
@@ -435,7 +478,9 @@ def _handler_for(application: MissionControlApplication):
                     "invalid Content-Length header",
                 ) from error
             if length <= 0:
-                raise ApiError(HTTPStatus.BAD_REQUEST, "empty-body", "JSON body is required")
+                raise ApiError(
+                    HTTPStatus.BAD_REQUEST, "empty-body", "JSON body is required"
+                )
             if length > MAX_REQUEST_BYTES:
                 raise ApiError(
                     HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
@@ -601,7 +646,9 @@ def main(argv: list[str] | None = None) -> int:
     mode = "demo" if args.demo else "live"
     print(f"Mission Control {__version__} ({mode}) listening on http://{host}:{port}")
     if host not in {"127.0.0.1", "::1", "localhost"}:
-        print("warning: the MVP server has no user authentication; expose it only on a trusted network")
+        print(
+            "warning: the MVP server has no user authentication; expose it only on a trusted network"
+        )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

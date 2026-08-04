@@ -46,6 +46,10 @@ affordances, and domain events. Core may compose shared notes into the activity
 sequence without copying or mutating plugin state. The provider must declare the
 coarse `entity-details` capability, while `activity.read` and `entity.annotate`
 remain entity-type capabilities enforced through the registration envelope.
+Core-composed note entries additionally carry their `core/annotation` source,
+active/inactive state, opaque note revision, and one current
+`lifecycle.dismiss` or `lifecycle.reopen` affordance. Plugin-supplied domain events
+cannot impersonate those core-owned controls.
 
 ## Runtime artifacts
 

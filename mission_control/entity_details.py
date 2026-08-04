@@ -15,7 +15,11 @@ from typing import Any, Protocol, cast
 from jsonschema import Draft202012Validator
 
 from mission_control.agenda import SourceRef
-from mission_control.annotations import EntityNote
+from mission_control.annotations import (
+    EntityNote,
+    EntityNoteState,
+    EntityNoteStatusEvent,
+)
 from mission_control.plugins import (
     Capability,
     EntityAffordance,
@@ -40,6 +44,11 @@ class ActivityKind(StrEnum):
     NOTE = "note"
 
 
+class ActivityNoteState(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
 @dataclass(frozen=True, slots=True)
 class DetailAttribute:
     key: str
@@ -56,6 +65,10 @@ class ActivityEntry:
     occurred_at: datetime
     body: str | None = None
     actor: str | None = None
+    source: SourceRef | None = None
+    state: ActivityNoteState | None = None
+    revision: str | None = None
+    affordances: tuple[EntityAffordance, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, ActivityKind):
@@ -64,13 +77,48 @@ class ActivityEntry:
             raise TypeError("activity occurred_at must be a datetime")
         if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
             raise ValueError("activity occurred_at must be timezone-aware")
-        if self.kind is ActivityKind.NOTE and (
-            not isinstance(self.body, str)
-            or not self.body.strip()
-            or not isinstance(self.actor, str)
-            or not self.actor.strip()
+        if self.kind is ActivityKind.NOTE:
+            if (
+                not isinstance(self.body, str)
+                or not self.body.strip()
+                or not isinstance(self.actor, str)
+                or not self.actor.strip()
+            ):
+                raise ValueError("note activity requires a nonblank body and actor")
+            if (
+                not isinstance(self.source, SourceRef)
+                or self.source.plugin_id.value != "core"
+                or self.source.entity_type != "annotation"
+                or self.activity_id != f"note:{self.source.entity_id}"
+            ):
+                raise ValueError("note activity requires its core annotation source")
+            if not isinstance(self.state, ActivityNoteState):
+                raise TypeError("note activity requires an ActivityNoteState")
+            if not isinstance(self.revision, str) or not self.revision:
+                raise ValueError("note activity requires a nonblank revision")
+            expected = (
+                (
+                    StandardEntityCapability.LIFECYCLE_DISMISS.value,
+                    "dismiss",
+                )
+                if self.state is ActivityNoteState.ACTIVE
+                else (
+                    StandardEntityCapability.LIFECYCLE_REOPEN.value,
+                    "reopen",
+                )
+            )
+            actual = tuple(
+                (item.capability.value, item.command) for item in self.affordances
+            )
+            if actual != (expected,):
+                raise ValueError(
+                    "note activity affordance does not match its lifecycle state"
+                )
+        elif (
+            any(value is not None for value in (self.source, self.state, self.revision))
+            or self.affordances
         ):
-            raise ValueError("note activity requires a nonblank body and actor")
+            raise ValueError("event activity cannot expose annotation lifecycle state")
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,9 +142,7 @@ class EntityDetailProvider(Protocol):
 
 @lru_cache(maxsize=1)
 def _entity_detail_validator() -> Draft202012Validator:
-    path = files("mission_control").joinpath(
-        "schemas", "entity-detail.schema.json"
-    )
+    path = files("mission_control").joinpath("schemas", "entity-detail.schema.json")
     schema = json.loads(path.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema)
@@ -171,6 +217,22 @@ def parse_entity_detail(document: object) -> EntityDetail:
                 datetime.fromisoformat(item["occurred_at"]),
                 item.get("body"),
                 item.get("actor"),
+                SourceRef(
+                    PluginId(item["source"]["plugin_id"]),
+                    item["source"]["entity_type"],
+                    item["source"]["entity_id"],
+                )
+                if "source" in item
+                else None,
+                ActivityNoteState(item["state"]) if "state" in item else None,
+                item.get("revision"),
+                tuple(
+                    EntityAffordance(
+                        EntityCapability(affordance["capability"]),
+                        affordance["command"],
+                    )
+                    for affordance in item.get("affordances", [])
+                ),
             )
             for item in raw["activity"]
         )
@@ -266,11 +328,31 @@ def activity_entry_to_dict(entry: ActivityEntry) -> dict[str, object]:
         document["body"] = entry.body
     if entry.actor is not None:
         document["actor"] = entry.actor
+    if entry.source is not None:
+        document["source"] = {
+            "plugin_id": entry.source.plugin_id.value,
+            "entity_type": entry.source.entity_type,
+            "entity_id": entry.source.entity_id,
+        }
+    if entry.state is not None:
+        document["state"] = entry.state.value
+    if entry.revision is not None:
+        document["revision"] = entry.revision
+    if entry.affordances:
+        document["affordances"] = [
+            {
+                "capability": item.capability.value,
+                "command": item.command,
+            }
+            for item in entry.affordances
+        ]
     return document
 
 
 def compose_entity_detail(
-    detail: EntityDetail, notes: Iterable[EntityNote]
+    detail: EntityDetail,
+    notes: Iterable[EntityNote],
+    status_events: Iterable[EntityNoteStatusEvent] = (),
 ) -> EntityDetail:
     """Merge shared immutable notes into plugin-owned activity at read time."""
 
@@ -284,15 +366,24 @@ def compose_entity_detail(
             body=note.body,
             actor=note.actor,
             occurred_at=note.occurred_at,
+            source=SourceRef(PluginId("core"), "annotation", note.note_id),
+            state=ActivityNoteState(note.state.value),
+            revision=note.revision,
+            affordances=(_note_affordance(note.state),),
         )
         for note in notes
     )
+    activity.extend(_status_activity_entry(event) for event in status_events)
     activity.sort(key=lambda item: (item.occurred_at, item.activity_id))
     return replace(detail, activity=tuple(activity))
 
 
 def validate_entity_detail_capabilities(
-    registration: PluginRegistration, detail: EntityDetail
+    registration: PluginRegistration,
+    detail: EntityDetail,
+    *,
+    allow_core_notes: bool = False,
+    expected_source: SourceRef | None = None,
 ) -> None:
     """Enforce the registration envelope around one detail projection."""
 
@@ -300,6 +391,8 @@ def validate_entity_detail_capabilities(
         raise ValueError("plugin did not declare the entity-details capability")
     if registration.plugin_id != detail.source.plugin_id:
         raise ValueError("entity detail provider does not match plugin registration")
+    if expected_source is not None and detail.source != expected_source:
+        raise ValueError("entity detail provider returned a different entity source")
     declared = entity_type_registration(registration, detail.source.entity_type)
     if declared is None:
         raise ValueError("entity detail uses an undeclared entity type")
@@ -319,3 +412,46 @@ def validate_entity_detail_capabilities(
         seen_commands.add(affordance.command)
     if detail.activity and StandardEntityCapability.ACTIVITY_READ.value not in envelope:
         raise ValueError("entity detail exposed activity without activity.read")
+    for item in detail.activity:
+        if item.kind is ActivityKind.NOTE and not allow_core_notes:
+            raise ValueError(
+                "plugin entity detail cannot supply core annotation activity"
+            )
+        activity_namespace = item.activity_type.split(".", 1)[0]
+        if activity_namespace == registration.plugin_id.value:
+            continue
+        if (
+            allow_core_notes
+            and item.kind is ActivityKind.EVENT
+            and item.activity_type in {"core.note-dismissed", "core.note-reopened"}
+        ):
+            continue
+        if item.kind is ActivityKind.NOTE and allow_core_notes:
+            continue
+        raise ValueError("entity detail activity does not belong to its declared owner")
+
+
+def _note_affordance(state: EntityNoteState) -> EntityAffordance:
+    if state is EntityNoteState.ACTIVE:
+        return EntityAffordance(
+            EntityCapability(StandardEntityCapability.LIFECYCLE_DISMISS.value),
+            "dismiss",
+        )
+    return EntityAffordance(
+        EntityCapability(StandardEntityCapability.LIFECYCLE_REOPEN.value),
+        "reopen",
+    )
+
+
+def _status_activity_entry(event: EntityNoteStatusEvent) -> ActivityEntry:
+    inactive = event.state is EntityNoteState.INACTIVE
+    return ActivityEntry(
+        activity_id=f"note-status:{event.event_id}",
+        kind=ActivityKind.EVENT,
+        activity_type=("core.note-dismissed" if inactive else "core.note-reopened"),
+        summary=(
+            "Note removed from activity" if inactive else "Note restored to activity"
+        ),
+        occurred_at=event.occurred_at,
+        actor=event.actor,
+    )

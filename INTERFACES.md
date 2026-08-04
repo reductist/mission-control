@@ -105,6 +105,14 @@ public-contract boundary, not a security sandbox.
 
 The experimental `mission-control.command/v1` envelope routes by a stable source target containing `plugin_id`, `entity_type`, and `entity_id`. It carries the caller's expected revision so the owner can reject stale intent before mutation. Arguments remain owner-specific JSON and are never interpreted by the aggregate renderer.
 
+Core-owned command targets use the same envelope and affordance rules without
+pretending to be plugins. Core declares a fixed maximum envelope for each such
+entity type. Shared annotations are the first example: an entity-detail note carries
+a `core/annotation/<note-id>` source, its own opaque revision, current active or
+inactive state, and exactly one `lifecycle.dismiss` or `lifecycle.reopen`
+affordance. A note visibility transition appends core audit state and does not
+advance the parent plugin entity revision.
+
 The `mission-control.command-result/v1` tagged result reports `accepted`, `rejected`, `conflicted`, `stale`, `unauthorized`, or `failed`. Operator-facing failures are normalized and must not expose raw tracebacks. The transitional `core/task:set-state` slice and Landscape lifecycle capabilities prove the boundary; durable idempotency and actor-aware event envelopes remain experimental follow-up work.
 
 ## Agenda contribution interface

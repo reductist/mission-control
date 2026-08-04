@@ -42,9 +42,13 @@ let activityCommon = {
 
 #NoteActivity: close({
 	activityCommon
-	kind!:  "note"
-	body!:  string & strings.MinRunes(1) & strings.MaxRunes(16384)
-	actor!: string & strings.MinRunes(1) & strings.MaxRunes(256)
+	kind!:        "note"
+	body!:        string & strings.MinRunes(1) & strings.MaxRunes(16384)
+	actor!:       string & strings.MinRunes(1) & strings.MaxRunes(256)
+	source!:      #SourceRef
+	state!:       "active" | "inactive"
+	revision!:    string & strings.MinRunes(1) & strings.MaxRunes(128)
+	affordances!: [...#Affordance]
 })
 
 #ActivityEntry: #EventActivity | #NoteActivity

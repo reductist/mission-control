@@ -37,6 +37,7 @@ let activeView = "overview";
 let entityDetail = null;
 let detailReturnView = "overview";
 let commandSequence = 0;
+let showRemovedNotes = false;
 
 document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
@@ -51,6 +52,7 @@ document.querySelectorAll(".nav-item").forEach((button) => {
 function showView(view) {
   activeView = view;
   entityDetail = null;
+  showRemovedNotes = false;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === view);
   });
@@ -282,7 +284,13 @@ function renderEntityDetail() {
     (affordance) => ["lifecycle.complete", "lifecycle.reopen"].includes(affordance.capability),
   );
   const lifecycleLabel = lifecycle?.capability === "lifecycle.reopen" ? "Reopen" : "Complete";
-  const activity = [...(detail.activity || [])].reverse();
+  const allActivity = [...(detail.activity || [])].reverse();
+  const removedNotes = allActivity.filter(
+    (entry) => entry.kind === "note" && entry.state === "inactive",
+  );
+  const activity = showRemovedNotes
+    ? allActivity
+    : allActivity.filter((entry) => entry.kind !== "note" || entry.state !== "inactive");
   pageEyebrow.textContent = `${pluginLabel(detail.source.plugin_id)} · ${detail.source.entity_type}`;
   pageTitle.textContent = detail.title;
   pageDescription.textContent = detail.description || "Entity details and immutable activity.";
@@ -305,7 +313,7 @@ function renderEntityDetail() {
       <div class="stack">
         ${annotate && detail.revision ? `
           <section class="panel">
-            <div class="panel-header"><h2>Add a note</h2><span>Immutable activity</span></div>
+            <div class="panel-header"><h2>Add a note</h2><span>Retained activity</span></div>
             <form class="note-form" id="entity-note-form">
               <textarea id="entity-note-body" name="body" required maxlength="16384" rows="5" placeholder="Record measurements, observations, decisions, or other context…"></textarea>
               <button class="primary-button" type="submit">Save note</button>
@@ -313,7 +321,13 @@ function renderEntityDetail() {
           </section>
         ` : ""}
         <section class="panel">
-          <div class="panel-header"><h2>Activity</h2><span>${activity.length} entries</span></div>
+          <div class="panel-header">
+            <h2 id="activity-heading" tabindex="-1">Activity</h2>
+            <div class="activity-header-actions">
+              <span>${activity.length} visible</span>
+              ${removedNotes.length ? `<button class="text-button" id="toggle-removed-notes" type="button">${showRemovedNotes ? "Hide" : "Show"} ${removedNotes.length} removed</button>` : ""}
+            </div>
+          </div>
           <div class="activity-list">
             ${activity.length ? activity.map(activityRow).join("") : '<div class="empty">No activity has been recorded.</div>'}
           </div>
@@ -328,6 +342,14 @@ function renderEntityDetail() {
   if (noteForm) {
     noteForm.addEventListener("submit", (event) => addEntityNote(event, annotate));
   }
+  const removedToggle = document.querySelector("#toggle-removed-notes");
+  if (removedToggle) {
+    removedToggle.addEventListener("click", () => {
+      showRemovedNotes = !showRemovedNotes;
+      renderEntityDetail();
+    });
+  }
+  wireActivityCommands();
 }
 
 function metric(label, value, detail) {
@@ -412,19 +434,26 @@ function detailAttribute(attribute) {
 
 function activityRow(entry) {
   const note = entry.kind === "note";
+  const noteActivity = entry.activity_type?.startsWith("core.note-");
   const provenance = [
-    note ? "Note" : pluginLabel(entityDetail.source.plugin_id),
-    note && entry.actor ? (entry.actor === "local-operator" ? "You" : entry.actor) : null,
+    note || noteActivity ? "Note" : pluginLabel(entityDetail.source.plugin_id),
+    (note || noteActivity) && entry.actor ? (entry.actor === "local-operator" ? "You" : entry.actor) : null,
     formatDateTime(entry.occurred_at),
   ].filter(Boolean).join(" · ");
+  const affordance = note ? entry.affordances?.[0] : null;
+  const actionLabel = affordance?.capability === "lifecycle.dismiss" ? "Remove" : "Restore";
+  const action = affordance && entry.source && entry.revision
+    ? `<button class="activity-action ${entry.state === "active" ? "is-destructive" : ""}" type="button" data-activity-command data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}" data-revision="${escapeHtml(entry.revision)}" data-command="${escapeHtml(affordance.command)}" data-capability="${escapeHtml(affordance.capability)}" aria-label="${actionLabel} note from ${escapeHtml(formatDateTime(entry.occurred_at))}">${actionLabel}</button>`
+    : "";
   return `
-    <article class="activity-row ${note ? "is-note" : ""}">
+    <article class="activity-row ${note ? "is-note" : ""} ${entry.state === "inactive" ? "is-inactive" : ""}">
       <div class="activity-marker" aria-hidden="true"></div>
       <div>
         <p class="activity-summary">${escapeHtml(entry.summary)}</p>
         ${entry.body ? `<p class="activity-body">${escapeHtml(entry.body)}</p>` : ""}
         <p class="item-meta">${escapeHtml(provenance)}</p>
       </div>
+      ${action}
     </article>
   `;
 }
@@ -474,7 +503,7 @@ function scenarioRow(item) {
 }
 
 function wireCommandButtons() {
-  document.querySelectorAll("button[data-command]").forEach((button) => {
+  document.querySelectorAll("button[data-command]:not([data-activity-command])").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
@@ -526,6 +555,7 @@ function entityDetailPath(source) {
 
 async function openEntityDetail(source) {
   detailReturnView = activeView;
+  showRemovedNotes = false;
   app.setAttribute("aria-busy", "true");
   try {
     entityDetail = await request(entityDetailPath(source));
@@ -534,6 +564,52 @@ async function openEntityDetail(source) {
   } catch (error) {
     renderError(error);
   }
+}
+
+function wireActivityCommands() {
+  document.querySelectorAll("button[data-activity-command]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const removing = button.dataset.capability === "lifecycle.dismiss";
+      if (removing && !window.confirm(
+        "Remove this note from the normal activity view? The original note will remain retained and can be restored.",
+      )) return;
+      button.disabled = true;
+      try {
+        await request("/api/commands", {
+          method: "POST",
+          body: JSON.stringify({
+            schema_version: "mission-control.command/v1",
+            command_id: `web-note-lifecycle-${Date.now()}-${++commandSequence}`,
+            target: {
+              plugin_id: button.dataset.pluginId,
+              entity_type: button.dataset.entityType,
+              entity_id: button.dataset.entityId,
+            },
+            expected_revision: button.dataset.revision,
+            command: button.dataset.command,
+            arguments: {},
+          }),
+        });
+        if (removing) showRemovedNotes = false;
+        await refresh();
+        showNotice(
+          removing
+            ? "Note removed from this view. Its immutable record is retained."
+            : "Note restored to this view.",
+        );
+        document.querySelector("#activity-heading")?.focus({ preventScroll: true });
+      } catch (error) {
+        if (error.status === 409) {
+          await refresh();
+          showNotice("That note changed after this view loaded. The details were refreshed; review its current state before retrying.", "warning");
+        } else {
+          showNotice(error.message || String(error), "warning");
+        }
+      } finally {
+        if (document.body.contains(button)) button.disabled = false;
+      }
+    });
+  });
 }
 
 async function addEntityNote(event, affordance) {

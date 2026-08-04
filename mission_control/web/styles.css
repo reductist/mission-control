@@ -365,18 +365,37 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
 }
 .note-form .primary-button { justify-self: start; }
 .activity-list { display: grid; }
+.activity-header-actions { display: flex; align-items: center; gap: 12px; }
+.activity-header-actions .text-button { font-size: 10px; }
 .activity-row {
   padding: 15px 18px;
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
+  grid-template-columns: 12px minmax(0, 1fr) auto;
   gap: 10px;
+  align-items: start;
   border-bottom: 1px solid var(--border);
 }
 .activity-row:last-child { border-bottom: 0; }
 .activity-marker { width: 8px; height: 8px; margin-top: 5px; border: 2px solid var(--border-strong); border-radius: 50%; }
 .activity-row.is-note .activity-marker { border-color: var(--accent); background: var(--accent-soft); }
+.activity-row.is-inactive { opacity: .72; }
+.activity-row.is-inactive .activity-body { text-decoration: line-through; }
 .activity-summary { margin: 0; font-size: 13px; font-weight: 600; }
 .activity-body { margin: 7px 0 0; white-space: pre-wrap; color: var(--text); font-size: 13px; line-height: 1.55; }
+.activity-action {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: 600 10px/1 var(--mono);
+}
+.activity-action:hover { background: var(--accent-soft); }
+.activity-action.is-destructive { color: var(--danger); border-color: var(--danger); }
+.activity-action.is-destructive:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+#activity-heading:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 @media (max-width: 900px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -402,4 +421,7 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   .history-metrics { grid-template-columns: 1fr; }
   .closed-row { grid-template-columns: 1fr; }
   .closed-row .secondary-button, .closed-row .read-only-label { justify-self: start; }
+  .activity-row { grid-template-columns: 12px minmax(0, 1fr); }
+  .activity-action { grid-column: 2; justify-self: start; }
+  .activity-header-actions { align-items: flex-end; flex-direction: column; gap: 5px; }
 }
