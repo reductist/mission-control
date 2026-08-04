@@ -4,6 +4,12 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from mission_control.agenda import SourceRef
+from mission_control.annotations import (
+    AnnotationLifecycleCommandHandler,
+    AnnotationRepository,
+    EntityNoteState,
+)
 from mission_control.commands import (
     Accepted,
     CommandContext,
@@ -13,6 +19,7 @@ from mission_control.commands import (
     CommandStatus,
     CommandTargetState,
     CoreTaskCommandOwner,
+    EntityTypeCommandOwner,
     Failed,
     JsonObject,
     Rejected,
@@ -26,6 +33,8 @@ from mission_control.migrations import MigrationRunner
 from mission_control.plugins import (
     EntityAffordance,
     EntityCapability,
+    PluginId,
+    StandardEntityCapability,
     parse_plugin_registration,
 )
 from mission_control.tasks import TaskRepository
@@ -166,20 +175,14 @@ def test_router_enforces_registered_and_current_plugin_capabilities():
             "version": "1",
             "plugin_api": ">=1 <2",
             "capabilities": ["commands"],
-            "entity_types": {
-                "action": {"capabilities": ["lifecycle.complete"]}
-            },
+            "entity_types": {"action": {"capabilities": ["lifecycle.complete"]}},
         }
     )
 
     class Owner:
         state = CommandTargetState(
             "2",
-            (
-                EntityAffordance(
-                    EntityCapability("lifecycle.complete"), "complete"
-                ),
-            ),
+            (EntityAffordance(EntityCapability("lifecycle.complete"), "complete"),),
         )
 
         def command_state(self, target):
@@ -189,17 +192,13 @@ def test_router_enforces_registered_and_current_plugin_capabilities():
             return Accepted(command.command_id, command.target, "3")
 
     owner = Owner()
-    router = CommandRouter(
-        {"example": owner}, registrations={"example": registration}
-    )
+    router = CommandRouter({"example": owner}, registrations={"example": registration})
 
     document = command_document(plugin_id="example", revision="2")
     document["target"]["entity_type"] = "action"  # type: ignore[index]
     document["command"] = "complete"
     document["arguments"] = {}
-    accepted = router.dispatch(
-        parse_command(document), context=CommandContext("test")
-    )
+    accepted = router.dispatch(parse_command(document), context=CommandContext("test"))
     assert isinstance(accepted, Accepted)
 
     stale_document = {**document, "expected_revision": "1", "command": "archive"}
@@ -226,14 +225,68 @@ def test_router_enforces_registered_and_current_plugin_capabilities():
 
     owner.state = CommandTargetState(
         "2",
-        (
-            EntityAffordance(
-                EntityCapability("lifecycle.reopen"), "reopen"
-            ),
-        ),
+        (EntityAffordance(EntityCapability("lifecycle.reopen"), "reopen"),),
     )
-    violation = router.dispatch(
-        parse_command(document), context=CommandContext("test")
-    )
+    violation = router.dispatch(parse_command(document), context=CommandContext("test"))
     assert isinstance(violation, Failed)
     assert violation.error.code == "capability-contract-violation"
+
+
+def test_router_enforces_core_annotation_lifecycle_envelope(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    MigrationRunner(database).apply()
+    tasks = TaskRepository(database)
+    annotations = AnnotationRepository(database)
+    note = annotations.add(
+        SourceRef(PluginId("landscape"), "action", "measure-access-route"),
+        "Remove this from the normal view.",
+        actor="operator",
+    )
+    owner = EntityTypeCommandOwner(
+        {
+            "task": CoreTaskCommandOwner(tasks),
+            "annotation": AnnotationLifecycleCommandHandler(annotations),
+        }
+    )
+    envelope = {
+        ("core", "annotation"): (
+            EntityCapability(StandardEntityCapability.LIFECYCLE_DISMISS.value),
+            EntityCapability(StandardEntityCapability.LIFECYCLE_REOPEN.value),
+        )
+    }
+    router = CommandRouter({"core": owner}, entity_type_capabilities=envelope)
+    document = {
+        "schema_version": "mission-control.command/v1",
+        "command_id": "dismiss-note-1",
+        "target": {
+            "plugin_id": "core",
+            "entity_type": "annotation",
+            "entity_id": note.note_id,
+        },
+        "expected_revision": note.revision,
+        "command": "dismiss",
+        "arguments": {},
+    }
+
+    accepted = router.dispatch(
+        parse_command(document), context=CommandContext("operator")
+    )
+    assert isinstance(accepted, Accepted)
+    assert annotations.get(note.note_id).state is EntityNoteState.INACTIVE
+
+    stale = router.dispatch(parse_command(document), context=CommandContext("operator"))
+    assert isinstance(stale, Stale)
+    assert stale.current_revision == accepted.revision
+
+    unavailable = router.dispatch(
+        parse_command(
+            {
+                **document,
+                "command_id": "dismiss-note-again",
+                "expected_revision": accepted.revision,
+            }
+        ),
+        context=CommandContext("operator"),
+    )
+    assert isinstance(unavailable, Rejected)
+    assert unavailable.error.code == "unavailable-command"

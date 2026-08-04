@@ -60,6 +60,7 @@ jobs:
           expected = {
               "mission_control/migrations/0001_initial.sql",
               "mission_control/migrations/0002_entity_notes.sql",
+              "mission_control/migrations/0003_entity_note_status_events.sql",
               "mission_control/builtin_plugins/landscape/agenda.json",
               "mission_control/builtin_plugins/landscape/migrations/0001_initial.sql",
               "mission_control/builtin_plugins/landscape/migrations/0002_domain_text_bounds.sql",

@@ -13,7 +13,7 @@ shared activity that it owns, such as annotations.
 | Title, description, state, timing, and plugin-native attributes | Plugin |
 | Legal lifecycle transitions and current affordances | Plugin |
 | Domain event history and event summaries | Plugin |
-| Textual annotations and their immutable storage | Core |
+| Textual annotations, visibility lifecycle, and immutable storage | Core |
 | Read-time activity composition and generic rendering | Core |
 | Photos, documents, and completion evidence | Future artifact slice |
 
@@ -35,12 +35,26 @@ responsible for resolving the current entity revision and advertising the
 accepts an append-only note. Adding a note does not advance the plugin entity's
 revision because it does not mutate plugin-owned state.
 
+Each composed note is also projected as a core-owned `annotation` target with its
+own opaque revision and exactly one current lifecycle affordance. Active notes
+advertise `lifecycle.dismiss`; inactive notes advertise `lifecycle.reopen`. These
+commands never target or advance the parent plugin entity. Core enforces a fixed
+capability envelope for its annotation entity type before dispatching either
+transition.
+
 ## Activity semantics
 
 The entity-detail contract exposes one chronological activity sequence. Plugin
 events and core notes retain separate identifiers and types; composition does not
 rewrite either source. Notes are immutable at the SQLite boundary and contain a
 bounded body, actor label, and timezone-aware timestamp.
+
+Removing a note from the normal view appends an immutable status event rather than
+updating or deleting the note. The browser hides inactive notes by default and can
+show and restore them. Dismiss/reopen events remain in the activity audit trail,
+including actor and timestamp. This is recoverable view management, not privacy
+erasure: the original note body remains in SQLite and in the complete entity-detail
+response while the removed-notes view is available.
 
 This is intentionally not the artifact model. A later storage-focused slice will
 associate photos and documents with the same entity reference and, when useful, a

@@ -41,7 +41,20 @@
       "summary": "Note added",
       "body": "Vertical drop: 42 inches; usable run: 18 feet.",
       "actor": "local-write-token",
-      "occurred_at": "2026-08-04T13:00:00+00:00"
+      "occurred_at": "2026-08-04T13:00:00+00:00",
+      "source": {
+        "plugin_id": "core",
+        "entity_type": "annotation",
+        "entity_id": "note-1"
+      },
+      "state": "active",
+      "revision": "note-1",
+      "affordances": [
+        {
+          "capability": "lifecycle.dismiss",
+          "command": "dismiss"
+        }
+      ]
     }
   ]
 }

@@ -86,7 +86,7 @@ Run the demo against a disposable database:
 mctrld --database ./mission-control-demo.db --demo --plugin landscape
 ```
 
-Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details and event history or add a durable measurement/observation note. Core task and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Landscape registers its command owner and detail provider only while the plugin is enabled.
+Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details and event history or add a durable measurement/observation note. Notes can be removed from the normal activity view and restored later; both transitions retain the original note and append audit state. Core task, annotation, and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Landscape registers its command owner and detail provider only while the plugin is enabled.
 
 #### Upgrading an existing Yard demo
 
@@ -149,7 +149,7 @@ This standalone repository owns application code, schemas, tests, plugins, packa
 - Schema changes use ordered, explicit migrations.
 - Landscape migrations and tables are namespaced and recorded independently from core migrations.
 - Every material task mutation appends an immutable event.
-- Core-owned entity notes are append-only, immutable activity records keyed by a stable plugin entity reference.
+- Core-owned entity notes remain immutable records keyed by a stable plugin entity reference; active/inactive visibility is projected from separate append-only lifecycle events.
 - The `tasks` table is the current projection used for efficient reads.
 - Supported task states are `backlog`, `ready`, `in-progress`, and `done`.
 - Task metadata includes `blocked`, `waiting_on`, and `review_after`.

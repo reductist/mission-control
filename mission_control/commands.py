@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -311,10 +311,16 @@ class CommandRouter:
         *,
         registrations: Mapping[str, PluginRegistration] | None = None,
         capability_handlers: Mapping[str, CommandOwner] | None = None,
+        entity_type_capabilities: Mapping[tuple[str, str], Iterable[EntityCapability]]
+        | None = None,
     ) -> None:
         self._owners = dict(owners)
         self._registrations = dict(registrations or {})
         self._capability_handlers = dict(capability_handlers or {})
+        self._entity_type_capabilities = {
+            key: tuple(capabilities)
+            for key, capabilities in (entity_type_capabilities or {}).items()
+        }
 
     def dispatch(
         self,
@@ -351,6 +357,22 @@ class CommandRouter:
                 )
                 if policy_outcome is not None:
                     return policy_outcome
+            else:
+                envelope = self._entity_type_capabilities.get(
+                    (
+                        command.target.plugin_id.value,
+                        command.target.entity_type,
+                    )
+                )
+                if envelope is not None:
+                    policy_outcome, capability = self._enforce_capability_envelope(
+                        command,
+                        owner,
+                        envelope,
+                        owner_label=command.target.plugin_id.value,
+                    )
+                    if policy_outcome is not None:
+                        return policy_outcome
             handler = (
                 self._capability_handlers.get(capability.value)
                 if capability is not None
@@ -384,9 +406,7 @@ class CommandRouter:
         owner: CommandOwner,
         registration: PluginRegistration,
     ) -> tuple[CommandOutcome | None, EntityCapability | None]:
-        declared = entity_type_registration(
-            registration, command.target.entity_type
-        )
+        declared = entity_type_registration(registration, command.target.entity_type)
         if declared is None:
             return _rejected(
                 command,
@@ -395,6 +415,21 @@ class CommandRouter:
                 f"{command.target.entity_type!r}.",
             ), None
 
+        return CommandRouter._enforce_capability_envelope(
+            command,
+            owner,
+            declared.capabilities,
+            owner_label=registration.plugin_id.value,
+        )
+
+    @staticmethod
+    def _enforce_capability_envelope(
+        command: CommandEnvelope,
+        owner: CommandOwner,
+        declared_capabilities: Iterable[EntityCapability],
+        *,
+        owner_label: str,
+    ) -> tuple[CommandOutcome | None, EntityCapability | None]:
         resolver = getattr(owner, "command_state", None)
         if not callable(resolver):
             raise TypeError("registered plugin owner does not expose command state")
@@ -408,7 +443,7 @@ class CommandRouter:
         if not isinstance(state, CommandTargetState):
             raise TypeError("owner returned unsupported command state")
 
-        envelope = {capability.value for capability in declared.capabilities}
+        envelope = {capability.value for capability in declared_capabilities}
         seen_capabilities: set[str] = set()
         seen_commands: set[str] = set()
         for affordance in state.affordances:
@@ -425,8 +460,8 @@ class CommandRouter:
                     command.target,
                     CommandError(
                         "capability-contract-violation",
-                        "The plugin exposed command behavior outside its registered "
-                        "entity capability envelope.",
+                        f"Owner {owner_label!r} exposed command behavior outside its "
+                        "registered entity capability envelope.",
                     ),
                 ), None
             seen_capabilities.add(capability)
@@ -460,6 +495,34 @@ class CommandRouter:
                 "target.",
             ), None
         return None, matching.capability
+
+
+class EntityTypeCommandOwner:
+    """Route one owner namespace to handlers for disjoint entity types."""
+
+    def __init__(self, owners: Mapping[str, CommandOwner]) -> None:
+        self._owners = dict(owners)
+
+    def command_state(self, target: SourceRef) -> CommandTargetState | None:
+        owner = self._owners.get(target.entity_type)
+        resolver = getattr(owner, "command_state", None)
+        if not callable(resolver):
+            return None
+        state = resolver(target)
+        return state if isinstance(state, CommandTargetState) else None
+
+    def handle(
+        self, command: CommandEnvelope, context: CommandContext
+    ) -> CommandOutcome:
+        owner = self._owners.get(command.target.entity_type)
+        if owner is None:
+            return _rejected(
+                command,
+                "unknown-target",
+                f"No core command owner is registered for entity type "
+                f"{command.target.entity_type!r}.",
+            )
+        return owner.handle(command, context)
 
 
 class CoreTaskCommandOwner:

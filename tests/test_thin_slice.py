@@ -14,7 +14,7 @@ def test_migrations_are_idempotent(tmp_path):
     database = Database(tmp_path / "mission-control.db")
     runner = MigrationRunner(database)
 
-    assert runner.apply() == [1, 2]
+    assert runner.apply() == [1, 2, 3]
     assert runner.apply() == []
 
     with database.connect() as connection:
@@ -23,7 +23,7 @@ def test_migrations_are_idempotent(tmp_path):
             for row in connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
-        ] == [1, 2]
+        ] == [1, 2, 3]
 
 
 def test_task_create_writes_projection_and_event(tmp_path):
@@ -47,12 +47,64 @@ def test_entity_note_migration_upgrades_existing_core_state_without_loss(tmp_pat
         connection.executescript(initial.read_text(encoding="utf-8"))
     task = TaskRepository(database).create("Preserve this task")
 
-    assert MigrationRunner(database).apply() == [2]
+    assert MigrationRunner(database).apply() == [2, 3]
     assert TaskRepository(database).get(task.id) == task
     with database.connect() as connection:
-        assert connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'entity_notes'"
-        ).fetchone() is not None
+        assert (
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'entity_notes'"
+            ).fetchone()
+            is not None
+        )
+        assert (
+            connection.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'entity_note_status_events'"
+            ).fetchone()
+            is not None
+        )
+
+
+def test_note_status_migration_preserves_schema_v2_notes(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    migration_root = files("mission_control").joinpath("migrations")
+    with database.connect() as connection:
+        for name in ("0001_initial.sql", "0002_entity_notes.sql"):
+            connection.executescript(
+                migration_root.joinpath(name).read_text(encoding="utf-8")
+            )
+        connection.execute(
+            """
+            INSERT INTO entity_notes(
+              note_id, plugin_id, entity_type, entity_id, body, actor, occurred_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "note-before-status-migration",
+                "landscape",
+                "action",
+                "measure-access-route",
+                "Preserve this note",
+                "operator",
+                "2026-08-04T15:58:00+00:00",
+            ),
+        )
+
+    assert MigrationRunner(database).apply() == [3]
+    with database.connect() as connection:
+        note = connection.execute(
+            "SELECT body, actor, occurred_at FROM entity_notes WHERE note_id = ?",
+            ("note-before-status-migration",),
+        ).fetchone()
+        status_count = connection.execute(
+            "SELECT count(*) FROM entity_note_status_events"
+        ).fetchone()[0]
+    assert tuple(note) == (
+        "Preserve this note",
+        "operator",
+        "2026-08-04T15:58:00+00:00",
+    )
+    assert status_count == 0
 
 
 def test_task_events_are_immutable(tmp_path):
