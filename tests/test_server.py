@@ -111,7 +111,12 @@ def test_http_dashboard_assets_and_health(tmp_path):
             assert b'affordance.capability === "lifecycle.reopen"' in script
             assert b'capability === "entity.annotate"' in script
             assert b'capability === "lifecycle.dismiss"' in script
-            assert b"toggle-removed-notes" in script
+            assert b'entry.kind === "note" && entry.state === "active"' in script
+            assert b'<h2 id="notes-heading" tabindex="-1">Notes</h2>' in script
+            assert b'<details class="panel activity-disclosure"' in script
+            assert b"Full audit trail" in script
+            assert b'capabilities.includes(item.capability)' in script
+            assert b"toggle-removed-notes" not in script
             assert b"data-activity-command" in script
             assert b"window.confirm" in script
             assert b"/api/entities/" in script

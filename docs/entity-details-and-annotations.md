@@ -49,12 +49,13 @@ events and core notes retain separate identifiers and types; composition does no
 rewrite either source. Notes are immutable at the SQLite boundary and contain a
 bounded body, actor label, and timezone-aware timestamp.
 
-Removing a note from the normal view appends an immutable status event rather than
-updating or deleting the note. The browser hides inactive notes by default and can
-show and restore them. Dismiss/reopen events remain in the activity audit trail,
-including actor and timestamp. This is recoverable view management, not privacy
+Removing a note from the focused Notes panel appends an immutable status event rather
+than updating or deleting the note. The browser projects active notes into that panel
+and keeps the complete activity stream in a collapsed Activity disclosure, where
+inactive notes can be restored. Dismiss/reopen events remain in the activity audit
+trail, including actor and timestamp. This is recoverable view management, not privacy
 erasure: the original note body remains in SQLite and in the complete entity-detail
-response while the removed-notes view is available.
+response while Activity provides the recovery view.
 
 This is intentionally not the artifact model. A later storage-focused slice will
 associate photos and documents with the same entity reference and, when useful, a
