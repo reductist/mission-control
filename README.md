@@ -34,7 +34,7 @@ The executable implementation provides:
 - ordered SQLite migrations
 - task creation, updates, listing, and immutable event history
 - browser task creation, completion, and reopening through authoritative owners
-- responsive Overview, completed History, entity detail/activity, and synthetic House demo workspaces
+- responsive Overview, completed History, focused entity notes with collapsible activity, and synthetic House demo workspaces
 - an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, agenda projections, and owner-routed completion
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
@@ -86,7 +86,7 @@ Run the demo against a disposable database:
 mctrld --database ./mission-control-demo.db --demo --plugin landscape
 ```
 
-Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details and event history or add a durable measurement/observation note. Notes can be removed from the normal activity view and restored later; both transitions retain the original note and append audit state. Core task, annotation, and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Landscape registers its command owner and detail provider only while the plugin is enabled.
+Then open `http://127.0.0.1:8000`. House content is a packaged synthetic fixture. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details, see only current notes in the focused Notes panel, or add a durable measurement/observation note. The full event history is collapsed under Activity; removed notes can be restored there, and both transitions retain the original note and append audit state. Core task, annotation, and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Landscape registers its command owner and detail provider only while the plugin is enabled.
 
 #### Upgrading an existing Yard demo
 

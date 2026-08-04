@@ -37,7 +37,7 @@ let activeView = "overview";
 let entityDetail = null;
 let detailReturnView = "overview";
 let commandSequence = 0;
-let showRemovedNotes = false;
+let activityExpanded = false;
 
 document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
@@ -52,7 +52,7 @@ document.querySelectorAll(".nav-item").forEach((button) => {
 function showView(view) {
   activeView = view;
   entityDetail = null;
-  showRemovedNotes = false;
+  activityExpanded = false;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === view);
   });
@@ -285,15 +285,15 @@ function renderEntityDetail() {
   );
   const lifecycleLabel = lifecycle?.capability === "lifecycle.reopen" ? "Reopen" : "Complete";
   const allActivity = [...(detail.activity || [])].reverse();
+  const activeNotes = allActivity.filter(
+    (entry) => entry.kind === "note" && entry.state === "active",
+  );
   const removedNotes = allActivity.filter(
     (entry) => entry.kind === "note" && entry.state === "inactive",
   );
-  const activity = showRemovedNotes
-    ? allActivity
-    : allActivity.filter((entry) => entry.kind !== "note" || entry.state !== "inactive");
   pageEyebrow.textContent = `${pluginLabel(detail.source.plugin_id)} · ${detail.source.entity_type}`;
   pageTitle.textContent = detail.title;
-  pageDescription.textContent = detail.description || "Entity details and immutable activity.";
+  pageDescription.textContent = detail.description || "Entity details, notes, and history.";
 
   app.innerHTML = `
     <button class="back-button" id="entity-detail-back" type="button">← Back to ${escapeHtml(viewCopy[detailReturnView].title)}</button>
@@ -311,27 +311,32 @@ function renderEntityDetail() {
       </section>
 
       <div class="stack">
-        ${annotate && detail.revision ? `
-          <section class="panel">
-            <div class="panel-header"><h2>Add a note</h2><span>Retained activity</span></div>
+        <section class="panel">
+          <div class="panel-header">
+            <h2 id="notes-heading" tabindex="-1">Notes</h2>
+            <span>${activeNotes.length} active</span>
+          </div>
+          <div class="note-list">
+            ${activeNotes.length ? activeNotes.map(noteRow).join("") : '<div class="empty">No active notes.</div>'}
+          </div>
+          ${annotate && detail.revision ? `
             <form class="note-form" id="entity-note-form">
+              <label class="note-form-label" for="entity-note-body">Add a note</label>
               <textarea id="entity-note-body" name="body" required maxlength="16384" rows="5" placeholder="Record measurements, observations, decisions, or other context…"></textarea>
               <button class="primary-button" type="submit">Save note</button>
             </form>
-          </section>
-        ` : ""}
-        <section class="panel">
-          <div class="panel-header">
-            <h2 id="activity-heading" tabindex="-1">Activity</h2>
-            <div class="activity-header-actions">
-              <span>${activity.length} visible</span>
-              ${removedNotes.length ? `<button class="text-button" id="toggle-removed-notes" type="button">${showRemovedNotes ? "Hide" : "Show"} ${removedNotes.length} removed</button>` : ""}
-            </div>
-          </div>
-          <div class="activity-list">
-            ${activity.length ? activity.map(activityRow).join("") : '<div class="empty">No activity has been recorded.</div>'}
-          </div>
+          ` : ""}
         </section>
+        <details class="panel activity-disclosure"${activityExpanded ? " open" : ""}>
+          <summary class="activity-disclosure-summary">
+            <span class="activity-disclosure-title">Activity</span>
+            <span class="activity-disclosure-meta">${allActivity.length} ${allActivity.length === 1 ? "entry" : "entries"}${removedNotes.length ? ` · ${removedNotes.length} removed note${removedNotes.length === 1 ? "" : "s"}` : " · Full audit trail"}</span>
+            <span class="activity-disclosure-icon" aria-hidden="true"></span>
+          </summary>
+          <div class="activity-list">
+            ${allActivity.length ? allActivity.map(activityRow).join("") : '<div class="empty">No activity has been recorded.</div>'}
+          </div>
+        </details>
       </div>
     </div>
   `;
@@ -342,13 +347,10 @@ function renderEntityDetail() {
   if (noteForm) {
     noteForm.addEventListener("submit", (event) => addEntityNote(event, annotate));
   }
-  const removedToggle = document.querySelector("#toggle-removed-notes");
-  if (removedToggle) {
-    removedToggle.addEventListener("click", () => {
-      showRemovedNotes = !showRemovedNotes;
-      renderEntityDetail();
-    });
-  }
+  const activityDisclosure = document.querySelector(".activity-disclosure");
+  activityDisclosure.addEventListener("toggle", () => {
+    activityExpanded = activityDisclosure.open;
+  });
   wireActivityCommands();
 }
 
@@ -432,19 +434,27 @@ function detailAttribute(attribute) {
   return `<div><dt>${escapeHtml(attribute.label)}</dt><dd>${escapeHtml(attribute.value)}</dd></div>`;
 }
 
+function noteRow(entry) {
+  const provenance = [noteActor(entry), formatDateTime(entry.occurred_at)].filter(Boolean).join(" · ");
+  const action = noteLifecycleAction(entry, ["lifecycle.dismiss"]);
+  return `
+    <article class="note-row">
+      <div>
+        <p class="note-body">${escapeHtml(entry.body)}</p>
+        <p class="item-meta">${escapeHtml(provenance)}</p>
+      </div>
+      ${action}
+    </article>
+  `;
+}
+
 function activityRow(entry) {
   const note = entry.kind === "note";
   const noteActivity = entry.activity_type?.startsWith("core.note-");
-  const provenance = [
-    note || noteActivity ? "Note" : pluginLabel(entityDetail.source.plugin_id),
-    (note || noteActivity) && entry.actor ? (entry.actor === "local-operator" ? "You" : entry.actor) : null,
-    formatDateTime(entry.occurred_at),
-  ].filter(Boolean).join(" · ");
-  const affordance = note ? entry.affordances?.[0] : null;
-  const actionLabel = affordance?.capability === "lifecycle.dismiss" ? "Remove" : "Restore";
-  const action = affordance && entry.source && entry.revision
-    ? `<button class="activity-action ${entry.state === "active" ? "is-destructive" : ""}" type="button" data-activity-command data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}" data-revision="${escapeHtml(entry.revision)}" data-command="${escapeHtml(affordance.command)}" data-capability="${escapeHtml(affordance.capability)}" aria-label="${actionLabel} note from ${escapeHtml(formatDateTime(entry.occurred_at))}">${actionLabel}</button>`
-    : "";
+  const provenance = note || noteActivity
+    ? noteProvenance(entry)
+    : [pluginLabel(entityDetail.source.plugin_id), formatDateTime(entry.occurred_at)].join(" · ");
+  const action = note ? noteLifecycleAction(entry, ["lifecycle.reopen"]) : "";
   return `
     <article class="activity-row ${note ? "is-note" : ""} ${entry.state === "inactive" ? "is-inactive" : ""}">
       <div class="activity-marker" aria-hidden="true"></div>
@@ -456,6 +466,29 @@ function activityRow(entry) {
       ${action}
     </article>
   `;
+}
+
+function noteProvenance(entry) {
+  return [
+    "Note",
+    noteActor(entry),
+    formatDateTime(entry.occurred_at),
+  ].filter(Boolean).join(" · ");
+}
+
+function noteActor(entry) {
+  if (!entry.actor) return null;
+  return entry.actor === "local-operator" ? "You" : entry.actor;
+}
+
+function noteLifecycleAction(entry, capabilities) {
+  const affordance = entry.affordances?.find((item) => capabilities.includes(item.capability));
+  const actionLabel = affordance?.capability === "lifecycle.dismiss"
+    ? "Remove"
+    : affordance?.capability === "lifecycle.reopen" ? "Restore" : null;
+  return affordance && entry.source && entry.revision
+    ? `<button class="activity-action ${entry.state === "active" ? "is-destructive" : ""}" type="button" data-activity-command data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}" data-revision="${escapeHtml(entry.revision)}" data-command="${escapeHtml(affordance.command)}" data-capability="${escapeHtml(affordance.capability)}" aria-label="${actionLabel} note from ${escapeHtml(formatDateTime(entry.occurred_at))}">${actionLabel}</button>`
+    : "";
 }
 
 function pluginLabel(pluginId) {
@@ -555,7 +588,7 @@ function entityDetailPath(source) {
 
 async function openEntityDetail(source) {
   detailReturnView = activeView;
-  showRemovedNotes = false;
+  activityExpanded = false;
   app.setAttribute("aria-busy", "true");
   try {
     entityDetail = await request(entityDetailPath(source));
@@ -571,7 +604,7 @@ function wireActivityCommands() {
     button.addEventListener("click", async () => {
       const removing = button.dataset.capability === "lifecycle.dismiss";
       if (removing && !window.confirm(
-        "Remove this note from the normal activity view? The original note will remain retained and can be restored.",
+        "Remove this note? You can restore it from Activity.",
       )) return;
       button.disabled = true;
       try {
@@ -590,14 +623,13 @@ function wireActivityCommands() {
             arguments: {},
           }),
         });
-        if (removing) showRemovedNotes = false;
         await refresh();
         showNotice(
           removing
-            ? "Note removed from this view. Its immutable record is retained."
-            : "Note restored to this view.",
+            ? "Note removed. You can restore it from Activity."
+            : "Note restored to Notes.",
         );
-        document.querySelector("#activity-heading")?.focus({ preventScroll: true });
+        document.querySelector("#notes-heading")?.focus({ preventScroll: true });
       } catch (error) {
         if (error.status === 409) {
           await refresh();
@@ -632,7 +664,7 @@ async function addEntityNote(event, affordance) {
       }),
     });
     await refresh();
-    showNotice("Note added to this entity's immutable activity.");
+    showNotice("Note added.");
   } catch (error) {
     if (error.status === 409) {
       await refresh();
