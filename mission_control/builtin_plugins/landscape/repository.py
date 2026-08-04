@@ -125,6 +125,8 @@ class LandscapeRepository(Protocol):
 
     def list_actions(self) -> tuple[LandscapeAction, ...]: ...
 
+    def get_initiative(self, initiative_id: str) -> LandscapeInitiative: ...
+
     def get_action(self, action_id: str) -> LandscapeAction: ...
 
     def complete_action(
@@ -222,6 +224,16 @@ class SQLiteLandscapeRepository:
                 "SELECT * FROM landscape_actions ORDER BY created_at, action_id"
             ).fetchall()
         return tuple(self._action_from_row(row) for row in rows)
+
+    def get_initiative(self, initiative_id: str) -> LandscapeInitiative:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM landscape_initiatives WHERE initiative_id = ?",
+                (initiative_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(initiative_id)
+        return self._initiative_from_row(row)
 
     def get_action(self, action_id: str) -> LandscapeAction:
         with self.database.connect() as connection:

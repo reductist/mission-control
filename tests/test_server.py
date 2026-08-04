@@ -106,6 +106,8 @@ def test_http_dashboard_assets_and_health(tmp_path):
             assert b'request("/api/commands"' in script
             assert b'affordance.capability === "lifecycle.complete"' in script
             assert b'affordance.capability === "lifecycle.reopen"' in script
+            assert b'capability === "entity.annotate"' in script
+            assert b"/api/entities/" in script
             assert b"error.status === 409" in script
 
         status, health = request_json(f"{base_url}/api/health")
@@ -299,6 +301,7 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         if entry["id"] == "measure-access-route"
     )
     assert initial["affordances"] == [
+        {"capability": "entity.annotate", "command": "add-note"},
         {"capability": "lifecycle.complete", "command": "complete"}
     ]
     complete = {
@@ -331,6 +334,7 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         )
         assert closed_item["revision"] == "2"
         assert closed_item["affordances"] == [
+            {"capability": "entity.annotate", "command": "add-note"},
             {"capability": "lifecycle.reopen", "command": "reopen"}
         ]
 
@@ -367,12 +371,134 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         assert restored["state"] == "ready"
         assert restored["revision"] == "3"
         assert restored["affordances"] == [
+            {"capability": "entity.annotate", "command": "add-note"},
             {"capability": "lifecycle.complete", "command": "complete"}
         ]
         assert "measure-access-route" not in {
             item["id"] for item in dashboard["closed_items"]
         }
     assert len(repository.history(LandscapeEntityKind.ACTION, "measure-access-route")) == 3
+
+
+def test_landscape_entity_detail_composes_durable_notes_and_domain_activity(tmp_path):
+    database = Database(tmp_path / "mission-control.db")
+    prepared = prepare_builtin_agenda_plugins(("landscape",))
+    first = MissionControlApplication(
+        database,
+        write_token="known-token",
+        builtin_plugins=prepared,
+    )
+
+    with running_server(first) as base_url:
+        status, detail = request_json(
+            f"{base_url}/api/entities/landscape/action/measure-access-route"
+        )
+        assert status == 200
+        assert detail["title"] == "Measure the backyard access route"
+        assert detail["state"] == "ready"
+        assert detail["revision"] == "1"
+        assert detail["attributes"][0] == {
+            "key": "timing",
+            "label": "Timing",
+            "value": "2026-08-01 to 2026-09-15",
+        }
+        assert detail["activity"][0]["activity_type"] == "landscape.action-imported"
+
+        _, added = request_json(
+            f"{base_url}/api/commands",
+            method="POST",
+            token="known-token",
+            body={
+                "schema_version": "mission-control.command/v1",
+                "command_id": "record-measurements-1",
+                "target": detail["source"],
+                "expected_revision": detail["revision"],
+                "command": "add-note",
+                "arguments": {
+                    "body": "Vertical drop: 42 inches; usable run: 18 feet."
+                },
+            },
+        )
+        assert added["status"] == "accepted"
+        assert added["revision"] == "1"
+
+        _, changed = request_json(
+            f"{base_url}/api/entities/landscape/action/measure-access-route"
+        )
+        note = changed["activity"][-1]
+        assert note["kind"] == "note"
+        assert note["body"].startswith("Vertical drop")
+        assert note["actor"] == "local-operator"
+
+        _, completed = request_json(
+            f"{base_url}/api/commands",
+            method="POST",
+            token="known-token",
+            body={
+                "schema_version": "mission-control.command/v1",
+                "command_id": "complete-after-measurements-1",
+                "target": detail["source"],
+                "expected_revision": detail["revision"],
+                "command": "complete",
+                "arguments": {},
+            },
+        )
+        assert completed["revision"] == "2"
+
+    restarted = MissionControlApplication(
+        database,
+        write_token="known-token",
+        builtin_plugins=prepared,
+    )
+    persisted = restarted.entity_detail(
+        "landscape", "action", "measure-access-route"
+    )
+    assert persisted["state"] == "done"
+    assert [entry["activity_type"] for entry in persisted["activity"]] == [
+        "landscape.action-imported",
+        "core.note-added",
+        "landscape.action-state-changed",
+    ]
+    assert persisted["activity"][1]["body"].startswith("Vertical drop")
+    assert {item["capability"] for item in persisted["affordances"]} == {
+        "entity.annotate",
+        "lifecycle.reopen",
+    }
+
+
+def test_entity_detail_unknown_targets_and_undeclared_notes_are_rejected(tmp_path):
+    application = MissionControlApplication(
+        Database(tmp_path / "mission-control.db"),
+        write_token="known-token",
+        builtin_plugins=prepare_builtin_agenda_plugins(("landscape",)),
+    )
+
+    with running_server(application) as base_url:
+        with pytest.raises(HTTPError) as missing:
+            request_json(
+                f"{base_url}/api/entities/landscape/action/not-present"
+            )
+        assert missing.value.code == 404
+
+        _, initiative = request_json(
+            f"{base_url}/api/entities/landscape/initiative/equipment-access"
+        )
+        with pytest.raises(HTTPError) as unavailable:
+            request_json(
+                f"{base_url}/api/commands",
+                method="POST",
+                token="known-token",
+                body={
+                    "schema_version": "mission-control.command/v1",
+                    "command_id": "note-initiative-1",
+                    "target": initiative["source"],
+                    "expected_revision": initiative["revision"],
+                    "command": "add-note",
+                    "arguments": {"body": "Should not be accepted"},
+                },
+            )
+        assert unavailable.value.code == 400
+        assert json.load(unavailable.value)["error"]["code"] == "unavailable-command"
 
 
 def test_unknown_mutation_fields_are_rejected(tmp_path):

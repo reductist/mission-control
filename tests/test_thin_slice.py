@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from importlib.resources import files
 
 from mission_control.cli import main
 from mission_control.database import Database
@@ -13,11 +14,16 @@ def test_migrations_are_idempotent(tmp_path):
     database = Database(tmp_path / "mission-control.db")
     runner = MigrationRunner(database)
 
-    assert runner.apply() == [1]
+    assert runner.apply() == [1, 2]
     assert runner.apply() == []
 
     with database.connect() as connection:
-        assert connection.execute("SELECT version FROM schema_migrations").fetchall()[0][0] == 1
+        assert [
+            row[0]
+            for row in connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+        ] == [1, 2]
 
 
 def test_task_create_writes_projection_and_event(tmp_path):
@@ -32,6 +38,21 @@ def test_task_create_writes_projection_and_event(tmp_path):
     history = repository.history(task.id)
     assert history[0]["event_type"] == "task.created"
     assert history[0]["payload"]["title"] == task.title
+
+
+def test_entity_note_migration_upgrades_existing_core_state_without_loss(tmp_path):
+    database = Database(tmp_path / "mission-control.db")
+    initial = files("mission_control").joinpath("migrations", "0001_initial.sql")
+    with database.connect() as connection:
+        connection.executescript(initial.read_text(encoding="utf-8"))
+    task = TaskRepository(database).create("Preserve this task")
+
+    assert MigrationRunner(database).apply() == [2]
+    assert TaskRepository(database).get(task.id) == task
+    with database.connect() as connection:
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'entity_notes'"
+        ).fetchone() is not None
 
 
 def test_task_events_are_immutable(tmp_path):

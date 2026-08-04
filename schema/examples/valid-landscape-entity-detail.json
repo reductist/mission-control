@@ -1,0 +1,47 @@
+{
+  "schema_version": "mission-control.entity-detail/v1",
+  "source": {
+    "plugin_id": "landscape",
+    "entity_type": "action",
+    "entity_id": "measure-access-route"
+  },
+  "title": "Measure the backyard access route",
+  "description": "Record the route dimensions before comparing access concepts.",
+  "state": "ready",
+  "revision": "1",
+  "attributes": [
+    {
+      "key": "timing",
+      "label": "Timing",
+      "value": "2026-08-01 to 2026-09-15"
+    }
+  ],
+  "affordances": [
+    {
+      "capability": "entity.annotate",
+      "command": "add-note"
+    },
+    {
+      "capability": "lifecycle.complete",
+      "command": "complete"
+    }
+  ],
+  "activity": [
+    {
+      "activity_id": "landscape:event-1",
+      "kind": "event",
+      "activity_type": "landscape.action-imported",
+      "summary": "Imported in ready state",
+      "occurred_at": "2026-08-03T01:56:07.785190+00:00"
+    },
+    {
+      "activity_id": "note:note-1",
+      "kind": "note",
+      "activity_type": "core.note-added",
+      "summary": "Note added",
+      "body": "Vertical drop: 42 inches; usable run: 18 feet.",
+      "actor": "local-write-token",
+      "occurred_at": "2026-08-04T13:00:00+00:00"
+    }
+  ]
+}
