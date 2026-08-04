@@ -34,6 +34,8 @@ const viewCopy = {
 
 let dashboard = null;
 let activeView = "overview";
+let entityDetail = null;
+let detailReturnView = "overview";
 let commandSequence = 0;
 
 document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(undefined, {
@@ -48,6 +50,7 @@ document.querySelectorAll(".nav-item").forEach((button) => {
 
 function showView(view) {
   activeView = view;
+  entityDetail = null;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === view);
   });
@@ -77,7 +80,11 @@ async function request(path, options = {}) {
 
 async function refresh() {
   try {
+    const detailTarget = entityDetail?.source;
     dashboard = await request("/api/dashboard");
+    if (detailTarget) {
+      entityDetail = await request(entityDetailPath(detailTarget));
+    }
     connectionLabel.textContent = "Online";
     modeLabel.textContent = dashboard.mode === "demo" ? "Synthetic demo workspace" : "Live workspace";
     versionLabel.textContent = `v${dashboard.version}`;
@@ -93,7 +100,9 @@ async function refresh() {
 
 function render() {
   if (!dashboard) return;
-  if (activeView === "house") {
+  if (entityDetail) {
+    renderEntityDetail();
+  } else if (activeView === "house") {
     renderHouse();
   } else if (activeView === "yard") {
     renderYard();
@@ -149,6 +158,7 @@ function renderOverview() {
   `;
 
   wireCommandButtons();
+  wireEntityLinks();
   document.querySelector("#quick-add-form").addEventListener("submit", addTask);
   document.querySelectorAll(".text-button[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
@@ -176,6 +186,7 @@ function renderHistory() {
     </section>
   `;
   wireCommandButtons();
+  wireEntityLinks();
 }
 
 function renderHouse() {
@@ -237,7 +248,7 @@ function renderYard() {
   app.innerHTML = `
     <div class="section-intro">
       <div>
-        <h2>${escapeHtml(primary?.title || "Seasonal work and long-term design")}</h2>
+        <h2>${primary ? entityLink(primary) : "Seasonal work and long-term design"}</h2>
         <p>${escapeHtml(primary?.detail || "Landscape work contributed through the shared agenda contract.")}</p>
       </div>
       <div class="status-note">
@@ -259,6 +270,64 @@ function renderYard() {
     </section>
   `;
   wireCommandButtons();
+  wireEntityLinks();
+}
+
+function renderEntityDetail() {
+  const detail = entityDetail;
+  const annotate = (detail.affordances || []).find(
+    (affordance) => affordance.capability === "entity.annotate",
+  );
+  const lifecycle = (detail.affordances || []).find(
+    (affordance) => ["lifecycle.complete", "lifecycle.reopen"].includes(affordance.capability),
+  );
+  const lifecycleLabel = lifecycle?.capability === "lifecycle.reopen" ? "Reopen" : "Complete";
+  const activity = [...(detail.activity || [])].reverse();
+  pageEyebrow.textContent = `${pluginLabel(detail.source.plugin_id)} · ${detail.source.entity_type}`;
+  pageTitle.textContent = detail.title;
+  pageDescription.textContent = detail.description || "Entity details and immutable activity.";
+
+  app.innerHTML = `
+    <button class="back-button" id="entity-detail-back" type="button">← Back to ${escapeHtml(viewCopy[detailReturnView].title)}</button>
+    <div class="entity-layout">
+      <section class="panel entity-summary">
+        <div class="panel-header">
+          <h2>Details</h2>
+          ${detail.state ? `<span>${escapeHtml(detail.state)}</span>` : ""}
+        </div>
+        <div class="panel-body">
+          ${detail.description ? `<p class="entity-description">${escapeHtml(detail.description)}</p>` : '<p class="task-description">No additional description.</p>'}
+          ${detail.attributes?.length ? `<dl class="attribute-list">${detail.attributes.map(detailAttribute).join("")}</dl>` : ""}
+          ${lifecycle && detail.revision ? `<button class="secondary-button entity-action" type="button" data-plugin-id="${escapeHtml(detail.source.plugin_id)}" data-entity-type="${escapeHtml(detail.source.entity_type)}" data-entity-id="${escapeHtml(detail.source.entity_id)}" data-revision="${escapeHtml(detail.revision)}" data-command="${escapeHtml(lifecycle.command)}" data-capability="${escapeHtml(lifecycle.capability)}">${lifecycleLabel}</button>` : ""}
+        </div>
+      </section>
+
+      <div class="stack">
+        ${annotate && detail.revision ? `
+          <section class="panel">
+            <div class="panel-header"><h2>Add a note</h2><span>Immutable activity</span></div>
+            <form class="note-form" id="entity-note-form">
+              <textarea id="entity-note-body" name="body" required maxlength="16384" rows="5" placeholder="Record measurements, observations, decisions, or other context…"></textarea>
+              <button class="primary-button" type="submit">Save note</button>
+            </form>
+          </section>
+        ` : ""}
+        <section class="panel">
+          <div class="panel-header"><h2>Activity</h2><span>${activity.length} entries</span></div>
+          <div class="activity-list">
+            ${activity.length ? activity.map(activityRow).join("") : '<div class="empty">No activity has been recorded.</div>'}
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  document.querySelector("#entity-detail-back").addEventListener("click", () => showView(detailReturnView));
+  wireCommandButtons();
+  const noteForm = document.querySelector("#entity-note-form");
+  if (noteForm) {
+    noteForm.addEventListener("submit", (event) => addEntityNote(event, annotate));
+  }
 }
 
 function metric(label, value, detail) {
@@ -299,7 +368,7 @@ function landscapeActionRow(entry) {
     <article class="task-row">
       ${control}
       <div>
-        <h3 class="task-title">${escapeHtml(entry.title)}</h3>
+        <h3 class="task-title">${entityLink(entry)}</h3>
         <p class="task-description">${escapeHtml(detail || "No additional detail")}</p>
       </div>
       <span class="state-badge ${badgeClass}">${escapeHtml(entry.state || entry.kind)}</span>
@@ -322,13 +391,40 @@ function closedItemRow(item) {
     <article class="closed-row">
       <div>
         <div class="closed-title-line">
-          <h3 class="task-title">${escapeHtml(item.title)}</h3>
+          <h3 class="task-title">${item.source?.plugin_id === "landscape" ? entityLink(item) : escapeHtml(item.title)}</h3>
           <span class="state-badge">${escapeHtml(item.state)}</span>
         </div>
         <p class="task-description">${escapeHtml(item.detail || "No additional detail")}</p>
         <p class="item-meta">${escapeHtml(provenance)}</p>
       </div>
       ${control}
+    </article>
+  `;
+}
+
+function entityLink(item) {
+  return `<button class="entity-link" type="button" data-entity-link data-plugin-id="${escapeHtml(item.source.plugin_id)}" data-entity-type="${escapeHtml(item.source.entity_type)}" data-entity-id="${escapeHtml(item.source.entity_id)}">${escapeHtml(item.title)}</button>`;
+}
+
+function detailAttribute(attribute) {
+  return `<div><dt>${escapeHtml(attribute.label)}</dt><dd>${escapeHtml(attribute.value)}</dd></div>`;
+}
+
+function activityRow(entry) {
+  const note = entry.kind === "note";
+  const provenance = [
+    note ? "Note" : pluginLabel(entityDetail.source.plugin_id),
+    note && entry.actor ? (entry.actor === "local-operator" ? "You" : entry.actor) : null,
+    formatDateTime(entry.occurred_at),
+  ].filter(Boolean).join(" · ");
+  return `
+    <article class="activity-row ${note ? "is-note" : ""}">
+      <div class="activity-marker" aria-hidden="true"></div>
+      <div>
+        <p class="activity-summary">${escapeHtml(entry.summary)}</p>
+        ${entry.body ? `<p class="activity-body">${escapeHtml(entry.body)}</p>` : ""}
+        <p class="item-meta">${escapeHtml(provenance)}</p>
+      </div>
     </article>
   `;
 }
@@ -412,6 +508,65 @@ function wireCommandButtons() {
       }
     });
   });
+}
+
+function wireEntityLinks() {
+  document.querySelectorAll("[data-entity-link]").forEach((button) => {
+    button.addEventListener("click", () => openEntityDetail({
+      plugin_id: button.dataset.pluginId,
+      entity_type: button.dataset.entityType,
+      entity_id: button.dataset.entityId,
+    }));
+  });
+}
+
+function entityDetailPath(source) {
+  return `/api/entities/${encodeURIComponent(source.plugin_id)}/${encodeURIComponent(source.entity_type)}/${encodeURIComponent(source.entity_id)}`;
+}
+
+async function openEntityDetail(source) {
+  detailReturnView = activeView;
+  app.setAttribute("aria-busy", "true");
+  try {
+    entityDetail = await request(entityDetailPath(source));
+    app.setAttribute("aria-busy", "false");
+    render();
+  } catch (error) {
+    renderError(error);
+  }
+}
+
+async function addEntityNote(event, affordance) {
+  event.preventDefault();
+  const input = document.querySelector("#entity-note-body");
+  const body = input.value.trim();
+  if (!body) return;
+  const submit = event.currentTarget.querySelector("button[type='submit']");
+  submit.disabled = true;
+  try {
+    await request("/api/commands", {
+      method: "POST",
+      body: JSON.stringify({
+        schema_version: "mission-control.command/v1",
+        command_id: `web-note-${Date.now()}-${++commandSequence}`,
+        target: entityDetail.source,
+        expected_revision: entityDetail.revision,
+        command: affordance.command,
+        arguments: { body },
+      }),
+    });
+    await refresh();
+    showNotice("Note added to this entity's immutable activity.");
+  } catch (error) {
+    if (error.status === 409) {
+      await refresh();
+      showNotice("This entity changed while you were writing. The details were refreshed; review them before retrying.", "warning");
+    } else {
+      renderError(error);
+    }
+  } finally {
+    if (document.body.contains(submit)) submit.disabled = false;
+  }
 }
 
 function showNotice(message, tone = "success") {

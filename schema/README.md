@@ -8,6 +8,7 @@ The current contracts cover:
 - the query core sends when requesting agenda contributions for an explicit horizon
 - the immutable agenda contribution a provider returns for aggregation and rendering
 - the immutable closed-item contribution a provider returns for completed/history views
+- the entity-focused detail and immutable activity projection composed at read time
 - the command envelope a client sends to exactly one authoritative owner
 - the structured outcome returned for accepted, rejected, stale, unauthorized, or failed commands
 
@@ -37,6 +38,15 @@ Closed items are projected separately so the default agenda remains focused on a
 
 This is a current-state read model, not the immutable event stream or the planned richer entity activity view. Reopening still travels through the ordinary command envelope to the authoritative owner.
 
+## Entity-detail contract
+
+Entity details remain a read model over one stable source reference. A plugin owns
+the entity's current title, description, state, revision, display attributes,
+affordances, and domain events. Core may compose shared notes into the activity
+sequence without copying or mutating plugin state. The provider must declare the
+coarse `entity-details` capability, while `activity.read` and `entity.annotate`
+remain entity-type capabilities enforced through the registration envelope.
+
 ## Runtime artifacts
 
 The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
@@ -47,6 +57,7 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Agenda contribution | `schema/agenda/contribution.cue` | `mission_control/schemas/agenda-contribution.schema.json` |
 | Agenda query | `schema/agenda/query.cue` | `mission_control/schemas/agenda-query.schema.json` |
 | Closed-item contribution | `schema/closed-items/contribution.cue` | `mission_control/schemas/closed-items-contribution.schema.json` |
+| Entity detail and activity | `schema/entity-detail/contract.cue` | `mission_control/schemas/entity-detail.schema.json` |
 | Command envelope | `schema/command/contract.cue` | `mission_control/schemas/command-envelope.schema.json` |
 | Command result | `schema/command/contract.cue` | `mission_control/schemas/command-result.schema.json` |
 
@@ -84,6 +95,11 @@ cue def --force --out jsonschema \
   -e '#ClosedItemsContribution' \
   -o mission_control/schemas/closed-items-contribution.schema.json \
   ./schema/closed-items
+
+cue def --force --out jsonschema \
+  -e '#EntityDetail' \
+  -o mission_control/schemas/entity-detail.schema.json \
+  ./schema/entity-detail
 ```
 
 Formatting is not part of the contract; CI compares generated and packaged schemas as decoded JSON values.

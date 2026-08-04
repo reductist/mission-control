@@ -8,6 +8,7 @@ from importlib.resources import files
 
 import pytest
 
+from mission_control.agenda import SourceRef
 from mission_control.builtin_plugins import prepare_builtin_agenda_plugins
 from mission_control.builtin_plugins.landscape.domain import (
     LandscapeActionState,
@@ -23,6 +24,7 @@ from mission_control.builtin_plugins.landscape.repository import (
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.server import MissionControlApplication
+from mission_control.plugins import PluginId
 
 
 def prepared_landscape():
@@ -40,7 +42,7 @@ def initialized_repository(tmp_path) -> LandscapeRepository:
 
 def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
     database = Database(tmp_path / "mission-control.db")
-    assert MigrationRunner(database).apply() == [1]
+    assert MigrationRunner(database).apply() == [1, 2]
     runner = LandscapeMigrationRunner(database)
 
     assert runner.apply() == [1, 2]
@@ -53,7 +55,7 @@ def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
         landscape_version = connection.execute(
             "SELECT max(version) FROM landscape_schema_migrations"
         ).fetchone()[0]
-    assert (core_version, landscape_version) == (1, 2)
+    assert (core_version, landscape_version) == (2, 2)
 
 
 def test_landscape_text_bounds_migrate_existing_state_without_loss(tmp_path) -> None:
@@ -145,6 +147,7 @@ def test_state_and_history_survive_restart_without_seed_overwrite(tmp_path) -> N
     assert item["revision"] == "2"
     assert item["state"] == "done"
     assert item["affordances"] == [
+        {"capability": "entity.annotate", "command": "add-note"},
         {"capability": "lifecycle.reopen", "command": "reopen"}
     ]
 
@@ -199,6 +202,20 @@ def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> No
     database = Database(tmp_path / "mission-control.db")
     prepared = prepared_landscape()
     enabled = MissionControlApplication(database, builtin_plugins=prepared)
+    detail = enabled.entity_detail("landscape", "action", "measure-access-route")
+    status, note = enabled.execute_command(
+        {
+            "schema_version": "mission-control.command/v1",
+            "command_id": "persist-disabled-note-1",
+            "target": detail["source"],
+            "expected_revision": detail["revision"],
+            "command": "add-note",
+            "arguments": {"body": "Gate clearance is 54 inches."},
+        },
+        authorized=True,
+    )
+    assert status == 200
+    assert note["status"] == "accepted"
     enabled.agenda_providers[0].repository.complete_action("measure-access-route")
 
     disabled = MissionControlApplication(database)
@@ -210,6 +227,12 @@ def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> No
         entry["source"]["plugin_id"] != "landscape"
         for entry in disabled.dashboard()["closed_items"]
     )
+    target = SourceRef(
+        PluginId("landscape"), "action", "measure-access-route"
+    )
+    assert disabled.annotation_repository.list(target)[0].body.startswith(
+        "Gate clearance"
+    )
 
     reenabled = MissionControlApplication(database, builtin_plugins=prepared)
     assert (
@@ -218,6 +241,9 @@ def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> No
         .state
         is LandscapeActionState.DONE
     )
+    assert reenabled.entity_detail(
+        "landscape", "action", "measure-access-route"
+    )["activity"][1]["body"].startswith("Gate clearance")
 
 
 def test_landscape_events_are_immutable_at_the_database_boundary(tmp_path) -> None:

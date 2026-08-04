@@ -27,6 +27,11 @@ command targets, event references, and logs remain predictable. Titles are limit
 limited to 128 characters, while inline detail is limited to 4096 characters; larger
 documents belong in a future attachment or Wiki capability rather than agenda state.
 
+Core-owned annotations are limited to 16,384 Unicode characters. They are immutable
+activity records rather than mutable entity description fields, so they can hold
+field observations and measurements without changing a plugin entity's revision.
+Annotation actor labels are limited to 256 characters.
+
 Bounds are measured in Python/SQLite characters, not encoded bytes. Boundary tests cover
 `N-1`, `N`, and `N+1` where a maximum is defined.
 

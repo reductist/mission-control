@@ -42,6 +42,7 @@ import "strings"
 	"agenda" |
 	"closed-items" |
 	"commands" |
+	"entity-details" |
 	"cli" |
 	"http" |
 	"jobs" |
