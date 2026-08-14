@@ -63,8 +63,9 @@ package agenda
 #ActionTiming: #Anytime | #DueOn | #DueAt | #Window
 
 #AllDay: close({
-	kind!:      "all-day"
-	occurs_on!: #Date
+	kind!:        "all-day"
+	occurs_on!:   #Date
+	ends_before?: #Date
 })
 
 #Timed: close({

@@ -15,11 +15,13 @@ from mission_control.plugins import (
     EntityCapability,
     JsonArray,
     ObjectArgument,
+    PluginConfigurationError,
     PluginRegistrationError,
     load_registration,
     parse_plugin_registration,
     registration_to_dict,
     StandardEntityCapability,
+    validate_plugin_configuration,
 )
 
 
@@ -136,6 +138,20 @@ def test_non_json_registration_value_is_rejected():
         match=r"^\$\.runtime_object: plugin registration must contain only JSON values",
     ):
         parse_plugin_registration(registration)
+
+
+def test_plugin_configuration_applies_defaults_and_rejects_invalid_values():
+    registration = load_registration(REFERENCE_REGISTRATION)
+
+    configured = validate_plugin_configuration(registration, {"message": "hello"})
+
+    assert configured.to_dict() == {"message": "hello", "repeat": 1}
+    with pytest.raises(PluginConfigurationError, match="repeat: must be at least"):
+        validate_plugin_configuration(
+            registration, {"message": "hello", "repeat": 0}
+        )
+    with pytest.raises(PluginConfigurationError, match="unknown configuration fields"):
+        validate_plugin_configuration(registration, {"message": "hello", "secret": True})
 
 
 @pytest.mark.parametrize(

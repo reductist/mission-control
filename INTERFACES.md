@@ -52,6 +52,8 @@ The application configuration contains core settings, enabled plugin identifiers
 
 Plugins may validate only their own configuration namespace. Cross-plugin configuration references require an explicit public capability contract.
 
+The current experimental runtime validates registered argument types, constraints, and defaults before importing a bundled provider. `mctrld` accepts non-secret settings documents separately from named credential file references. A provider receives only its detached validated values and its own credential-name mapping.
+
 ## Event interface
 
 Core owns the event envelope. It includes:
@@ -164,6 +166,8 @@ A job contribution declares:
 
 Jobs start only after plugin initialization completes and must stop cleanly when the plugin is disabled or Mission Control shuts down.
 
+The current experimental supervisor runs a provider job immediately and then at its declared fixed interval, contains failures at the job boundary, prevents overlap by assigning one thread per job, and joins jobs during shutdown. Providers remain responsible for bounded retries and safe health detail.
+
 ## UI contribution interface
 
 UI contributions are declarative manifests that reference approved extension points. A plugin may contribute navigation, dashboard panels, forms, views, and settings surfaces without importing private web application modules.
@@ -189,6 +193,8 @@ Each plugin reports a structured state such as:
 - stopping
 
 Health reports include a stable code, safe operator-facing detail, and optional remediation guidance. Secrets and raw exception data must not be exposed by default.
+
+`/api/health` and the dashboard provider catalog currently expose this safe health projection. A transient degraded Google refresh retains cached projections and does not make the core health endpoint unavailable. A terminal `reconnect-required` result erases imported Google cache data instead of retaining private records after authorization is revoked.
 
 ## Compatibility policy
 

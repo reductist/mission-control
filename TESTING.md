@@ -99,4 +99,6 @@ A change to a public core interface cannot merge unless all built-in and referen
 
 A change to a deployment adapter must run the common packaging smoke test. A change to machine-readable interface schemas must regenerate artifacts and prove the working tree remains clean.
 
+The Google contract tests additionally cover privacy redaction, all-day exclusive ends, date-only Tasks semantics, independent migrations, restart persistence, partial-source stale-cache retention, health degradation, live credential requirements, and the credential-free synthetic demo. The NixOS smoke test enables Google and Landscape together to exercise isolation and packaged resources.
+
 No test may rely on privileged interfaces available only to built-in plugins. A built-in plugin that cannot pass the public contract suite represents an architecture defect, not a test exception.

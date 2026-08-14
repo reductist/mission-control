@@ -218,6 +218,67 @@ def test_query_and_occurrence_windows_must_move_forward():
         parse_agenda_contribution(document)
 
 
+def test_multi_day_all_day_event_preserves_exclusive_end_date():
+    document = contribution_document()
+    event = document["entries"][2]  # type: ignore[index]
+    event["timing"] = {  # type: ignore[index]
+        "kind": "all-day",
+        "occurs_on": "2026-08-14",
+        "ends_before": "2026-08-23",
+    }
+
+    contribution = parse_agenda_contribution(document)
+    serialized = agenda_to_list(aggregate_agenda((contribution,)))
+
+    assert serialized[0]["timing"] == event["timing"]
+    event["timing"]["ends_before"] = "2026-08-14"  # type: ignore[index]
+    with pytest.raises(AgendaContributionError, match="all-day event must end after"):
+        parse_agenda_contribution(document)
+
+
+def test_timed_entries_sort_by_instant_across_utc_offsets():
+    document = contribution_document()
+    document["entries"] = [  # type: ignore[index]
+        {
+            "id": "new-york",
+            "source": {
+                "plugin_id": "landscape",
+                "entity_type": "visit",
+                "entity_id": "new-york",
+            },
+            "title": "New York later",
+            "kind": "event",
+            "timing": {
+                "kind": "timed",
+                "starts_at": "2026-08-14T08:00:00-04:00",
+                "ends_at": "2026-08-14T09:00:00-04:00",
+            },
+        },
+        {
+            "id": "zurich",
+            "source": {
+                "plugin_id": "landscape",
+                "entity_type": "visit",
+                "entity_id": "zurich",
+            },
+            "title": "Zürich earlier",
+            "kind": "event",
+            "timing": {
+                "kind": "timed",
+                "starts_at": "2026-08-14T09:00:00+02:00",
+                "ends_at": "2026-08-14T10:00:00+02:00",
+            },
+        },
+    ]
+
+    contribution = parse_agenda_contribution(document)
+
+    assert [entry.entry_id for entry in aggregate_agenda((contribution,)).entries] == [
+        "zurich",
+        "new-york",
+    ]
+
+
 def test_provider_ownership_and_duplicate_ids_are_enforced():
     document = contribution_document()
     document["entries"][0]["source"]["plugin_id"] = "other"  # type: ignore[index]

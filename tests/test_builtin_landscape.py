@@ -81,7 +81,7 @@ def test_activation_rejects_command_capability_drift(
         command_owner=None,
     )
     implementation = SimpleNamespace(
-        activate=lambda _database, _seed: read_only_provider
+        activate=lambda _database, _seed, _configuration, _credentials: read_only_provider
     )
     monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
 
@@ -103,7 +103,9 @@ def test_activation_requires_state_dependent_affordances(
         plugin_id=prepared.registration.plugin_id,
         command_owner=owner_without_affordances,
     )
-    implementation = SimpleNamespace(activate=lambda _database, _seed: provider)
+    implementation = SimpleNamespace(
+        activate=lambda _database, _seed, _configuration, _credentials: provider
+    )
     monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
 
     with pytest.raises(
@@ -126,7 +128,9 @@ def test_activation_requires_declared_closed_item_projection(
             handle=lambda _command, _context: None,
         ),
     )
-    implementation = SimpleNamespace(activate=lambda _database, _seed: provider)
+    implementation = SimpleNamespace(
+        activate=lambda _database, _seed, _configuration, _credentials: provider
+    )
     monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
 
     with pytest.raises(
@@ -150,7 +154,9 @@ def test_activation_requires_declared_entity_detail_projection(
         ),
         closed_items=lambda **_kwargs: None,
     )
-    implementation = SimpleNamespace(activate=lambda _database, _seed: provider)
+    implementation = SimpleNamespace(
+        activate=lambda _database, _seed, _configuration, _credentials: provider
+    )
     monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
 
     with pytest.raises(

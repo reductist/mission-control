@@ -1,0 +1,59 @@
+{
+  "schema_version": "mission-control.plugin/v1",
+  "id": "google",
+  "name": "Google",
+  "version": "0.1.0",
+  "plugin_api": ">=1.0.0 <2.0.0",
+  "capabilities": ["agenda", "entity-details", "jobs", "health"],
+  "entity_types": {
+    "calendar-event": {
+      "capabilities": ["entity.annotate", "activity.read"]
+    },
+    "task": {
+      "capabilities": ["entity.annotate", "activity.read"]
+    }
+  },
+  "arguments": {
+    "calendar_ids": {
+      "type": "array",
+      "items": {"type": "string", "min_length": 1},
+      "default": [],
+      "description": "Calendar IDs to import. Empty selects the primary and Google-selected calendars."
+    },
+    "lookahead_days": {
+      "type": "integer",
+      "default": 30,
+      "minimum": 1,
+      "maximum": 366
+    },
+    "lookback_days": {
+      "type": "integer",
+      "default": 1,
+      "minimum": 0,
+      "maximum": 30
+    },
+    "mode": {
+      "type": "string",
+      "default": "live",
+      "enum": ["live", "demo"]
+    },
+    "request_timeout_seconds": {
+      "type": "integer",
+      "default": 15,
+      "minimum": 3,
+      "maximum": 60
+    },
+    "sync_interval_seconds": {
+      "type": "integer",
+      "default": 300,
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "task_list_ids": {
+      "type": "array",
+      "items": {"type": "string", "min_length": 1},
+      "default": [],
+      "description": "Task-list IDs to import. Empty selects every available task list."
+    }
+  }
+}

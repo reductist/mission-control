@@ -43,9 +43,22 @@ slice is selected separately through the bundled Landscape provider:
 services.mission-control = {
   enable = true;
   demo = true;
-  plugins = [ "landscape" ];
+  plugins = [ "google" "landscape" ];
 };
 ```
+
+With `demo = true`, Google uses its packaged synthetic fixture and requires no credential. For live mode, keep non-secret settings in a JSON path and provide the authorized-user credential through systemd's credential mechanism:
+
+```nix
+services.mission-control = {
+  enable = true;
+  plugins = [ "google" ];
+  pluginSettings.google = ./google-settings.json;
+  pluginCredentials.google.oauth = "/run/secrets/mission-control-google-oauth.json";
+};
+```
+
+The settings file may enter the Nix store and must not contain OAuth values. The credential source is loaded by PID 1 into the service's private `/run/credentials` directory and is not copied into the store or passed as a secret-bearing process argument. See [`../../docs/google-integration.md`](../../docs/google-integration.md) for the settings and OAuth contract.
 
 Do not point demo mode at a production database.
 
@@ -76,6 +89,8 @@ services.mission-control.host
 services.mission-control.port
 services.mission-control.demo
 services.mission-control.plugins
+services.mission-control.pluginSettings
+services.mission-control.pluginCredentials
 ```
 
 While the service uses `DynamicUser` and `StateDirectory`, `databasePath` must remain under `/var/lib/mission-control`.

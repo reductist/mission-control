@@ -16,6 +16,8 @@ Mission Control is a plugin-oriented work and context system, not a global to-do
 
 ## Near-term sequence
 
+The read-only Google Schedule slice is an explicit household-demo reprioritization between steps 3 and 4. It exercises validated plugin configuration, runtime credentials, background jobs, health, a plugin-owned cache, and generic event/action rendering without taking ownership of Google records. It does not change the artifact-storage milestone below.
+
 1. **Deploy capability envelopes.** Pin merged Mission Control PR #37 in `nixconfigs` and validate capability-driven complete and reopen behavior on `vectorsigma`.
 2. **Complete the lifecycle workflow.** Implement [issue #35](https://github.com/reductist/mission-control/issues/35): a discoverable completed-item history with first-class reopen controls, optimistic revision handling, cross-projection refresh, and restart persistence.
 3. **Add rich entity details and activity.** Open an agenda card into an entity-focused detail surface with description, plugin-native context, immutable activity, and notes or structured observations through `entity.annotate`. The Landscape measurement workflow is the proving case.

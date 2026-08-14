@@ -65,6 +65,8 @@ All plugins, including built-in plugins, follow the same lifecycle:
 
 The runtime must be able to identify a failed plugin, isolate its contributions, and start Mission Control in a recoverable mode when core invariants remain intact.
 
+The Google vertical slice exercises the smallest current application lifecycle: configuration validates before runtime import, named credential requirements validate during activation, namespaced migrations run during activation, and periodic work begins only after the application is ready. Each source refresh replaces one complete cached collection transactionally. A transient failed refresh retains the last good collection and reports degraded health without blocking core or unrelated providers; a terminal authorization revocation erases imported Google cache data and requires reconnection. OAuth secrets and access tokens are not persistence fields.
+
 ## Public contribution interfaces
 
 The interface catalog is defined in `INTERFACES.md`. At minimum, the public API must cover:
@@ -109,6 +111,8 @@ Mission Control accepts one application-level configuration format with:
 - per-plugin validated configuration
 
 NixOS modules, Compose files, and the setup wizard are configuration producers. They must not become alternate implementations of application logic. Installer output must pass the same validator used by `mcctl` and `mctrld`.
+
+Non-secret plugin settings and named credential file references are separate inputs. Deployment adapters may materialize credentials using their native secret mechanism, but the application passes only the named runtime path to the owning plugin. Secret values must not be serialized into application configuration, SQLite, process arguments, health output, or logs.
 
 ## Deployment adapters
 

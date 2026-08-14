@@ -117,6 +117,8 @@ def test_http_dashboard_assets_and_health(tmp_path):
             assert b"Full audit trail" in script
             assert b'capabilities.includes(item.capability)' in script
             assert b"toggle-removed-notes" not in script
+            assert b"Google" not in script
+            assert b"restoreAppFocus" in script
             assert b"data-activity-command" in script
             assert b"window.confirm" in script
             assert b"/api/entities/" in script
@@ -124,12 +126,45 @@ def test_http_dashboard_assets_and_health(tmp_path):
 
         status, health = request_json(f"{base_url}/api/health")
         assert status == 200
-        assert health == {"status": "ok", "version": "0.1.0"}
+        assert health == {"status": "ok", "version": "0.1.0", "plugins": []}
 
         status, dashboard = request_json(f"{base_url}/api/dashboard")
         assert status == 200
         assert dashboard["summary"]["open"] == 1
         assert "closed_items" in dashboard
+
+
+def test_dashboard_retains_last_provider_projection_after_safe_failure(tmp_path):
+    application = MissionControlApplication(Database(tmp_path / "mission-control.db"))
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+
+    class FlakyProvider:
+        failed = False
+
+        def contribution(self, *, generated_at):
+            if self.failed:
+                raise RuntimeError("private provider failure")
+            return prepared.seed
+
+    provider = FlakyProvider()
+    application.builtin_plugins = (prepared,)
+    application.agenda_providers = (provider,)
+    application.registrations = {"landscape": prepared.registration}
+
+    first = application.dashboard()
+    assert any(
+        item["source"]["plugin_id"] == "landscape" for item in first["agenda"]
+    )
+
+    provider.failed = True
+    second = application.dashboard()
+    assert any(
+        item["source"]["plugin_id"] == "landscape" for item in second["agenda"]
+    )
+    health = second["providers"][0]["health"]
+    assert health["state"] == "failed"
+    assert health["code"] == "agenda-read-failed"
+    assert "private provider failure" not in health["detail"]
 
 
 def test_landscape_upgrade_preserves_legacy_demo_tasks_for_manual_cleanup(tmp_path):

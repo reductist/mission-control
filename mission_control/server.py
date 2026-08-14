@@ -50,6 +50,7 @@ from mission_control.commands import (
     parse_command,
 )
 from mission_control.closed_items import (
+    ClosedItemsContribution,
     aggregate_closed_items,
     closed_items_to_list,
     project_core_closed_items,
@@ -62,6 +63,7 @@ from mission_control.entity_details import (
     validate_entity_detail_capabilities,
 )
 from mission_control.migrations import MigrationRunner
+from mission_control.plugin_runtime import PluginJobSupervisor
 from mission_control.plugins import (
     EntityCapability,
     PluginId,
@@ -157,22 +159,44 @@ class MissionControlApplication:
                 )
             },
         )
+        self.job_supervisor = PluginJobSupervisor(
+            job
+            for provider in self.agenda_providers
+            for job in (
+                provider.jobs() if callable(getattr(provider, "jobs", None)) else ()
+            )
+        )
+        self._last_agenda_contributions: dict[str, AgendaContribution] = {}
+        self._last_closed_contributions: dict[str, ClosedItemsContribution] = {}
+        self._provider_runtime_failures: dict[str, tuple[str, str]] = {}
         self._demo_fixture = _load_demo_fixture() if demo else None
         if demo:
             _seed_demo_tasks(self.repository)
+
+    def start(self) -> None:
+        """Start provider jobs only after every plugin has initialized."""
+
+        self.job_supervisor.start()
+
+    def stop(self) -> None:
+        """Stop provider jobs before the application is discarded."""
+
+        self.job_supervisor.stop()
+
+    def health(self) -> dict[str, object]:
+        plugins = self._plugin_health()
+        degraded = any(item["state"] in {"degraded", "failed"} for item in plugins)
+        return {
+            "status": "degraded" if degraded else "ok",
+            "version": __version__,
+            "plugins": plugins,
+        }
 
     def dashboard(self) -> dict[str, object]:
         tasks = self.repository.list()
         active = [task for task in tasks if task.state != "done"]
         generated_at = datetime.now(UTC)
-        builtin_contributions = tuple(
-            provider.contribution(generated_at=generated_at)
-            for provider in self.agenda_providers
-        )
-        for plugin, contribution in zip(
-            self.builtin_plugins, builtin_contributions, strict=True
-        ):
-            validate_agenda_capabilities(plugin.registration, contribution)
+        builtin_contributions = self._agenda_contributions(generated_at)
 
         closed_contributions = [
             project_core_closed_items(tasks, generated_at=generated_at)
@@ -183,9 +207,22 @@ class MissionControlApplication:
             project_closed = getattr(provider, "closed_items", None)
             if not callable(project_closed):
                 continue
-            contribution = project_closed(generated_at=generated_at)
-            validate_closed_items_capabilities(plugin.registration, contribution)
-            closed_contributions.append(contribution)
+            plugin_id = plugin.registration.plugin_id.value
+            try:
+                contribution = project_closed(generated_at=generated_at)
+                validate_closed_items_capabilities(plugin.registration, contribution)
+            except Exception:
+                self._provider_runtime_failures[plugin_id] = (
+                    "closed-items-read-failed",
+                    "Provider history failed; the last available view was retained.",
+                )
+                if plugin_id in self._last_closed_contributions:
+                    closed_contributions.append(
+                        self._last_closed_contributions[plugin_id]
+                    )
+            else:
+                self._last_closed_contributions[plugin_id] = contribution
+                closed_contributions.append(contribution)
         closed_items = aggregate_closed_items(closed_contributions)
 
         agenda = aggregate_agenda(
@@ -208,8 +245,89 @@ class MissionControlApplication:
             "tasks": [_task_to_dict(task) for task in _sort_tasks(tasks)],
             "agenda": agenda_to_list(agenda),
             "closed_items": closed_items_to_list(closed_items),
+            "providers": self._provider_documents(),
             "demo": self._demo_fixture,
         }
+
+    def _agenda_contributions(
+        self, generated_at: datetime
+    ) -> tuple[AgendaContribution, ...]:
+        contributions: list[AgendaContribution] = []
+        for plugin, provider in zip(
+            self.builtin_plugins, self.agenda_providers, strict=True
+        ):
+            plugin_id = plugin.registration.plugin_id.value
+            try:
+                contribution = provider.contribution(generated_at=generated_at)
+                validate_agenda_capabilities(plugin.registration, contribution)
+            except Exception:
+                self._provider_runtime_failures[plugin_id] = (
+                    "agenda-read-failed",
+                    "Provider agenda failed; the last available view was retained.",
+                )
+                if plugin_id in self._last_agenda_contributions:
+                    contributions.append(self._last_agenda_contributions[plugin_id])
+            else:
+                self._last_agenda_contributions[plugin_id] = contribution
+                self._provider_runtime_failures.pop(plugin_id, None)
+                contributions.append(contribution)
+        return tuple(contributions)
+
+    def _plugin_health(self) -> list[dict[str, object]]:
+        documents: list[dict[str, object]] = []
+        for plugin, provider in zip(
+            self.builtin_plugins, self.agenda_providers, strict=True
+        ):
+            plugin_id = plugin.registration.plugin_id.value
+            if plugin_id in self._provider_runtime_failures:
+                code, detail = self._provider_runtime_failures[plugin_id]
+                documents.append(self._failed_plugin_health(plugin_id, code, detail))
+                continue
+            health = getattr(provider, "health", None)
+            if not callable(health):
+                continue
+            try:
+                document = health().to_dict()
+                if document.get("plugin_id") != plugin_id:
+                    raise ValueError("provider health identity does not match registration")
+            except Exception:
+                document = self._failed_plugin_health(
+                    plugin_id,
+                    "health-read-failed",
+                    "Provider health could not be read safely.",
+                )
+            documents.append(document)
+        return documents
+
+    @staticmethod
+    def _failed_plugin_health(
+        plugin_id: str, code: str, detail: str
+    ) -> dict[str, object]:
+        return {
+            "plugin_id": plugin_id,
+            "state": "failed",
+            "code": code,
+            "detail": detail,
+            "checked_at": datetime.now(UTC).isoformat(),
+        }
+
+    def _provider_documents(self) -> list[dict[str, object]]:
+        health = {item["plugin_id"]: item for item in self._plugin_health()}
+        return [
+            {
+                "id": registration.plugin_id.value,
+                "name": registration.name,
+                "capabilities": [item.value for item in registration.capabilities],
+                **(
+                    {"health": health[registration.plugin_id.value]}
+                    if registration.plugin_id.value in health
+                    else {}
+                ),
+            }
+            for registration in sorted(
+                self.registrations.values(), key=lambda item: item.plugin_id.value
+            )
+        ]
 
     def create_task(self, document: object) -> dict[str, object]:
         payload = _object_payload(document, allowed={"title", "description"})
@@ -370,7 +488,7 @@ def _handler_for(application: MissionControlApplication):
             if path == "/api/health":
                 self._send_json(
                     HTTPStatus.OK,
-                    {"status": "ok", "version": __version__},
+                    application.health(),
                 )
                 return
             if path == "/api/dashboard":
@@ -623,6 +741,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="load a bundled read-only agenda provider; may be repeated",
     )
+    parser.add_argument(
+        "--plugin-settings",
+        action="append",
+        default=[],
+        metavar="PLUGIN_ID=PATH",
+        help="read one plugin's non-secret JSON settings; may be repeated",
+    )
+    parser.add_argument(
+        "--plugin-credential",
+        action="append",
+        default=[],
+        metavar="PLUGIN_ID.NAME=PATH",
+        help="provide one named credential file to a plugin; may be repeated",
+    )
     return parser
 
 
@@ -630,8 +762,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        builtin_plugins = prepare_builtin_agenda_plugins(args.plugin)
-    except BuiltinPluginError as error:
+        configurations = _plugin_settings(args.plugin_settings)
+        credentials = _plugin_credentials(args.plugin_credential)
+        selected = set(args.plugin)
+        unexpected = sorted((set(configurations) | set(credentials)) - selected)
+        if unexpected:
+            raise ValueError(
+                "configuration supplied for unselected plugins: "
+                + ", ".join(unexpected)
+            )
+        if args.demo and "google" in selected and "google" not in configurations:
+            configurations["google"] = {"mode": "demo"}
+        builtin_plugins = prepare_builtin_agenda_plugins(
+            args.plugin,
+            configurations=configurations,
+            credentials=credentials,
+        )
+    except (BuiltinPluginError, OSError, ValueError) as error:
         parser.error(str(error))
     try:
         application = MissionControlApplication(
@@ -650,12 +797,61 @@ def main(argv: list[str] | None = None) -> int:
             "warning: the MVP server has no user authentication; expose it only on a trusted network"
         )
     try:
+        application.start()
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+        application.stop()
     return 0
+
+
+def _plugin_settings(values: Iterable[str]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for value in values:
+        plugin_id, path = _assignment(value, "--plugin-settings")
+        if plugin_id in result:
+            raise ValueError(f"plugin settings supplied more than once: {plugin_id}")
+        try:
+            result[plugin_id] = json.loads(Path(path).read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"{plugin_id}: invalid settings JSON at line {error.lineno}, "
+                f"column {error.colno}"
+            ) from error
+    return result
+
+
+def _plugin_credentials(values: Iterable[str]) -> dict[str, dict[str, str]]:
+    result: dict[str, dict[str, str]] = {}
+    for value in values:
+        identity, path = _assignment(value, "--plugin-credential")
+        if "." not in identity:
+            raise ValueError(
+                "--plugin-credential identity must use PLUGIN_ID.NAME"
+            )
+        plugin_id, name = identity.split(".", 1)
+        if not plugin_id or not name:
+            raise ValueError(
+                "--plugin-credential identity must use PLUGIN_ID.NAME"
+            )
+        plugin_credentials = result.setdefault(plugin_id, {})
+        if name in plugin_credentials:
+            raise ValueError(
+                f"plugin credential supplied more than once: {plugin_id}.{name}"
+            )
+        plugin_credentials[name] = path
+    return result
+
+
+def _assignment(value: str, option: str) -> tuple[str, str]:
+    if "=" not in value:
+        raise ValueError(f"{option} must use NAME=PATH")
+    name, path = value.split("=", 1)
+    if not name or not path:
+        raise ValueError(f"{option} must use NAME=PATH")
+    return name, path
 
 
 if __name__ == "__main__":

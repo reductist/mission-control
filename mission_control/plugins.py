@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -17,6 +18,10 @@ from jsonschema import Draft202012Validator
 
 class PluginRegistrationError(ValueError):
     """A plugin registration document cannot be parsed into the domain model."""
+
+
+class PluginConfigurationError(ValueError):
+    """A plugin configuration does not satisfy its registered arguments."""
 
 
 class PluginDiscoveryError(ValueError):
@@ -194,6 +199,16 @@ class PluginRegistration:
     capabilities: tuple[Capability, ...]
     entity_types: tuple[EntityTypeRegistration, ...] = ()
     arguments: tuple[PluginArgument, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PluginConfiguration:
+    """One detached, validated, namespaced plugin configuration."""
+
+    values: tuple[tuple[str, JsonValue], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {key: _thaw_json(value) for key, value in self.values}
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -424,6 +439,145 @@ def parse_plugin_registration(document: object) -> PluginRegistration:
         entity_types=entity_types,
         arguments=arguments,
     )
+
+
+def validate_plugin_configuration(
+    registration: PluginRegistration, document: object
+) -> PluginConfiguration:
+    """Validate configuration before importing a plugin implementation."""
+
+    try:
+        _assert_json_input(document)
+    except PluginRegistrationError as error:
+        raise PluginConfigurationError(str(error)) from error
+    if not isinstance(document, Mapping):
+        raise PluginConfigurationError("$: plugin configuration must be a JSON object")
+    raw = dict(document)
+    definitions = {argument.name: argument.definition for argument in registration.arguments}
+    unknown = sorted(set(raw) - set(definitions))
+    if unknown:
+        raise PluginConfigurationError(
+            f"$: unknown configuration fields: {', '.join(unknown)}"
+        )
+
+    values: list[tuple[str, JsonValue]] = []
+    for name, definition in definitions.items():
+        if name in raw:
+            value = _validate_configuration_value(raw[name], definition, name)
+        else:
+            default = getattr(definition, "default", None)
+            if default is not None:
+                value = (
+                    _thaw_json(default)
+                    if isinstance(default, (JsonArray, JsonObject))
+                    else default
+                )
+            elif definition.metadata.required:
+                raise PluginConfigurationError(f"{name}: required configuration is missing")
+            else:
+                continue
+        values.append((name, _freeze_json(value)))
+    return PluginConfiguration(tuple(values))
+
+
+def _validate_configuration_value(
+    value: Any, definition: ArgumentDefinition, path: str
+) -> Any:
+    if isinstance(definition, StringArgument):
+        if not isinstance(value, str):
+            raise PluginConfigurationError(f"{path}: expected string")
+        if definition.enum is not None and value not in definition.enum:
+            raise PluginConfigurationError(
+                f"{path}: expected one of {', '.join(repr(item) for item in definition.enum)}"
+            )
+        if definition.pattern is not None and re.search(definition.pattern, value) is None:
+            raise PluginConfigurationError(f"{path}: value does not match required pattern")
+        if definition.min_length is not None and len(value) < definition.min_length:
+            raise PluginConfigurationError(
+                f"{path}: must contain at least {definition.min_length} characters"
+            )
+        if definition.max_length is not None and len(value) > definition.max_length:
+            raise PluginConfigurationError(
+                f"{path}: must contain at most {definition.max_length} characters"
+            )
+        return value
+    if isinstance(definition, BooleanArgument):
+        if not isinstance(value, bool):
+            raise PluginConfigurationError(f"{path}: expected boolean")
+        return value
+    if isinstance(definition, IntegerArgument):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise PluginConfigurationError(f"{path}: expected integer")
+        if definition.enum is not None and value not in definition.enum:
+            raise PluginConfigurationError(f"{path}: value is not an allowed integer")
+        if definition.minimum is not None and value < definition.minimum:
+            raise PluginConfigurationError(f"{path}: must be at least {definition.minimum}")
+        if definition.maximum is not None and value > definition.maximum:
+            raise PluginConfigurationError(f"{path}: must be at most {definition.maximum}")
+        return value
+    if isinstance(definition, NumberArgument):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise PluginConfigurationError(f"{path}: expected number")
+        if not math.isfinite(value):
+            raise PluginConfigurationError(f"{path}: number must be finite")
+        if definition.enum is not None and value not in definition.enum:
+            raise PluginConfigurationError(f"{path}: value is not an allowed number")
+        if definition.minimum is not None and value < definition.minimum:
+            raise PluginConfigurationError(f"{path}: must be at least {definition.minimum}")
+        if definition.maximum is not None and value > definition.maximum:
+            raise PluginConfigurationError(f"{path}: must be at most {definition.maximum}")
+        return value
+    if isinstance(definition, ArrayArgument):
+        if not isinstance(value, list):
+            raise PluginConfigurationError(f"{path}: expected array")
+        if definition.min_items is not None and len(value) < definition.min_items:
+            raise PluginConfigurationError(
+                f"{path}: must contain at least {definition.min_items} items"
+            )
+        if definition.max_items is not None and len(value) > definition.max_items:
+            raise PluginConfigurationError(
+                f"{path}: must contain at most {definition.max_items} items"
+            )
+        return [
+            _validate_configuration_value(item, definition.items, f"{path}.{index}")
+            for index, item in enumerate(value)
+        ]
+    if isinstance(definition, ObjectArgument):
+        if not isinstance(value, Mapping):
+            raise PluginConfigurationError(f"{path}: expected object")
+        properties = {item.name: item.definition for item in definition.properties}
+        unknown = sorted(set(value) - set(properties))
+        if unknown and not definition.additional_properties:
+            raise PluginConfigurationError(
+                f"{path}: unknown fields: {', '.join(str(item) for item in unknown)}"
+            )
+        result: dict[str, Any] = {}
+        for name, child in properties.items():
+            child_path = f"{path}.{name}"
+            if name in value:
+                result[name] = _validate_configuration_value(value[name], child, child_path)
+            else:
+                default = getattr(child, "default", None)
+                if default is not None:
+                    result[name] = (
+                        _thaw_json(default)
+                        if isinstance(default, (JsonArray, JsonObject))
+                        else default
+                    )
+                elif child.metadata.required:
+                    raise PluginConfigurationError(
+                        f"{child_path}: required configuration is missing"
+                    )
+        if definition.additional_properties:
+            result.update(
+                {
+                    str(key): item
+                    for key, item in value.items()
+                    if key not in properties
+                }
+            )
+        return result
+    raise AssertionError(f"unhandled argument definition: {definition!r}")
 
 
 def _parse_entity_capabilities(

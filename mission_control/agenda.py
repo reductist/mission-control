@@ -7,7 +7,7 @@ import json
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time
 from enum import StrEnum
 from functools import lru_cache
 from importlib.resources import files
@@ -117,6 +117,7 @@ ActionTiming: TypeAlias = AnytimeTiming | DueOnTiming | DueAtTiming | WindowTimi
 @dataclass(frozen=True, slots=True)
 class AllDayTiming:
     occurs_on: date
+    ends_before: date | None = None
     kind: ClassVar[EventTimingKind] = EventTimingKind.ALL_DAY
 
 
@@ -341,7 +342,17 @@ def _parse_event_timing(raw: Mapping[str, Any], path: str) -> EventTiming:
     kind = EventTimingKind(raw["kind"])
     match kind:
         case EventTimingKind.ALL_DAY:
-            return AllDayTiming(_parse_date(raw["occurs_on"], f"{path}.occurs_on"))
+            occurs_on = _parse_date(raw["occurs_on"], f"{path}.occurs_on")
+            ends_before = (
+                _parse_date(raw["ends_before"], f"{path}.ends_before")
+                if "ends_before" in raw
+                else None
+            )
+            if ends_before is not None and ends_before <= occurs_on:
+                raise AgendaContributionError(
+                    f"{path}: all-day event must end after it starts"
+                )
+            return AllDayTiming(occurs_on, ends_before)
         case EventTimingKind.TIMED:
             starts_at = _parse_datetime(raw["starts_at"], f"{path}.starts_at")
             ends_at = _parse_datetime(raw["ends_at"], f"{path}.ends_at")
@@ -488,7 +499,10 @@ def _action_timing_to_dict(timing: ActionTiming) -> dict[str, object]:
 
 def _event_timing_to_dict(timing: EventTiming) -> dict[str, object]:
     if isinstance(timing, AllDayTiming):
-        return {"kind": timing.kind.value, "occurs_on": timing.occurs_on.isoformat()}
+        result = {"kind": timing.kind.value, "occurs_on": timing.occurs_on.isoformat()}
+        if timing.ends_before is not None:
+            result["ends_before"] = timing.ends_before.isoformat()
+        return result
     if isinstance(timing, TimedTiming):
         return {
             "kind": timing.kind.value,
@@ -542,28 +556,40 @@ def contribution_to_dict(contribution: AgendaContribution) -> dict[str, object]:
     }
 
 
-def _entry_sort_key(entry: AgendaEntry) -> tuple[str, str, str, str, str]:
+def _entry_sort_key(entry: AgendaEntry) -> tuple[int, float, int, str, str, str, str]:
+    # Datetimes with different UTC offsets must be ordered by instant rather than
+    # by their ISO-8601 spelling. Date-only values intentionally remain local
+    # calendar dates and sort at the start of that date.
     if isinstance(entry, Action):
         timing = entry.timing
         if isinstance(timing, DueOnTiming):
-            when = f"0:{timing.due_on.isoformat()}"
+            rank, when, time_rank = (
+                0,
+                datetime.combine(timing.due_on, time.min, UTC).timestamp(),
+                0,
+            )
         elif isinstance(timing, DueAtTiming):
-            when = f"0:{_datetime_text(timing.due_at)}"
+            rank, when, time_rank = 0, timing.due_at.timestamp(), 1
         elif isinstance(timing, WindowTiming):
-            when = f"0:{_datetime_text(timing.starts_at)}"
+            rank, when, time_rank = 0, timing.starts_at.timestamp(), 1
         else:
-            when = "1:"
+            rank, when, time_rank = 1, 0.0, 0
     elif isinstance(entry, Event):
         timing = entry.timing
-        when = (
-            f"0:{timing.occurs_on.isoformat()}"
-            if isinstance(timing, AllDayTiming)
-            else f"0:{_datetime_text(timing.starts_at)}"
-        )
+        if isinstance(timing, AllDayTiming):
+            rank, when, time_rank = (
+                0,
+                datetime.combine(timing.occurs_on, time.min, UTC).timestamp(),
+                0,
+            )
+        else:
+            rank, when, time_rank = 0, timing.starts_at.timestamp(), 1
     else:
-        when = "2:"
+        rank, when, time_rank = 2, 0.0, 0
     return (
+        rank,
         when,
+        time_rank,
         entry.kind.value,
         entry.title.casefold(),
         entry.source.plugin_id.value,

@@ -1,0 +1,7 @@
+{
+  "schema_version": "mission-control.agenda/v1",
+  "provider": {"plugin_id": "google"},
+  "revision": "empty-cache-v1",
+  "generated_at": "2026-08-14T00:00:00+00:00",
+  "entries": []
+}
