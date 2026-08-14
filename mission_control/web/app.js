@@ -15,6 +15,11 @@ const viewCopy = {
     title: "The next right things",
     description: "A shared view of active work, decisions, and longer-term plans.",
   },
+  schedule: {
+    eyebrow: "Household schedule",
+    title: "What is happening next",
+    description: "Events, appointments, tasks, and reminders from every enabled provider.",
+  },
   house: {
     eyebrow: "House and finances",
     title: "Move only for a clear upgrade",
@@ -38,6 +43,8 @@ let entityDetail = null;
 let detailReturnView = "overview";
 let commandSequence = 0;
 let activityExpanded = false;
+let scheduleFilter = "all";
+let refreshInFlight = false;
 
 document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
@@ -81,29 +88,89 @@ async function request(path, options = {}) {
 }
 
 async function refresh() {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
   try {
+    const focus = captureAppFocus();
     const detailTarget = entityDetail?.source;
-    dashboard = await request("/api/dashboard");
+    const nextDashboard = await request("/api/dashboard");
+    let nextDetail = entityDetail;
     if (detailTarget) {
-      entityDetail = await request(entityDetailPath(detailTarget));
+      nextDetail = await request(entityDetailPath(detailTarget));
     }
+    dashboard = nextDashboard;
+    entityDetail = nextDetail;
     connectionLabel.textContent = "Online";
     modeLabel.textContent = dashboard.mode === "demo" ? "Synthetic demo workspace" : "Live workspace";
     versionLabel.textContent = `v${dashboard.version}`;
     statusDot.classList.add("is-online");
     app.setAttribute("aria-busy", "false");
     render();
+    restoreAppFocus(focus);
   } catch (error) {
-    connectionLabel.textContent = "Unavailable";
-    modeLabel.textContent = "Could not load workspace";
-    renderError(error);
+    connectionLabel.textContent = dashboard ? "Showing cached view" : "Unavailable";
+    modeLabel.textContent = dashboard
+      ? `Last loaded ${formatDateTime(dashboard.generated_at)}`
+      : "Could not load workspace";
+    if (dashboard) {
+      showNotice("Could not refresh. The last loaded schedule remains visible.", "warning");
+    } else {
+      renderError(error);
+    }
+  } finally {
+    refreshInFlight = false;
   }
+}
+
+function captureAppFocus() {
+  const active = document.activeElement;
+  if (!active || !app.contains(active)) return null;
+  const candidates = [...app.querySelectorAll("button, input, textarea, select, a[href], [tabindex]")];
+  return {
+    index: candidates.indexOf(active),
+    signature: focusSignature(active),
+    value: "value" in active ? active.value : null,
+    selectionStart: active.selectionStart,
+    selectionEnd: active.selectionEnd,
+  };
+}
+
+function restoreAppFocus(saved) {
+  if (!saved) return;
+  const candidates = [...app.querySelectorAll("button, input, textarea, select, a[href], [tabindex]")];
+  const target = candidates.find((item) => focusSignature(item) === saved.signature)
+    || candidates[saved.index];
+  if (!target) return;
+  if (saved.value !== null && "value" in target) target.value = saved.value;
+  target.focus({ preventScroll: true });
+  if (
+    saved.selectionStart !== null
+    && saved.selectionStart !== undefined
+    && typeof target.setSelectionRange === "function"
+  ) {
+    target.setSelectionRange(saved.selectionStart, saved.selectionEnd);
+  }
+}
+
+function focusSignature(element) {
+  return [
+    element.tagName,
+    element.id,
+    element.dataset?.view,
+    element.dataset?.scheduleFilter,
+    element.dataset?.pluginId,
+    element.dataset?.entityType,
+    element.dataset?.entityId,
+    element.dataset?.command,
+  ].join("|");
 }
 
 function render() {
   if (!dashboard) return;
   if (entityDetail) {
     renderEntityDetail();
+  } else if (activeView === "schedule") {
+    renderSchedule();
   } else if (activeView === "house") {
     renderHouse();
   } else if (activeView === "yard") {
@@ -120,6 +187,7 @@ function renderOverview() {
   const activeTasks = dashboard.tasks.filter((task) => task.state !== "done");
   const visibleTasks = activeTasks.slice(0, 7);
   const house = dashboard.demo?.house;
+  const scheduled = scheduleEntries().filter((entry) => entry.timing?.kind !== "anytime");
   const yardEntries = landscapeEntries();
   const yardInitiative = yardEntries.find((entry) => entry.kind === "initiative");
   const yardActions = yardEntries.filter((entry) => entry.kind === "action");
@@ -153,6 +221,7 @@ function renderOverview() {
       </section>
 
       <div class="stack">
+        ${scheduled.length ? previewCard("Schedule", scheduled[0].title, scheduleTimingLabel(scheduled[0]), "schedule") : livePlaceholder("Household schedule")}
         ${house ? previewCard("House", house.status, house.summary, "house") : livePlaceholder("House planning")}
         ${yardInitiative ? previewCard("Yard", yardInitiative.title, yardInitiative.detail, "yard") : livePlaceholder("Yard planning")}
       </div>
@@ -165,6 +234,246 @@ function renderOverview() {
   document.querySelectorAll(".text-button[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
+}
+
+function renderSchedule() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+  const entries = scheduleEntries()
+    .filter((entry) => scheduleFilter === "all"
+      || (scheduleFilter === "events" && entry.kind === "event")
+      || (scheduleFilter === "tasks" && entry.kind === "action"))
+    .sort((left, right) => compareScheduleEntries(left, right, timeZone));
+  const groups = new Map();
+  entries.forEach((entry) => {
+    const key = scheduleDateKey(entry, timeZone);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  });
+  const degraded = (dashboard.providers || []).filter((provider) =>
+    ["degraded", "failed"].includes(provider.health?.state),
+  );
+  const starting = (dashboard.providers || []).filter((provider) =>
+    provider.health?.state === "starting",
+  );
+  const lastSuccess = (dashboard.providers || [])
+    .map((provider) => provider.health?.last_success_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  app.innerHTML = `
+    ${degraded.length ? `
+      <div class="notice is-warning" role="status">
+        ${escapeHtml(degraded.map((provider) => `${provider.name}: ${provider.health.detail}`).join(" "))}
+      </div>
+    ` : starting.length ? `
+      <div class="notice" role="status">
+        ${escapeHtml(starting.map((provider) => `${provider.name}: ${provider.health.detail}`).join(" "))}
+      </div>
+    ` : ""}
+    <div class="schedule-toolbar panel">
+      <div class="schedule-filters" role="group" aria-label="Filter schedule">
+        ${scheduleFilterButton("all", "All")}
+        ${scheduleFilterButton("events", "Events")}
+        ${scheduleFilterButton("tasks", "Tasks & reminders")}
+      </div>
+      <div class="schedule-freshness">
+        <span>Times shown in ${escapeHtml(timeZone)}</span>
+        <span>${lastSuccess ? `Updated ${escapeHtml(formatDateTime(lastSuccess))}` : starting.length ? "Waiting for first refresh" : `Loaded ${escapeHtml(formatDateTime(dashboard.generated_at))}`}</span>
+      </div>
+    </div>
+    <div class="schedule-days">
+      ${groups.size
+        ? [...groups].map(([key, items]) => scheduleDay(key, items)).join("")
+        : '<section class="panel empty">Nothing scheduled in this range.</section>'}
+    </div>
+  `;
+
+  document.querySelectorAll("[data-schedule-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      scheduleFilter = button.dataset.scheduleFilter;
+      renderSchedule();
+    });
+  });
+  wireEntityLinks();
+}
+
+function scheduleEntries() {
+  return (dashboard.agenda || []).filter((entry) =>
+    entry.kind === "event" || (entry.kind === "action" && entry.timing),
+  );
+}
+
+function scheduleFilterButton(value, label) {
+  const selected = scheduleFilter === value;
+  return `<button class="schedule-filter ${selected ? "is-active" : ""}" data-schedule-filter="${value}" type="button" aria-pressed="${selected}">${escapeHtml(label)}</button>`;
+}
+
+function scheduleDay(key, entries) {
+  return `
+    <section class="panel schedule-day" aria-labelledby="schedule-${escapeHtml(key)}">
+      <div class="panel-header">
+        <h2 id="schedule-${escapeHtml(key)}">${escapeHtml(scheduleDayLabel(key))}</h2>
+        <span>${entries.length} ${entries.length === 1 ? "item" : "items"}</span>
+      </div>
+      <div class="schedule-list">${entries.map(scheduleRow).join("")}</div>
+    </section>
+  `;
+}
+
+function scheduleRow(entry) {
+  const kindLabel = entry.kind === "event" ? "Event" : "Task";
+  const provenance = [pluginLabel(entry.source?.plugin_id), entry.context, kindLabel]
+    .filter(Boolean)
+    .join(" · ");
+  const timeValue = scheduleTimeValue(entry);
+  return `
+    <article class="schedule-row">
+      <time class="schedule-time"${timeValue ? ` datetime="${escapeHtml(timeValue)}"` : ""}>${escapeHtml(scheduleTimingLabel(entry))}</time>
+      <div>
+        <h3 class="task-title">${entityTitle(entry)}</h3>
+        ${entry.detail ? `<p class="task-description">${escapeHtml(entry.detail)}</p>` : ""}
+        <p class="item-meta">${escapeHtml(provenance)}</p>
+      </div>
+      <span class="state-badge">${escapeHtml(kindLabel)}</span>
+    </article>
+  `;
+}
+
+function entityTitle(entry) {
+  return providerHasCapability(entry.source?.plugin_id, "entity-details")
+    ? entityLink(entry)
+    : escapeHtml(entry.title);
+}
+
+function providerHasCapability(pluginId, capability) {
+  return (dashboard.providers || []).some((provider) =>
+    provider.id === pluginId && (provider.capabilities || []).includes(capability),
+  );
+}
+
+function compareScheduleEntries(left, right, timeZone) {
+  const leftDay = scheduleDateKey(left, timeZone);
+  const rightDay = scheduleDateKey(right, timeZone);
+  if (leftDay !== rightDay) {
+    if (leftDay === "anytime") return 1;
+    if (rightDay === "anytime") return -1;
+    return leftDay.localeCompare(rightDay);
+  }
+  const leftRank = scheduleTimingRank(left);
+  const rightRank = scheduleTimingRank(right);
+  const leftValue = scheduleSortValue(left);
+  const rightValue = scheduleSortValue(right);
+  return leftRank - rightRank
+    || leftValue - rightValue
+    || left.kind.localeCompare(right.kind)
+    || left.title.localeCompare(right.title)
+    || left.id.localeCompare(right.id);
+}
+
+function scheduleTimingRank(entry) {
+  const kind = entry.timing?.kind;
+  if (kind === "all-day") return 0;
+  if (["timed", "window", "due-at"].includes(kind)) return 1;
+  if (kind === "due-on") return 2;
+  return 3;
+}
+
+function scheduleSortValue(entry) {
+  const timing = entry.timing || {};
+  if (timing.kind === "all-day") return civilDateValue(timing.occurs_on);
+  if (timing.kind === "due-on") return civilDateValue(timing.due_on) + 86399000;
+  if (timing.kind === "timed" || timing.kind === "window") {
+    return new Date(timing.starts_at).valueOf();
+  }
+  if (timing.kind === "due-at") return new Date(timing.due_at).valueOf();
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function scheduleDateKey(entry, timeZone) {
+  const timing = entry.timing || {};
+  if (timing.kind === "all-day") {
+    const today = localCivilDate(new Date());
+    if (timing.ends_before && timing.occurs_on < today && today < timing.ends_before) {
+      return today;
+    }
+    return timing.occurs_on;
+  }
+  if (timing.kind === "due-on") return timing.due_on;
+  if (timing.kind === "anytime") return "anytime";
+  return dateKeyInTimeZone(
+    timing.starts_at || timing.due_at,
+    timeZone,
+  );
+}
+
+function dateKeyInTimeZone(value, timeZone) {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function scheduleDayLabel(key) {
+  if (key === "anytime") return "Anytime";
+  const today = localCivilDate(new Date());
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrow = localCivilDate(tomorrowDate);
+  if (key === today) return "Today";
+  if (key === tomorrow) return "Tomorrow";
+  const [year, month, day] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: year === new Date().getFullYear() ? undefined : "numeric",
+  }).format(new Date(year, month - 1, day, 12));
+}
+
+function localCivilDate(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function civilDateValue(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
+function scheduleTimeValue(entry) {
+  const timing = entry.timing || {};
+  return timing.starts_at || timing.due_at || timing.occurs_on || timing.due_on || "";
+}
+
+function scheduleTimingLabel(entry) {
+  const timing = entry.timing || {};
+  if (timing.kind === "all-day") {
+    if (timing.ends_before && civilDateValue(timing.ends_before) > civilDateValue(timing.occurs_on) + 86400000) {
+      const last = new Date(civilDateValue(timing.ends_before) - 86400000);
+      return `All day through ${new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" }).format(last)}`;
+    }
+    return "All day";
+  }
+  if (timing.kind === "timed") {
+    return `${formatTime(timing.starts_at)}–${formatTime(timing.ends_at)}`;
+  }
+  if (timing.kind === "due-on") return "Due";
+  if (timing.kind === "due-at") return `Due ${formatTime(timing.due_at)}`;
+  if (timing.kind === "window") return `${formatDateTime(timing.starts_at)}–${formatDateTime(timing.ends_at)}`;
+  return "Anytime";
+}
+
+function formatTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(parsed);
 }
 
 function renderHistory() {
@@ -415,7 +724,7 @@ function closedItemRow(item) {
     <article class="closed-row">
       <div>
         <div class="closed-title-line">
-          <h3 class="task-title">${item.source?.plugin_id === "landscape" ? entityLink(item) : escapeHtml(item.title)}</h3>
+          <h3 class="task-title">${providerHasCapability(item.source?.plugin_id, "entity-details") ? entityLink(item) : escapeHtml(item.title)}</h3>
           <span class="state-badge">${escapeHtml(item.state)}</span>
         </div>
         <p class="task-description">${escapeHtml(item.detail || "No additional detail")}</p>
@@ -493,7 +802,8 @@ function noteLifecycleAction(entry, capabilities) {
 
 function pluginLabel(pluginId) {
   if (pluginId === "core") return "Core";
-  if (pluginId === "landscape") return "Yard";
+  const provider = (dashboard?.providers || []).find((item) => item.id === pluginId);
+  if (provider) return provider.name;
   return pluginId || "Unknown source";
 }
 
@@ -510,8 +820,10 @@ function formatDateTime(value) {
 function timingLabel(timing) {
   if (!timing || timing.kind === "anytime") return "Anytime";
   if (timing.kind === "due-on") return `Due ${timing.due_on}`;
-  if (timing.kind === "due-at") return `Due ${timing.due_at}`;
+  if (timing.kind === "due-at") return `Due ${formatDateTime(timing.due_at)}`;
   if (timing.kind === "window") return `${timing.starts_at.slice(0, 10)} to ${timing.ends_at.slice(0, 10)}`;
+  if (timing.kind === "all-day") return scheduleTimingLabel({ timing });
+  if (timing.kind === "timed") return `${formatDateTime(timing.starts_at)} to ${formatDateTime(timing.ends_at)}`;
   return timing.kind;
 }
 
@@ -709,7 +1021,8 @@ function renderNoDemo(title, detail) {
 
 function renderError(error) {
   app.setAttribute("aria-busy", "false");
-  app.innerHTML = `<div class="error-box"><strong>Mission Control could not complete that request.</strong><p>${escapeHtml(error.message || String(error))}</p></div>`;
+  app.innerHTML = `<div class="error-box"><strong>Mission Control could not complete that request.</strong><p>${escapeHtml(error.message || String(error))}</p><button class="secondary-button" id="retry-load" type="button">Retry</button></div>`;
+  document.querySelector("#retry-load").addEventListener("click", refresh);
 }
 
 function escapeHtml(value) {
@@ -725,3 +1038,7 @@ if (configuredMode === "demo") {
   modeLabel.textContent = "Synthetic demo workspace";
 }
 refresh();
+setInterval(refresh, 300000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refresh();
+});

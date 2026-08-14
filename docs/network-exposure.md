@@ -15,6 +15,8 @@ A deployment may opt into direct trusted-LAN access by setting a non-loopback bi
 
 Authentication, TLS, reverse-proxy policy, public URLs, and any broader exposure require separate decisions and validation.
 
+Live calendar and task projections can contain private titles, descriptions, locations, and travel plans. A shared household display should therefore use a browser on the same host, an SSH tunnel, or an access-controlled private-network proxy such as Tailscale Serve. Enabling the Google provider does not make the unauthenticated listener safe to expose to a guest LAN or the public internet.
+
 ## Consequences
 
 - Installing or enabling Mission Control does not silently broaden network access.

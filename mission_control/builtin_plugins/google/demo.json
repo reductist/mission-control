@@ -1,0 +1,119 @@
+{
+  "calendarList": {
+    "items": [
+      {
+        "id": "primary@example.invalid",
+        "summary": "Family calendar",
+        "primary": true,
+        "selected": true,
+        "accessRole": "owner"
+      },
+      {
+        "id": "travel@example.invalid",
+        "summary": "Travel",
+        "selected": true,
+        "accessRole": "owner"
+      }
+    ]
+  },
+  "events": {
+    "primary@example.invalid": {
+      "items": [
+        {
+          "id": "language-practice-20260816",
+          "recurringEventId": "language-practice",
+          "originalStartTime": {"dateTime": "2026-08-16T09:00:00+02:00"},
+          "summary": "Language practice",
+          "status": "confirmed",
+          "start": {"dateTime": "2026-08-16T09:00:00+02:00", "timeZone": "Europe/Zurich"},
+          "end": {"dateTime": "2026-08-16T09:30:00+02:00", "timeZone": "Europe/Zurich"},
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-language-practice"
+        },
+        {
+          "id": "private-focus",
+          "summary": "Busy",
+          "visibility": "private",
+          "status": "confirmed",
+          "start": {"dateTime": "2026-08-17T13:00:00+02:00"},
+          "end": {"dateTime": "2026-08-17T14:00:00+02:00"},
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-private"
+        }
+      ]
+    },
+    "travel@example.invalid": {
+      "items": [
+        {
+          "id": "travel-days",
+          "summary": "Switzerland trip",
+          "description": "Synthetic trip fixture for the Mission Control demo.",
+          "status": "confirmed",
+          "start": {"date": "2026-08-14"},
+          "end": {"date": "2026-08-23"},
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-trip"
+        },
+        {
+          "id": "flight-zurich",
+          "summary": "Flight to Zürich",
+          "status": "confirmed",
+          "location": "Boston to Zürich",
+          "start": {"dateTime": "2026-08-14T20:30:00-04:00", "timeZone": "America/New_York"},
+          "end": {"dateTime": "2026-08-15T09:55:00+02:00", "timeZone": "Europe/Zurich"},
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-flight"
+        },
+        {
+          "id": "museum-appointment",
+          "summary": "Museum appointment",
+          "status": "confirmed",
+          "start": {"dateTime": "2026-08-18T10:30:00+02:00", "timeZone": "Europe/Zurich"},
+          "end": {"dateTime": "2026-08-18T12:00:00+02:00", "timeZone": "Europe/Zurich"},
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-museum"
+        }
+      ]
+    }
+  },
+  "tasklists": {
+    "items": [
+      {"id": "travel-tasks", "title": "Travel tasks"},
+      {"id": "reminders", "title": "Reminders"}
+    ]
+  },
+  "tasks": {
+    "travel-tasks": {
+      "items": [
+        {
+          "id": "offline-maps",
+          "title": "Download offline maps",
+          "status": "needsAction",
+          "due": "2026-08-15T00:00:00.000Z",
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-maps"
+        },
+        {
+          "id": "share-itinerary",
+          "title": "Share the itinerary",
+          "notes": "Make sure everyone has the current travel plan.",
+          "status": "needsAction",
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-itinerary"
+        }
+      ]
+    },
+    "reminders": {
+      "items": [
+        {
+          "id": "travel-documents",
+          "title": "Check travel documents",
+          "status": "needsAction",
+          "due": "2026-08-14T00:00:00.000Z",
+          "updated": "2026-08-13T18:00:00Z",
+          "etag": "demo-documents"
+        }
+      ]
+    }
+  }
+}

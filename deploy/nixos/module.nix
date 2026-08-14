@@ -3,6 +3,25 @@
 let
   cfg = config.services.mission-control;
   stateDirectory = "/var/lib/mission-control";
+  credentialDirectory = "/run/credentials/mission-control.service";
+  pluginSettingsArgs = lib.concatMap (
+    plugin: [ "--plugin-settings" "${plugin}=${toString cfg.pluginSettings.${plugin}}" ]
+  ) (lib.attrNames cfg.pluginSettings);
+  pluginCredentialArgs = lib.concatMap (
+    plugin:
+    lib.concatMap (
+      name: [
+        "--plugin-credential"
+        "${plugin}.${name}=${credentialDirectory}/${plugin}-${name}"
+      ]
+    ) (lib.attrNames cfg.pluginCredentials.${plugin})
+  ) (lib.attrNames cfg.pluginCredentials);
+  loadedCredentials = lib.concatMap (
+    plugin:
+    map (
+      name: "${plugin}-${name}:${cfg.pluginCredentials.${plugin}.${name}}"
+    ) (lib.attrNames cfg.pluginCredentials.${plugin})
+  ) (lib.attrNames cfg.pluginCredentials);
   command = lib.escapeShellArgs (
     [
       "${cfg.package}/bin/mctrld"
@@ -15,6 +34,8 @@ let
     ]
     ++ lib.optional cfg.demo "--demo"
     ++ lib.concatMap (plugin: [ "--plugin" plugin ]) cfg.plugins
+    ++ pluginSettingsArgs
+    ++ pluginCredentialArgs
   );
 in
 {
@@ -60,11 +81,30 @@ in
     };
 
     plugins = lib.mkOption {
-      type = lib.types.listOf (lib.types.enum [ "landscape" ]);
+      type = lib.types.listOf (lib.types.enum [ "google" "landscape" ]);
       default = [ ];
       description = ''
         Bundled read-only agenda providers to load explicitly. General plugin
         lifecycle and third-party activation are not implemented yet.
+      '';
+    };
+
+    pluginSettings = lib.mkOption {
+      type = lib.types.attrsOf lib.types.path;
+      default = { };
+      description = ''
+        Non-secret JSON settings files keyed by enabled plugin ID. Files may
+        contain credential names or paths, but never OAuth secret values.
+      '';
+    };
+
+    pluginCredentials = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.str);
+      default = { };
+      description = ''
+        Runtime credential source paths keyed by plugin ID and credential name.
+        Values are passed through systemd LoadCredential and are not copied into
+        the Nix store by this module.
       '';
     };
   };
@@ -79,6 +119,18 @@ in
           services.mission-control.databasePath must remain within
           ${stateDirectory} while the service uses DynamicUser and StateDirectory.
         '';
+      }
+      {
+        assertion = lib.all (plugin: lib.elem plugin cfg.plugins) (
+          lib.attrNames cfg.pluginSettings
+        );
+        message = "services.mission-control.pluginSettings may only configure enabled plugins";
+      }
+      {
+        assertion = lib.all (plugin: lib.elem plugin cfg.plugins) (
+          lib.attrNames cfg.pluginCredentials
+        );
+        message = "services.mission-control.pluginCredentials may only configure enabled plugins";
       }
     ];
 
@@ -100,6 +152,7 @@ in
         StateDirectoryMode = "0750";
         WorkingDirectory = stateDirectory;
         UMask = "0077";
+        LoadCredential = loadedCredentials;
 
         NoNewPrivileges = true;
         PrivateDevices = true;

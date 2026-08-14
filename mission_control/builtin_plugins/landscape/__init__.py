@@ -19,7 +19,7 @@ from mission_control.commands import CommandOwner
 from mission_control.closed_items import ClosedItemsContribution
 from mission_control.database import Database
 from mission_control.entity_details import EntityDetail
-from mission_control.plugins import PluginId
+from mission_control.plugins import PluginConfiguration, PluginId
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,8 +38,16 @@ class LandscapeAgendaProvider:
         return entity_detail(self.repository, target)
 
 
-def activate(database: Database, seed: AgendaContribution) -> LandscapeAgendaProvider:
+def activate(
+    database: Database,
+    seed: AgendaContribution,
+    configuration: PluginConfiguration,
+    credentials: dict[str, str],
+) -> LandscapeAgendaProvider:
     """Apply Landscape-owned migrations and import its initial data once."""
+
+    if configuration.values or credentials:
+        raise ValueError("Landscape does not accept configuration or credentials")
 
     LandscapeMigrationRunner(database).apply()
     repository = SQLiteLandscapeRepository(database)

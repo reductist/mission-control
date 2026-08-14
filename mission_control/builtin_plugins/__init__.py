@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import import_module
@@ -21,10 +21,13 @@ from mission_control.commands import CommandOwner
 from mission_control.database import Database
 from mission_control.plugins import (
     Capability,
+    PluginConfiguration,
+    PluginConfigurationError,
     PluginId,
     PluginRegistration,
     PluginRegistrationError,
     parse_plugin_registration,
+    validate_plugin_configuration,
 )
 
 
@@ -32,7 +35,7 @@ class BuiltinPluginError(ValueError):
     """A requested bundled plugin cannot provide a valid contribution."""
 
 
-BUILTIN_AGENDA_PLUGIN_IDS = ("landscape",)
+BUILTIN_AGENDA_PLUGIN_IDS = ("google", "landscape")
 
 
 class BuiltinAgendaProvider(Protocol):
@@ -46,6 +49,8 @@ class BuiltinAgendaProvider(Protocol):
 class PreparedBuiltinAgendaPlugin:
     registration: PluginRegistration
     seed: AgendaContribution
+    configuration: PluginConfiguration
+    credentials: tuple[tuple[str, str], ...] = ()
 
 
 def _document(plugin_id: str, name: str) -> object:
@@ -53,7 +58,11 @@ def _document(plugin_id: str, name: str) -> object:
     return json.loads(resource.read_text(encoding="utf-8"))
 
 
-def _prepare_agenda_plugin(plugin_id: str) -> PreparedBuiltinAgendaPlugin:
+def _prepare_agenda_plugin(
+    plugin_id: str,
+    configuration: object,
+    credentials: Mapping[str, str],
+) -> PreparedBuiltinAgendaPlugin:
     try:
         registration = parse_plugin_registration(
             _document(plugin_id, "registration.json")
@@ -67,10 +76,19 @@ def _prepare_agenda_plugin(plugin_id: str) -> PreparedBuiltinAgendaPlugin:
         if registration.plugin_id != contribution.provider.plugin_id:
             raise ValueError("registration and agenda provider ids must match")
         validate_agenda_capabilities(registration, contribution)
-        return PreparedBuiltinAgendaPlugin(registration, contribution)
+        validated_configuration = validate_plugin_configuration(
+            registration, configuration
+        )
+        return PreparedBuiltinAgendaPlugin(
+            registration,
+            contribution,
+            validated_configuration,
+            tuple(sorted(credentials.items())),
+        )
     except (
         OSError,
         json.JSONDecodeError,
+        PluginConfigurationError,
         PluginRegistrationError,
         AgendaContributionError,
         ValueError,
@@ -88,6 +106,9 @@ def load_builtin_agenda_contributions(
 
 def prepare_builtin_agenda_plugins(
     plugin_ids: Iterable[str],
+    *,
+    configurations: Mapping[str, object] | None = None,
+    credentials: Mapping[str, Mapping[str, str]] | None = None,
 ) -> tuple[PreparedBuiltinAgendaPlugin, ...]:
     """Validate selected built-ins without importing code or touching persistence."""
 
@@ -102,7 +123,13 @@ def prepare_builtin_agenda_plugins(
             raise BuiltinPluginError(
                 f"unknown bundled agenda plugin {plugin_id!r}; available: {supported}"
             )
-        prepared.append(_prepare_agenda_plugin(plugin_id))
+        prepared.append(
+            _prepare_agenda_plugin(
+                plugin_id,
+                (configurations or {}).get(plugin_id, {}),
+                (credentials or {}).get(plugin_id, {}),
+            )
+        )
     return tuple(prepared)
 
 
@@ -117,7 +144,12 @@ def activate_builtin_agenda_plugins(
         plugin_id = plugin.registration.plugin_id.value
         try:
             implementation = import_module(f"{__package__}.{plugin_id}")
-            provider = implementation.activate(database, plugin.seed)
+            provider = implementation.activate(
+                database,
+                plugin.seed,
+                plugin.configuration,
+                dict(plugin.credentials),
+            )
             if provider.plugin_id != plugin.registration.plugin_id:
                 raise ValueError("registration and activated provider ids must match")
             declares_commands = Capability.COMMANDS in plugin.registration.capabilities
@@ -147,6 +179,18 @@ def activate_builtin_agenda_plugins(
             if exposes_entity_details is not declares_entity_details:
                 raise ValueError(
                     "registration and activated entity-details capability must match"
+                )
+            declares_jobs = Capability.JOBS in plugin.registration.capabilities
+            exposes_jobs = callable(getattr(provider, "jobs", None))
+            if exposes_jobs is not declares_jobs:
+                raise ValueError(
+                    "registration and activated jobs capability must match"
+                )
+            declares_health = Capability.HEALTH in plugin.registration.capabilities
+            exposes_health = callable(getattr(provider, "health", None))
+            if exposes_health is not declares_health:
+                raise ValueError(
+                    "registration and activated health capability must match"
                 )
         except (
             AttributeError,

@@ -178,6 +178,52 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
 .metric-detail { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .85fr); gap: 18px; align-items: start; }
+.schedule-toolbar {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.schedule-filters { display: flex; flex-wrap: wrap; gap: 7px; }
+.schedule-filter {
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.schedule-filter:hover, .schedule-filter.is-active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.schedule-filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.schedule-freshness {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  color: var(--muted);
+  font: 10px/1.35 var(--mono);
+}
+.schedule-days { display: grid; gap: 16px; }
+.schedule-list { display: grid; }
+.schedule-row {
+  padding: 15px 18px;
+  display: grid;
+  grid-template-columns: minmax(94px, .28fr) minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  border-bottom: 1px solid var(--border);
+}
+.schedule-row:last-child { border-bottom: 0; }
+.schedule-time {
+  color: var(--accent);
+  font: 600 12px/1.5 var(--mono);
+}
 .stack { display: grid; gap: 18px; }
 .panel {
   background: var(--panel);
@@ -440,7 +486,7 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; padding: 14px 16px; gap: 14px; }
   .brand { display: none; }
-  nav { grid-template-columns: repeat(4, 1fr); }
+  nav { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }
   .nav-item { justify-content: center; }
   .nav-item span { display: none; }
   .sidebar-status { display: none; }
@@ -460,4 +506,8 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   .activity-action { grid-column: 2; justify-self: start; }
   .activity-disclosure-summary { align-items: center; }
   .activity-disclosure-meta { margin-left: auto; text-align: right; }
+  .schedule-toolbar { align-items: flex-start; flex-direction: column; }
+  .schedule-freshness { justify-items: start; }
+  .schedule-row { grid-template-columns: 1fr auto; }
+  .schedule-time { grid-column: 1 / -1; }
 }
