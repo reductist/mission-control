@@ -101,4 +101,9 @@ A change to a deployment adapter must run the common packaging smoke test. A cha
 
 The Google contract tests additionally cover privacy redaction, all-day exclusive ends, date-only Tasks semantics, independent migrations, restart persistence, partial-source stale-cache retention, health degradation, live credential requirements, and the credential-free synthetic demo. The NixOS smoke test enables Google and Landscape together to exercise isolation and packaged resources.
 
+Google's plugin-owned CUE suite additionally validates its exact registration
+and capability envelope, configuration and demo settings, evergreen fixture,
+and open-input/closed-output mapping conformance cases. Negative fixtures prove
+that unknown settings and invalid cross-interface projections fail.
+
 No test may rely on privileged interfaces available only to built-in plugins. A built-in plugin that cannot pass the public contract suite represents an architecture defect, not a test exception.

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import mission_control.builtin_plugins as builtin_plugins
+import mission_control.plugin_lifecycle as builtin_plugins
 from mission_control.builtin_plugins import (
     BuiltinPluginError,
     activate_builtin_agenda_plugins,
@@ -44,6 +44,31 @@ def test_landscape_provider_validates_real_equipment_access_work(
 def test_builtin_provider_selection_rejects_duplicates() -> None:
     with pytest.raises(BuiltinPluginError, match="selected more than once"):
         load_builtin_agenda_contributions(("landscape", "landscape"))
+
+
+def test_manifest_compatibility_is_rejected_before_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_document = builtin_plugins._document
+    imported = False
+
+    def incompatible_registration(plugin_id: str, name: str) -> object:
+        document = deepcopy(original_document(plugin_id, name))
+        if name == "registration.json":
+            document["plugin_api"] = ">=2.0.0 <3.0.0"
+        return document
+
+    def unexpected_import(_name: str):
+        nonlocal imported
+        imported = True
+        raise AssertionError("incompatible plugin implementation imported")
+
+    monkeypatch.setattr(builtin_plugins, "_document", incompatible_registration)
+    monkeypatch.setattr(builtin_plugins, "import_module", unexpected_import)
+
+    with pytest.raises(BuiltinPluginError, match="host provides 1.0.0"):
+        prepare_builtin_agenda_plugins(("landscape",))
+    assert imported is False
 
 
 def test_landscape_declares_its_public_command_capability() -> None:

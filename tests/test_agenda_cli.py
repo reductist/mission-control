@@ -162,6 +162,35 @@ def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
     }
 
 
+def test_cli_accepts_explicit_google_demo_settings(tmp_path, capsys):
+    database = tmp_path / "mission-control.db"
+    settings = tmp_path / "google.json"
+    settings.write_text(
+        json.dumps({"mode": "demo", "demo_anchor_date": "2026-08-14"}),
+        encoding="utf-8",
+    )
+
+    assert main(
+        [
+            "--database",
+            str(database),
+            "agenda",
+            "list",
+            "--plugin",
+            "google",
+            "--plugin-settings",
+            f"google={settings}",
+        ]
+    ) == 0
+    output = json.loads(capsys.readouterr().out)
+
+    assert {entry["source"]["plugin_id"] for entry in output} == {"google"}
+    assert {entry["title"] for entry in output} >= {
+        "Switzerland trip",
+        "Download offline maps",
+    }
+
+
 def test_invalid_provider_selection_does_not_initialize_database(tmp_path, capsys):
     database = tmp_path / "must-not-exist.db"
 

@@ -11,17 +11,10 @@ from datetime import UTC, date, datetime, timedelta
 from importlib.resources import files
 
 from mission_control.agenda import (
-    Action,
-    ActionState,
     AgendaContribution,
     AgendaSchemaVersion,
-    AllDayTiming,
-    AnytimeTiming,
-    DueOnTiming,
-    Event,
     ProviderRef,
     SourceRef,
-    TimedTiming,
 )
 from mission_control.builtin_plugins.google.client import GoogleApiError, GoogleClient
 from mission_control.builtin_plugins.google.config import GoogleConfig
@@ -32,6 +25,7 @@ from mission_control.builtin_plugins.google.domain import (
     calendar_event,
     google_task,
 )
+from mission_control.builtin_plugins.google.mapping import agenda_entry
 from mission_control.database import Database
 from mission_control.entity_details import (
     DetailAttribute,
@@ -99,6 +93,8 @@ class GoogleSyncStatus:
     last_success_at: datetime | None
     error_code: str | None
     error_detail: str | None
+    source_mode: str | None
+    source_fingerprint: str | None
 
 
 class SQLiteGoogleRepository:
@@ -138,6 +134,27 @@ class SQLiteGoogleRepository:
                 connection.execute(
                     "DELETE FROM google_collections WHERE kind = ?", (kind,)
                 )
+
+    def prepare_source(self, mode: str, fingerprint: str) -> bool:
+        """Quarantine cache rows when fixture mode or OAuth identity changes."""
+
+        with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT source_mode, source_fingerprint FROM google_sync_status "
+                "WHERE singleton = 1"
+            ).fetchone()
+            assert row is not None
+            if row["source_mode"] == mode and row["source_fingerprint"] == fingerprint:
+                return False
+            connection.execute("DELETE FROM google_collections")
+            connection.execute(
+                "UPDATE google_sync_status SET last_attempt_at = NULL, "
+                "last_success_at = NULL, error_code = NULL, error_detail = NULL, "
+                "source_mode = ?, source_fingerprint = ? WHERE singleton = 1",
+                (mode, fingerprint),
+            )
+        return True
 
     def replace_collection(
         self,
@@ -240,7 +257,8 @@ class SQLiteGoogleRepository:
     def status(self) -> GoogleSyncStatus:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT last_attempt_at, last_success_at, error_code, error_detail "
+                "SELECT last_attempt_at, last_success_at, error_code, error_detail, "
+                "source_mode, source_fingerprint "
                 "FROM google_sync_status WHERE singleton = 1"
             ).fetchone()
         assert row is not None
@@ -249,6 +267,8 @@ class SQLiteGoogleRepository:
             _optional_datetime(row["last_success_at"]),
             row["error_code"],
             row["error_detail"],
+            row["source_mode"],
+            row["source_fingerprint"],
         )
 
     def list_entries(self) -> tuple[GoogleEntry, ...]:
@@ -292,7 +312,7 @@ class SQLiteGoogleRepository:
 
     def contribution(self, *, generated_at: datetime) -> AgendaContribution:
         cached = self.list_entries()
-        entries = tuple(_agenda_entry(item) for item in cached)
+        entries = tuple(agenda_entry(item) for item in cached)
         revision = hashlib.sha256(
             json.dumps(
                 [(item.entity_id, item.revision) for item in cached],
@@ -498,6 +518,7 @@ class GoogleSynchronizer:
 def plugin_health(
     repository: SQLiteGoogleRepository,
     *,
+    source_mode: str = "live",
     runtime_failure_at: datetime | None = None,
 ) -> PluginHealth:
     now = datetime.now(UTC)
@@ -517,30 +538,12 @@ def plugin_health(
     else:
         state = PluginHealthState.READY
         code = "synchronized"
-        detail = "Calendar and task cache is current."
-    return PluginHealth(PLUGIN_ID, state, code, detail, now, status.last_success_at)
-
-
-def _agenda_entry(item: GoogleEntry) -> Event | Action:
-    source = SourceRef(PLUGIN_ID, item.entity_type, item.entity_id)
-    common = {
-        "entry_id": item.entity_id,
-        "source": source,
-        "title": item.title,
-        "context": item.context,
-        "detail": item.detail or item.location,
-        "revision": item.revision,
-        "affordances": (ANNOTATE,),
-    }
-    if item.entity_type == "calendar-event":
-        timing = (
-            AllDayTiming(item.occurs_on, item.ends_before)
-            if item.timing_kind == "all-day" and item.occurs_on is not None
-            else TimedTiming(_required(item.starts_at), _required(item.ends_at))
+        detail = (
+            "Synthetic Calendar and Tasks fixture is ready."
+            if source_mode == "demo"
+            else "Calendar and task cache is current."
         )
-        return Event(timing=timing, **common)
-    timing = DueOnTiming(item.due_on) if item.due_on is not None else AnytimeTiming()
-    return Action(state=ActionState.READY, timing=timing, **common)
+    return PluginHealth(PLUGIN_ID, state, code, detail, now, status.last_success_at)
 
 
 def _timing_label(item: GoogleEntry) -> str:

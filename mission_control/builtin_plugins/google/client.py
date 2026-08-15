@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
@@ -54,6 +55,12 @@ class AuthorizedUserCredentials:
     client_secret: str
     refresh_token: str
     token_uri: str = DEFAULT_TOKEN_URI
+
+    def source_fingerprint(self) -> str:
+        """Identify one authorization without persisting recoverable credentials."""
+
+        material = f"{self.client_id}\0{self.refresh_token}".encode("utf-8")
+        return hashlib.sha256(material).hexdigest()
 
     @classmethod
     def load(cls, path: Path) -> AuthorizedUserCredentials:

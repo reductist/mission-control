@@ -1,0 +1,59 @@
+{
+  "schema_version": "mission-control.google-mapping-cases/v1",
+  "cases": [
+    {
+      "name": "unknown upstream fields are ignored recursively",
+      "resource_kind": "calendar-event",
+      "input": {
+        "collection": {
+          "id": "future",
+          "summary": "Future API",
+          "accessRole": "owner",
+          "futureCollectionField": {"nested": true}
+        },
+        "resource": {
+          "id": "future-event",
+          "summary": "Forward compatible",
+          "status": "confirmed",
+          "start": {
+            "dateTime": "2026-08-20T09:00:00Z",
+            "futureBoundaryField": [1, 2, 3]
+          },
+          "end": {"dateTime": "2026-08-20T10:00:00Z"},
+          "attendees": [
+            {
+              "self": false,
+              "responseStatus": "accepted",
+              "futureAttendeeField": "preserved by Google, ignored here"
+            }
+          ],
+          "updated": "2026-08-19T18:00:00Z",
+          "etag": "future-v1",
+          "futureResourceField": {"opaque": "value"}
+        }
+      },
+      "outcome": {
+        "schema_version": "mission-control.google-mapping/v1",
+        "status": "mapped",
+        "entry": {
+          "id": "gcal-ae74fd81e7438ed44de5fad5f03913987ee7b279423233acc9cbe0c42ed8ab9c",
+          "kind": "event",
+          "source": {
+            "plugin_id": "google",
+            "entity_type": "calendar-event",
+            "entity_id": "gcal-ae74fd81e7438ed44de5fad5f03913987ee7b279423233acc9cbe0c42ed8ab9c"
+          },
+          "title": "Forward compatible",
+          "context": "Future API",
+          "revision": "future-v1",
+          "affordances": [{"capability": "entity.annotate", "command": "add-note"}],
+          "timing": {
+            "kind": "timed",
+            "starts_at": "2026-08-20T09:00:00+00:00",
+            "ends_at": "2026-08-20T10:00:00+00:00"
+          }
+        }
+      }
+    }
+  ]
+}

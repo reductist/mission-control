@@ -30,6 +30,15 @@ def credentials() -> AuthorizedUserCredentials:
     return AuthorizedUserCredentials("client", "secret", "refresh")
 
 
+def test_authorization_fingerprint_changes_without_exposing_credentials():
+    first = credentials().source_fingerprint()
+    second = AuthorizedUserCredentials("client", "secret", "other").source_fingerprint()
+
+    assert first != second
+    assert "refresh" not in first
+    assert len(first) == 64
+
+
 def test_calendar_events_are_paginated_with_bounded_expansion_parameters():
     urls: list[str] = []
     pages = iter(

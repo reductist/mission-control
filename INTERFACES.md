@@ -83,7 +83,7 @@ A plugin migration declares:
 
 Core validates the migration plan before execution. A plugin may not modify core tables or another plugin's private tables.
 
-The current Landscape vertical slice exercises the intended ownership boundary with a domain-specific `LandscapeRepository` protocol, a `SQLiteLandscapeRepository` adapter, `landscape_*` tables, an independently recorded migration version, and append-only Landscape events. Its packaged agenda document is an import seed, not a runtime source of truth: activation records the import once and subsequent starts project only from persisted state. A generalized storage capability and third-party migration planner remain future interface work.
+The current runtime gives every built-in or explicitly discovered Python plugin the same namespaced SQLite adapter. The adapter authorizes only tables and schema objects prefixed by that plugin's identifier, while core owns migration ordering, checksums, transactions, and the shared ledger. Landscape exercises that boundary through its domain-specific repository, `landscape_*` tables, and append-only events; its packaged agenda document is an import seed, not a runtime source of truth. In-process plugins remain trusted code rather than an operating-system security sandbox, but accidental or direct SQL access to core and unrelated plugin tables is rejected at the connection boundary. A process-isolated storage service remains a later hard-security boundary.
 
 ## Command and query interface
 

@@ -94,6 +94,10 @@ validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
   ./schema/examples/valid-github-plugin.json
 validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
   ./plugins/reference/registration.json
+validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
+  ./mission_control/builtin_plugins/google/registration.json
+validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
+  ./mission_control/builtin_plugins/landscape/registration.json
 
 for fixture in \
   ./schema/examples/valid-landscape-agenda.json \
@@ -103,6 +107,8 @@ for fixture in \
   ./schema/examples/valid-ansible-agenda.json; do
   validate_success '#AgendaContribution' ./schema/agenda "$AGENDA_GENERATED" "$fixture"
 done
+validate_success '#AgendaContribution' ./schema/agenda "$AGENDA_GENERATED" \
+  ./mission_control/builtin_plugins/landscape/agenda.json
 validate_success '#AgendaQuery' ./schema/agenda "$AGENDA_QUERY_GENERATED" \
   ./schema/examples/valid-agenda-query.json
 validate_success '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
@@ -113,6 +119,27 @@ validate_success '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS
   ./schema/examples/valid-landscape-closed-items.json
 validate_success '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/valid-landscape-entity-detail.json
+
+validate_cue_success() {
+  local definition="$1"
+  local fixture="$2"
+
+  (
+    cd ./schema
+    cue vet -c -d "$definition" ./google "$fixture"
+  )
+}
+
+validate_cue_success '#GoogleRegistration' \
+  ../mission_control/builtin_plugins/google/registration.json
+validate_cue_success '#GoogleDemoConfiguration' \
+  ../mission_control/builtin_plugins/google/demo-settings.json
+validate_cue_success '#GoogleDemoFixture' \
+  ../mission_control/builtin_plugins/google/demo.json
+validate_cue_success '#GoogleMappingCases' \
+  ./google/examples/valid-mapping-cases.json
+validate_cue_success '#GoogleMappingCases' \
+  ./google/examples/valid-mapping-additive-fields.json
 
 expect_failure() {
   local definition="$1"
@@ -148,6 +175,33 @@ expect_failure '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_G
   ./schema/examples/invalid-closed-item-key.json
 expect_failure '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/invalid-entity-detail-key.json
+
+expect_cue_failure() {
+  local definition="$1"
+  local fixture="$2"
+
+  if (cd ./schema && cue vet -c -d "$definition" ./google "$fixture") >/dev/null 2>&1; then
+    echo "expected direct CUE validation to fail: $fixture" >&2
+    exit 1
+  fi
+}
+
+expect_cue_failure '#GoogleDemoConfiguration' \
+  ./google/examples/invalid-demo-settings.json
+expect_cue_failure '#GoogleConfiguration' \
+  ./google/examples/invalid-live-demo-anchor.json
+expect_cue_failure '#GoogleDemoConfiguration' \
+  ./google/examples/invalid-demo-date.json
+expect_cue_failure '#GoogleDemoFixture' \
+  ./google/examples/invalid-demo-fixture.json
+expect_cue_failure '#GoogleMappingCases' \
+  ./google/examples/invalid-mapping-case.json
+expect_cue_failure '#GoogleMappingCases' \
+  ./google/examples/invalid-mapping-title-mismatch.json
+expect_cue_failure '#GoogleMappingCases' \
+  ./google/examples/invalid-mapping-freebusy-detail.json
+expect_cue_failure '#GoogleMappingCases' \
+  ./google/examples/invalid-mapping-timing-mismatch.json
 
 for fixture in \
   ./schema/examples/invalid-agenda-kind.json \

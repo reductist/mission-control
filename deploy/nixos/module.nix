@@ -4,8 +4,11 @@ let
   cfg = config.services.mission-control;
   stateDirectory = "/var/lib/mission-control";
   credentialDirectory = "/run/credentials/mission-control.service";
+  pluginRootArgs = lib.concatMap (
+    root: [ "--plugin-root" (toString root) ]
+  ) cfg.pluginRoots;
   pluginSettingsArgs = lib.concatMap (
-    plugin: [ "--plugin-settings" "${plugin}=${toString cfg.pluginSettings.${plugin}}" ]
+    plugin: [ "--plugin-settings" "${plugin}=${cfg.pluginSettings.${plugin}}" ]
   ) (lib.attrNames cfg.pluginSettings);
   pluginCredentialArgs = lib.concatMap (
     plugin:
@@ -33,6 +36,7 @@ let
       (toString cfg.port)
     ]
     ++ lib.optional cfg.demo "--demo"
+    ++ pluginRootArgs
     ++ lib.concatMap (plugin: [ "--plugin" plugin ]) cfg.plugins
     ++ pluginSettingsArgs
     ++ pluginCredentialArgs
@@ -75,17 +79,26 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Opt in to the synthetic House showcase data. This is disabled
+        Opt in to the synthetic House showcase data. Provider fixture modes
+        are configured independently through pluginSettings. This is disabled
         by default and is not intended for a production data store.
       '';
     };
 
     plugins = lib.mkOption {
-      type = lib.types.listOf (lib.types.enum [ "google" "landscape" ]);
+      type = lib.types.listOf lib.types.str;
       default = [ ];
       description = ''
-        Bundled read-only agenda providers to load explicitly. General plugin
-        lifecycle and third-party activation are not implemented yet.
+        Bundled agenda providers to load explicitly by their manifest ID.
+      '';
+    };
+
+    pluginRoots = lib.mkOption {
+      type = lib.types.listOf lib.types.path;
+      default = [ ];
+      description = ''
+        Additional manifest/resource roots to discover. Python runtime modules
+        named by those manifests must already be present in the package closure.
       '';
     };
 

@@ -85,10 +85,14 @@ pytest
 Run the demo against a disposable database:
 
 ```sh
-mctrld --database ./mission-control-demo.db --demo --plugin google --plugin landscape
+mctrld --database ./mission-control-demo.db \
+  --demo \
+  --plugin google \
+  --plugin-settings google=./mission_control/builtin_plugins/google/demo-settings.json \
+  --plugin landscape
 ```
 
-Then open `http://127.0.0.1:8000`. House and Google content are packaged synthetic fixtures; the Google fixture includes the Switzerland trip, cross-timezone travel, an appointment, tasks, and reminders without contacting Google. The shared Schedule view groups generic events and actions in the viewer's timezone. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details, see only current notes in the focused Notes panel, or add a durable measurement/observation note. The full event history is collapsed under Activity; removed notes can be restored there, and both transitions retain the original note and append audit state. Core task, annotation, and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Providers register only their declared public contributions while enabled.
+Then open `http://127.0.0.1:8000`. `--demo` enables only the synthetic House showcase; Google fixture mode is selected independently through Google-owned settings. The evergreen Google fixture includes a trip, cross-timezone travel, an appointment, tasks, and reminders without contacting Google. The shared Schedule view groups generic events and actions in the viewer's timezone. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details, see only current notes in the focused Notes panel, or add a durable measurement/observation note. The full event history is collapsed under Activity; removed notes can be restored there, and both transitions retain the original note and append audit state. Core task, annotation, and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Providers register only their declared public contributions while enabled.
 
 For a live read-only Google connection, follow [`docs/google-integration.md`](docs/google-integration.md). OAuth authorization is an explicit operator step after deployment; secrets are never part of the demo fixture.
 
@@ -118,7 +122,7 @@ Providers retain authoritative ownership of their records, detailed state machin
 
 Unscheduled work is explicit rather than represented by invented or nullable dates. Actions use `anytime`, `due-on`, `due-at`, or `window` timing; events use `all-day` or `timed` timing. Providers receiving an agenda query expand their own recurring definitions into concrete occurrences within that horizon and may separately include initiatives or unscheduled actions.
 
-The CLI and browser shell project core tasks plus explicitly selected provider state through the same pure aggregator. Landscape validates registration and seed data before importing its implementation or touching SQLite, then applies independently recorded migrations and performs an idempotent first-run import. General third-party plugin activation and transport are not implemented yet. User operations such as complete, defer, approve, or run follow a separate command path back to the authoritative owner; renderers remain incapable of mutation.
+The CLI and browser shell project core tasks plus explicitly selected provider state through the same pure aggregator. Landscape validates registration and seed data before importing its implementation or touching SQLite, then applies independently recorded migrations and performs an idempotent first-run import. Installable Python providers can be discovered from explicit plugin roots and use the same manifest lifecycle; package installation and out-of-process transports remain separate concerns. User operations such as complete, defer, approve, or run follow a separate command path back to the authoritative owner; renderers remain incapable of mutation.
 
 ## CLI presentation boundary
 

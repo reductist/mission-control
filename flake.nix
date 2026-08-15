@@ -99,6 +99,7 @@
               jsonschema
               pytest
               rich
+              ruff
             ]
           );
         in
@@ -107,6 +108,7 @@
             packages = [
               python
               pkgs.go
+              pkgs.nodejs
             ];
           };
         }

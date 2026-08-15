@@ -44,10 +44,15 @@ services.mission-control = {
   enable = true;
   demo = true;
   plugins = [ "google" "landscape" ];
+  pluginSettings.google = ./google-demo-settings.json;
 };
 ```
 
-With `demo = true`, Google uses its packaged synthetic fixture and requires no credential. For live mode, keep non-secret settings in a JSON path and provide the authorized-user credential through systemd's credential mechanism:
+`demo = true` enables the House showcase only. Google fixture mode remains an
+explicit, plugin-owned setting so the core never changes a provider's source.
+The referenced settings file contains `{ "mode": "demo" }`.
+
+Google fixture mode requires no credential. For live mode, keep non-secret settings in a JSON path and provide the authorized-user credential through systemd's credential mechanism:
 
 ```nix
 services.mission-control = {
@@ -57,6 +62,11 @@ services.mission-control = {
   pluginCredentials.google.oauth = "/run/secrets/mission-control-google-oauth.json";
 };
 ```
+
+Additional installable providers can be discovered with `pluginRoots`. Their
+manifest resources may live outside the bundled package, but the Python module
+declared by each runtime entrypoint must already be installed in the service's
+package closure.
 
 The settings file may enter the Nix store and must not contain OAuth values. The credential source is loaded by PID 1 into the service's private `/run/credentials` directory and is not copied into the store or passed as a secret-bearing process argument. See [`../../docs/google-integration.md`](../../docs/google-integration.md) for the settings and OAuth contract.
 
@@ -89,6 +99,7 @@ services.mission-control.host
 services.mission-control.port
 services.mission-control.demo
 services.mission-control.plugins
+services.mission-control.pluginRoots
 services.mission-control.pluginSettings
 services.mission-control.pluginCredentials
 ```

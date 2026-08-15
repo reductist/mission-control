@@ -11,7 +11,6 @@ from mission_control.builtin_plugins.landscape.commands import LandscapeCommandO
 from mission_control.builtin_plugins.landscape.details import entity_detail
 from mission_control.builtin_plugins.landscape.repository import (
     PLUGIN_ID,
-    LandscapeMigrationRunner,
     LandscapeRepository,
     SQLiteLandscapeRepository,
 )
@@ -40,7 +39,7 @@ class LandscapeAgendaProvider:
 
 def activate(
     database: Database,
-    seed: AgendaContribution,
+    seed: AgendaContribution | None,
     configuration: PluginConfiguration,
     credentials: dict[str, str],
 ) -> LandscapeAgendaProvider:
@@ -48,8 +47,9 @@ def activate(
 
     if configuration.values or credentials:
         raise ValueError("Landscape does not accept configuration or credentials")
+    if seed is None:
+        raise ValueError("Landscape requires its declared agenda seed resource")
 
-    LandscapeMigrationRunner(database).apply()
     repository = SQLiteLandscapeRepository(database)
     repository.import_agenda_seed(seed)
     return LandscapeAgendaProvider(repository, LandscapeCommandOwner(repository))

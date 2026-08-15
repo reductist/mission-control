@@ -5,6 +5,17 @@
   "version": "0.1.0",
   "plugin_api": ">=1.0.0 <2.0.0",
   "capabilities": ["agenda", "entity-details", "jobs", "health"],
+  "runtime": {
+    "entrypoint": "mission_control.builtin_plugins.google:activate",
+    "migration_set": "google"
+  },
+  "permissions": ["database", "network", "credentials"],
+  "credentials": {
+    "oauth": {
+      "required_when": {"argument": "mode", "equals": "live"},
+      "description": "OAuth authorized-user JSON for live Calendar and Tasks access."
+    }
+  },
   "entity_types": {
     "calendar-event": {
       "capabilities": ["entity.annotate", "activity.read"]
@@ -20,17 +31,22 @@
       "default": [],
       "description": "Calendar IDs to import. Empty selects the primary and Google-selected calendars."
     },
+    "demo_anchor_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Optional deterministic anchor for the synthetic fixture; omitted keeps the showcase current."
+    },
     "lookahead_days": {
       "type": "integer",
-      "default": 30,
+      "default": 42,
       "minimum": 1,
       "maximum": 366
     },
     "lookback_days": {
       "type": "integer",
-      "default": 1,
+      "default": 42,
       "minimum": 0,
-      "maximum": 30
+      "maximum": 366
     },
     "mode": {
       "type": "string",
