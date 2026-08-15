@@ -15,12 +15,32 @@ The bundled `google` provider is a read-only import and presentation adapter. Go
 
 Google Calendar appointment bookings appear after they create ordinary calendar events. This integration does not import appointment-schedule availability pages or open booking slots.
 
+## Mapping contract
+
+The read-only Google-to-Mission-Control boundary is specified in
+`schema/google/mapping.cue`. It intentionally models only the Google fields the
+adapter consumes, then constrains the public Agenda event/action emitted for
+each resource kind. Versioned conformance cases cover mapped, deliberately
+filtered, and invalid-resource outcomes, including exclusive all-day ends,
+timezone offsets, Tasks' date-only due semantics, declined/completed filtering,
+free/busy privacy masking, and malformed upstream data.
+
+`tests/test_google_mapping.py` executes those same cases through the production
+Python mapper. The schema check validates both the positive cases and a negative
+cross-interface case, so a code or CUE change cannot silently redefine one side
+of the mapping. There is no reverse mapping: the plugin is read-only and never
+translates Mission Control changes into Google API writes.
+
 ## Try the synthetic wall view
 
 No Google account or secret is needed:
 
 ```sh
-mctrld --database ./mission-control-demo.db --demo --plugin google --plugin landscape
+mctrld --database ./mission-control-demo.db \
+  --demo \
+  --plugin google \
+  --plugin-settings google=./mission_control/builtin_plugins/google/demo-settings.json \
+  --plugin landscape
 ```
 
 Open `http://127.0.0.1:8000` and select **Schedule**. The packaged fixture includes events in New York and Zürich offsets, an all-day Switzerland trip, an appointment, Tasks, and Reminders.
@@ -55,8 +75,8 @@ On POSIX systems, Mission Control rejects files accessible by group or other use
   "mode": "live",
   "calendar_ids": [],
   "task_list_ids": [],
-  "lookback_days": 1,
-  "lookahead_days": 30,
+  "lookback_days": 42,
+  "lookahead_days": 42,
   "sync_interval_seconds": 300,
   "request_timeout_seconds": 15
 }
@@ -74,7 +94,7 @@ mctrld \
   --plugin-credential google.oauth=/run/secrets/mission-control-google-oauth.json
 ```
 
-The first live refresh begins after application initialization. Calendar pages use a bounded moving window; Tasks pages are fully polled because the Tasks API does not expose a compatible sync token. A source replaces its cached collection only after every page and resource validates. Other sources and the last good cache remain readable after transient failures. If Google reports that authorization is no longer valid, Mission Control marks the provider `reconnect-required` and erases imported Google cache data rather than retaining private records after revocation.
+The first live refresh begins after application initialization. Calendar pages use a bounded moving window sized to cover the current month view by default; Tasks pages are fully polled because the Tasks API does not expose a compatible sync token. A source replaces its cached collection only after every page and resource validates. Other sources and the last good cache remain readable after transient failures. The plugin fingerprints the OAuth authorization without persisting a recoverable credential and clears cached imports before switching between fixture/live modes or authorizations, preventing one source's rows from appearing under another. If Google reports that authorization is no longer valid, Mission Control marks the provider `reconnect-required` and erases imported Google cache data rather than retaining private records after revocation.
 
 ## OAuth testing-mode warning
 

@@ -10,6 +10,7 @@ pkgs.testers.nixosTest {
       enable = true;
       demo = true;
       plugins = [ "google" "landscape" ];
+      pluginSettings.google = ../../mission_control/builtin_plugins/google/demo-settings.json;
     };
 
     environment.systemPackages = [ pkgs.curl ];

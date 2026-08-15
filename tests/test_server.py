@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+import mission_control.plugin_lifecycle as plugin_lifecycle
 from mission_control.builtin_plugins import (
     load_builtin_agenda_contributions,
     prepare_builtin_agenda_plugins,
@@ -149,6 +150,7 @@ def test_dashboard_retains_last_provider_projection_after_safe_failure(tmp_path)
     provider = FlakyProvider()
     application.builtin_plugins = (prepared,)
     application.agenda_providers = (provider,)
+    application.active_plugins = ((prepared, provider),)
     application.registrations = {"landscape": prepared.registration}
 
     first = application.dashboard()
@@ -165,6 +167,39 @@ def test_dashboard_retains_last_provider_projection_after_safe_failure(tmp_path)
     assert health["state"] == "failed"
     assert health["code"] == "agenda-read-failed"
     assert "private provider failure" not in health["detail"]
+
+
+def test_failed_plugin_activation_is_isolated_from_other_plugins(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    prepared = prepare_builtin_agenda_plugins(
+        ("google", "landscape"),
+        configurations={
+            "google": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+        },
+    )
+    activate_one = plugin_lifecycle._activate_one
+
+    def fail_google(database, plugin):
+        if plugin.registration.plugin_id.value == "google":
+            raise RuntimeError("private initialization failure")
+        return activate_one(database, plugin)
+
+    monkeypatch.setattr(plugin_lifecycle, "_activate_one", fail_google)
+    application = MissionControlApplication(
+        Database(tmp_path / "mission-control.db"), builtin_plugins=prepared
+    )
+
+    dashboard = application.dashboard()
+    providers = {item["id"]: item for item in dashboard["providers"]}
+    assert providers["google"]["health"]["state"] == "failed"
+    assert providers["google"]["health"]["code"] == "activation-failed"
+    assert "private initialization failure" not in providers["google"]["health"]["detail"]
+    assert "private initialization failure" not in caplog.text
+    assert any(
+        entry["source"]["plugin_id"] == "landscape"
+        for entry in dashboard["agenda"]
+    )
 
 
 def test_landscape_upgrade_preserves_legacy_demo_tasks_for_manual_cleanup(tmp_path):

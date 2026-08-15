@@ -1,0 +1,37 @@
+{
+  "schema_version": "mission-control.google-mapping-cases/v1",
+  "cases": [
+    {
+      "name": "calendar mappings cannot claim a task source type",
+      "resource_kind": "calendar-event",
+      "input": {
+        "collection": {"id": "family", "summary": "Family"},
+        "resource": {
+          "id": "appointment",
+          "status": "confirmed",
+          "start": {"dateTime": "2026-08-18T10:30:00+02:00"},
+          "end": {"dateTime": "2026-08-18T12:00:00+02:00"}
+        }
+      },
+      "outcome": {
+        "schema_version": "mission-control.google-mapping/v1",
+        "status": "mapped",
+        "entry": {
+          "id": "gcal-invalid",
+          "kind": "event",
+          "source": {
+            "plugin_id": "google",
+            "entity_type": "task",
+            "entity_id": "gcal-invalid"
+          },
+          "title": "Wrong type",
+          "timing": {
+            "kind": "timed",
+            "starts_at": "2026-08-18T10:30:00+02:00",
+            "ends_at": "2026-08-18T12:00:00+02:00"
+          }
+        }
+      }
+    }
+  ]
+}

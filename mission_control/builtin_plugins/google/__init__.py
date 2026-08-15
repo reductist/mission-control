@@ -15,7 +15,6 @@ from mission_control.builtin_plugins.google.config import GoogleConfig
 from mission_control.builtin_plugins.google.fixture import FixtureGoogleClient
 from mission_control.builtin_plugins.google.repository import (
     PLUGIN_ID,
-    GoogleMigrationRunner,
     GoogleSynchronizer,
     SQLiteGoogleRepository,
     plugin_health,
@@ -31,6 +30,7 @@ class GoogleAgendaProvider:
     repository: SQLiteGoogleRepository
     synchronizer: GoogleSynchronizer
     interval_seconds: int
+    source_mode: str
     plugin_id: ClassVar[PluginId] = PLUGIN_ID
     command_owner: ClassVar[None] = None
 
@@ -54,34 +54,37 @@ class GoogleAgendaProvider:
     def health(self) -> PluginHealth:
         return plugin_health(
             self.repository,
+            source_mode=self.source_mode,
             runtime_failure_at=self.synchronizer.runtime_failure_at,
         )
 
 
 def activate(
     database: Database,
-    seed: AgendaContribution,
+    seed: AgendaContribution | None,
     configuration: PluginConfiguration,
     credentials: dict[str, str],
 ) -> GoogleAgendaProvider:
     """Migrate the cache and prepare sync without persisting OAuth secrets."""
 
-    if seed.provider.plugin_id != PLUGIN_ID or seed.entries:
-        raise ValueError("Google's packaged agenda seed must be empty and provider-owned")
+    if seed is not None:
+        raise ValueError("Google does not declare an agenda seed resource")
     config = GoogleConfig.from_runtime(configuration, credentials)
-    GoogleMigrationRunner(database).apply()
     repository = SQLiteGoogleRepository(database)
     if config.mode == "demo":
-        client = FixtureGoogleClient.load()
+        client = FixtureGoogleClient.load(config.demo_anchor_date)
+        source_fingerprint = "packaged-fixture-v1"
     else:
         assert config.oauth_credential is not None
         authorized = AuthorizedUserCredentials.load(config.oauth_credential)
+        source_fingerprint = authorized.source_fingerprint()
         client = GoogleHttpClient(
             authorized, timeout_seconds=config.request_timeout_seconds
         )
+    repository.prepare_source(config.mode, source_fingerprint)
     synchronizer = GoogleSynchronizer(repository, client, config)
     provider = GoogleAgendaProvider(
-        repository, synchronizer, config.sync_interval_seconds
+        repository, synchronizer, config.sync_interval_seconds, config.mode
     )
     if config.mode == "demo":
         synchronizer.sync_once()

@@ -9,7 +9,10 @@ from importlib.resources import files
 import pytest
 
 from mission_control.agenda import SourceRef
-from mission_control.builtin_plugins import prepare_builtin_agenda_plugins
+from mission_control.builtin_plugins import (
+    activate_builtin_agenda_plugins,
+    prepare_builtin_agenda_plugins,
+)
 from mission_control.builtin_plugins.landscape.domain import (
     LandscapeActionState,
     LandscapeEntityKind,
@@ -42,7 +45,7 @@ def initialized_repository(tmp_path) -> LandscapeRepository:
 
 def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
     database = Database(tmp_path / "mission-control.db")
-    assert MigrationRunner(database).apply() == [1, 2, 3]
+    assert MigrationRunner(database).apply() == [1, 2, 3, 4]
     runner = LandscapeMigrationRunner(database)
 
     assert runner.apply() == [1, 2]
@@ -55,7 +58,23 @@ def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
         landscape_version = connection.execute(
             "SELECT max(version) FROM landscape_schema_migrations"
         ).fetchone()[0]
-    assert (core_version, landscape_version) == (3, 2)
+    assert (core_version, landscape_version) == (4, 2)
+
+
+def test_generic_lifecycle_adopts_already_deployed_plugin_migrations(tmp_path) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    MigrationRunner(database).apply()
+    assert LandscapeMigrationRunner(database).apply() == [1, 2]
+
+    (provider,) = activate_builtin_agenda_plugins(database, prepared_landscape())
+
+    assert provider.plugin_id.value == "landscape"
+    with database.connect() as connection:
+        adopted = connection.execute(
+            "SELECT version FROM plugin_schema_migrations "
+            "WHERE plugin_id = 'landscape' ORDER BY version"
+        ).fetchall()
+    assert [row["version"] for row in adopted] == [1, 2]
 
 
 def test_landscape_text_bounds_migrate_existing_state_without_loss(tmp_path) -> None:

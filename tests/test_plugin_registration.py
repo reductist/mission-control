@@ -16,11 +16,15 @@ from mission_control.plugins import (
     JsonArray,
     ObjectArgument,
     PluginConfigurationError,
+    PluginCompatibilityError,
+    PluginCredentialError,
     PluginRegistrationError,
+    ensure_plugin_api_compatible,
     load_registration,
     parse_plugin_registration,
     registration_to_dict,
     StandardEntityCapability,
+    validate_plugin_credentials,
     validate_plugin_configuration,
 )
 
@@ -61,6 +65,45 @@ def test_parser_detaches_from_mutable_source_data():
     assert registration_to_dict(accepted)["arguments"]["message"]["description"] != (
         source["arguments"]["message"]["description"]  # type: ignore[index]
     )
+
+
+def test_runtime_and_named_credentials_are_immutable_and_round_trip():
+    source = reference_document()
+    source["runtime"] = {
+        "entrypoint": "example.reference:activate",
+        "migration_set": "reference",
+        "agenda_seed": "agenda.json",
+    }
+    source["credentials"] = {
+        "token": {"required": True, "description": "API token"}
+    }
+
+    registration = parse_plugin_registration(source)
+
+    assert registration.runtime is not None
+    assert registration.runtime.entrypoint == "example.reference:activate"
+    assert registration.credentials[0].required is True
+    assert registration_to_dict(registration) == source
+
+
+def test_plugin_api_compatibility_and_credentials_are_checked_explicitly():
+    source = reference_document()
+    source["credentials"] = {"token": {"required": True}}
+    registration = parse_plugin_registration(source)
+
+    ensure_plugin_api_compatible(registration)
+    assert validate_plugin_credentials(registration, {"token": "/run/token"}) == (
+        ("token", "/run/token"),
+    )
+
+    source["plugin_api"] = ">=2.0.0 <3.0.0"
+    incompatible = parse_plugin_registration(source)
+    with pytest.raises(PluginCompatibilityError, match="host provides 1.0.0"):
+        ensure_plugin_api_compatible(incompatible)
+    with pytest.raises(PluginCredentialError, match="required named credentials"):
+        validate_plugin_credentials(registration, {})
+    with pytest.raises(PluginCredentialError, match="unknown named credentials"):
+        validate_plugin_credentials(registration, {"token": "/run/token", "extra": "x"})
 
 
 def test_entity_capability_envelopes_are_immutable_and_round_trip():

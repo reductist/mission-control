@@ -25,6 +25,27 @@ import "strings"
 	capabilities!: [...#EntityCapability]
 })
 
+#PluginRuntime: close({
+	// Entrypoints are resolved only after the complete manifest, compatibility,
+	// configuration, credentials, and optional resources have been validated.
+	entrypoint!:    =~"^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"
+	migration_set?: =~"^[a-z][a-z0-9_]*$"
+	agenda_seed?:   =~"^[A-Za-z0-9][A-Za-z0-9._-]*$"
+})
+
+#Permission: "database" | "network" | "credentials"
+
+#CredentialCondition: close({
+	argument!: #Identifier
+	equals!:   null | bool | number | string
+})
+
+#CredentialRegistration: close({
+	required?:      bool | *false
+	required_when?: #CredentialCondition
+	description?:   string
+})
+
 // PluginRegistration is the language-neutral document a plugin presents before
 // Mission Control imports or activates any implementation code.
 #PluginRegistration: {
@@ -34,6 +55,9 @@ import "strings"
 	version!:        strings.MinRunes(1)
 	plugin_api!:     strings.MinRunes(1)
 	capabilities!: [...#Capability]
+	runtime?: #PluginRuntime
+	permissions?: [...#Permission]
+	credentials?: [#Identifier]:  #CredentialRegistration
 	entity_types?: [#Identifier]: #EntityTypeRegistration
 	arguments?: [string]:         #ArgumentDefinition
 }

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
+
 import pytest
 
-import mission_control.builtin_plugins as builtin_plugins
+import mission_control.plugin_lifecycle as builtin_plugins
 from mission_control.builtin_plugins import (
     BuiltinPluginError,
+    activate_builtin_agenda_plugins,
     prepare_builtin_agenda_plugins,
 )
 from mission_control.builtin_plugins.google.client import GoogleApiError
@@ -22,13 +25,17 @@ from mission_control.builtin_plugins.google.repository import (
     plugin_health,
 )
 from mission_control.database import Database
+from mission_control.migrations import MigrationRunner
 from mission_control.plugins import Capability, StandardEntityCapability
 from mission_control.server import MissionControlApplication
 
 
 def google_plugins():
     return prepare_builtin_agenda_plugins(
-        ("google",), configurations={"google": {"mode": "demo"}}
+        ("google",),
+        configurations={
+            "google": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+        },
     )
 
 
@@ -59,6 +66,12 @@ def test_google_registration_and_configuration_validate_before_import(monkeypatc
         ),
     }
     assert prepared.configuration.to_dict()["sync_interval_seconds"] == 300
+    assert prepared.seed is None
+    assert prepared.registration.runtime is not None
+    assert (
+        prepared.registration.runtime.entrypoint
+        == "mission_control.builtin_plugins.google:activate"
+    )
 
 
 def test_demo_sync_projects_events_tasks_details_and_independent_migration(tmp_path):
@@ -99,7 +112,7 @@ def test_demo_sync_projects_events_tasks_details_and_independent_migration(tmp_p
             for row in connection.execute(
                 "SELECT version FROM google_schema_migrations"
             ).fetchall()
-        ] == [1]
+        ] == [1, 2]
         assert connection.execute("SELECT count(*) FROM google_entries").fetchone()[0] == 8
 
     restarted = MissionControlApplication(database, builtin_plugins=google_plugins())
@@ -110,6 +123,47 @@ def test_demo_sync_projects_events_tasks_details_and_independent_migration(tmp_p
             if item["source"]["plugin_id"] == "google"
         ]
     ) == 8
+
+
+def test_generic_lifecycle_adopts_deployed_google_migrations(tmp_path):
+    database = Database(tmp_path / "mission-control.db")
+    MigrationRunner(database).apply()
+    assert GoogleMigrationRunner(database).apply() == [1, 2]
+
+    (provider,) = activate_builtin_agenda_plugins(database, google_plugins())
+
+    assert provider.plugin_id.value == "google"
+    with database.connect() as connection:
+        adopted = connection.execute(
+            "SELECT version FROM plugin_schema_migrations "
+            "WHERE plugin_id = 'google' ORDER BY version"
+        ).fetchall()
+    assert [row["version"] for row in adopted] == [1, 2]
+
+
+def test_google_cache_is_quarantined_when_source_changes(tmp_path):
+    database = Database(tmp_path / "mission-control.db")
+    GoogleMigrationRunner(database).apply()
+    repository = SQLiteGoogleRepository(database)
+    repository.prepare_source("demo", "fixture-one")
+    (prepared,) = google_plugins()
+    config = GoogleConfig.from_runtime(prepared.configuration, {})
+    GoogleSynchronizer(
+        repository,
+        FixtureGoogleClient.load(config.demo_anchor_date),
+        config,
+    ).sync_once()
+    assert repository.list_entries()
+    assert repository.prepare_source("demo", "fixture-one") is False
+    assert repository.list_entries()
+
+    assert repository.prepare_source("live", "different-authorization") is True
+
+    assert repository.list_entries() == ()
+    status = repository.status()
+    assert status.source_mode == "live"
+    assert status.source_fingerprint == "different-authorization"
+    assert status.last_success_at is None
 
 
 def test_google_resource_mapping_handles_privacy_dates_html_and_declines():
@@ -148,6 +202,21 @@ def test_google_resource_mapping_handles_privacy_dates_html_and_declines():
         },
     )
     assert declined is None
+
+
+def test_demo_fixture_rebases_its_showcase_dates():
+    fixture = FixtureGoogleClient.load(date(2030, 1, 10))
+    events = fixture.events(
+        "travel@example.invalid",
+        starts_at=datetime(2030, 1, 1, tzinfo=UTC),
+        ends_at=datetime(2030, 2, 1, tzinfo=UTC),
+    )
+    trip = next(item for item in events if item["id"] == "travel-days")
+    flight = next(item for item in events if item["id"] == "flight-zurich")
+
+    assert trip["start"]["date"] == "2030-01-10"
+    assert trip["end"]["date"] == "2030-01-19"
+    assert flight["start"]["dateTime"].startswith("2030-01-10T20:30:00")
 
 
 def test_google_task_due_timestamp_is_intentionally_date_only():
@@ -218,11 +287,8 @@ def test_partial_refresh_retains_last_good_collection_and_reports_degraded(tmp_p
 
 
 def test_live_google_requires_named_oauth_credential(tmp_path):
-    prepared = prepare_builtin_agenda_plugins(("google",))
-    with pytest.raises(BuiltinPluginError, match="named 'oauth' credential"):
-        MissionControlApplication(
-            Database(tmp_path / "mission-control.db"), builtin_plugins=prepared
-        )
+    with pytest.raises(BuiltinPluginError, match="required named credentials.*oauth"):
+        prepare_builtin_agenda_plugins(("google",))
 
 
 def test_reconnect_required_is_actionable_and_erases_private_cache(tmp_path):

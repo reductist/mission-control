@@ -5,6 +5,12 @@
   "version": "0.1.0",
   "plugin_api": ">=1.0.0 <2.0.0",
   "capabilities": ["agenda", "closed-items", "commands", "entity-details"],
+  "runtime": {
+    "entrypoint": "mission_control.builtin_plugins.landscape:activate",
+    "migration_set": "landscape",
+    "agenda_seed": "agenda.json"
+  },
+  "permissions": ["database"],
   "entity_types": {
     "initiative": {
       "capabilities": [

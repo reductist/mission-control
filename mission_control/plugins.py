@@ -24,6 +24,14 @@ class PluginConfigurationError(ValueError):
     """A plugin configuration does not satisfy its registered arguments."""
 
 
+class PluginCompatibilityError(ValueError):
+    """A plugin does not support the host's public plugin API version."""
+
+
+class PluginCredentialError(ValueError):
+    """Named plugin credentials do not satisfy the manifest."""
+
+
 class PluginDiscoveryError(ValueError):
     """Configured plugin roots cannot be scanned deterministically."""
 
@@ -43,6 +51,12 @@ class Capability(StrEnum):
     EVENTS = "events"
     UI = "ui"
     HEALTH = "health"
+
+
+class Permission(StrEnum):
+    DATABASE = "database"
+    NETWORK = "network"
+    CREDENTIALS = "credentials"
 
 
 class StandardEntityCapability(StrEnum):
@@ -190,6 +204,21 @@ class PluginArgument:
 
 
 @dataclass(frozen=True, slots=True)
+class PluginRuntime:
+    entrypoint: str
+    migration_set: str | None = None
+    agenda_seed: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CredentialRegistration:
+    name: str
+    required: bool = False
+    required_when: tuple[str, JsonScalar] | None = None
+    description: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PluginRegistration:
     schema_version: PluginSchemaVersion
     plugin_id: PluginId
@@ -197,6 +226,9 @@ class PluginRegistration:
     version: str
     plugin_api: str
     capabilities: tuple[Capability, ...]
+    runtime: PluginRuntime | None = None
+    permissions: tuple[Permission, ...] = ()
+    credentials: tuple[CredentialRegistration, ...] = ()
     entity_types: tuple[EntityTypeRegistration, ...] = ()
     arguments: tuple[PluginArgument, ...] = ()
 
@@ -418,6 +450,32 @@ def parse_plugin_registration(document: object) -> PluginRegistration:
         for name, definition in sorted(raw.get("arguments", {}).items())
     )
     plugin_id = PluginId(raw["id"])
+    raw_runtime = raw.get("runtime")
+    runtime = (
+        PluginRuntime(
+            entrypoint=raw_runtime["entrypoint"],
+            migration_set=raw_runtime.get("migration_set"),
+            agenda_seed=raw_runtime.get("agenda_seed"),
+        )
+        if raw_runtime is not None
+        else None
+    )
+    credentials = tuple(
+        CredentialRegistration(
+            name,
+            required=definition.get("required", False),
+            required_when=(
+                (
+                    definition["required_when"]["argument"],
+                    definition["required_when"]["equals"],
+                )
+                if "required_when" in definition
+                else None
+            ),
+            description=definition.get("description"),
+        )
+        for name, definition in sorted(raw.get("credentials", {}).items())
+    )
     entity_types = tuple(
         EntityTypeRegistration(
             entity_type,
@@ -436,6 +494,9 @@ def parse_plugin_registration(document: object) -> PluginRegistration:
         version=raw["version"],
         plugin_api=raw["plugin_api"],
         capabilities=tuple(Capability(value) for value in raw["capabilities"]),
+        runtime=runtime,
+        permissions=tuple(Permission(value) for value in raw.get("permissions", [])),
+        credentials=credentials,
         entity_types=entity_types,
         arguments=arguments,
     )
@@ -478,6 +539,81 @@ def validate_plugin_configuration(
                 continue
         values.append((name, _freeze_json(value)))
     return PluginConfiguration(tuple(values))
+
+
+PLUGIN_API_VERSION = "1.0.0"
+_VERSION_CLAUSE = re.compile(r"^(>=|<=|==|>|<)([0-9]+(?:\.[0-9]+){0,2})$")
+
+
+def _version_tuple(value: str) -> tuple[int, int, int]:
+    parts = value.split(".")
+    if len(parts) > 3 or any(not part.isdigit() for part in parts):
+        raise PluginCompatibilityError(f"invalid plugin API version {value!r}")
+    padded = tuple(int(part) for part in parts) + (0,) * (3 - len(parts))
+    return cast(tuple[int, int, int], padded)
+
+
+def ensure_plugin_api_compatible(
+    registration: PluginRegistration, *, host_version: str = PLUGIN_API_VERSION
+) -> None:
+    """Reject an incompatible implementation before any plugin code is imported."""
+
+    host = _version_tuple(host_version)
+    clauses = registration.plugin_api.split()
+    if not clauses:
+        raise PluginCompatibilityError("plugin_api compatibility range is empty")
+    comparisons = {
+        ">=": lambda left, right: left >= right,
+        "<=": lambda left, right: left <= right,
+        ">": lambda left, right: left > right,
+        "<": lambda left, right: left < right,
+        "==": lambda left, right: left == right,
+    }
+    for clause in clauses:
+        match = _VERSION_CLAUSE.fullmatch(clause)
+        if match is None:
+            raise PluginCompatibilityError(
+                f"invalid plugin_api compatibility clause {clause!r}"
+            )
+        operator, version = match.groups()
+        if not comparisons[operator](host, _version_tuple(version)):
+            raise PluginCompatibilityError(
+                f"plugin requires API {registration.plugin_api!r}; host provides {host_version}"
+            )
+
+
+def validate_plugin_credentials(
+    registration: PluginRegistration,
+    credentials: Mapping[str, str],
+    configuration: PluginConfiguration | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """Validate credential names and presence without reading secret contents."""
+
+    declared = {credential.name: credential for credential in registration.credentials}
+    unknown = sorted(set(credentials) - set(declared))
+    if unknown:
+        raise PluginCredentialError(
+            "unknown named credentials: " + ", ".join(unknown)
+        )
+    configured = configuration.to_dict() if configuration is not None else {}
+    missing = sorted(
+        name
+        for name, credential in declared.items()
+        if (
+            credential.required
+            or (
+                credential.required_when is not None
+                and configured.get(credential.required_when[0])
+                == credential.required_when[1]
+            )
+        )
+        and name not in credentials
+    )
+    if missing:
+        raise PluginCredentialError(
+            "required named credentials are missing: " + ", ".join(missing)
+        )
+    return tuple(sorted(credentials.items()))
 
 
 def _validate_configuration_value(
@@ -694,6 +830,28 @@ def registration_to_dict(registration: PluginRegistration) -> dict[str, Any]:
         "plugin_api": registration.plugin_api,
         "capabilities": [value.value for value in registration.capabilities],
     }
+    if registration.runtime is not None:
+        result["runtime"] = {"entrypoint": registration.runtime.entrypoint}
+        if registration.runtime.migration_set is not None:
+            result["runtime"]["migration_set"] = registration.runtime.migration_set
+        if registration.runtime.agenda_seed is not None:
+            result["runtime"]["agenda_seed"] = registration.runtime.agenda_seed
+    if registration.permissions:
+        result["permissions"] = [item.value for item in registration.permissions]
+    if registration.credentials:
+        result["credentials"] = {}
+        for credential in registration.credentials:
+            definition: dict[str, Any] = {}
+            if credential.required:
+                definition["required"] = True
+            if credential.required_when is not None:
+                definition["required_when"] = {
+                    "argument": credential.required_when[0],
+                    "equals": credential.required_when[1],
+                }
+            if credential.description is not None:
+                definition["description"] = credential.description
+            result["credentials"][credential.name] = definition
     if registration.entity_types:
         result["entity_types"] = {
             entity.entity_type: {

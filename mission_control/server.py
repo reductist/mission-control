@@ -32,13 +32,6 @@ from mission_control.annotations import (
     AnnotationLifecycleCommandHandler,
     AnnotationRepository,
 )
-from mission_control.builtin_plugins import (
-    BUILTIN_AGENDA_PLUGIN_IDS,
-    BuiltinPluginError,
-    PreparedBuiltinAgendaPlugin,
-    activate_builtin_agenda_plugins,
-    prepare_builtin_agenda_plugins,
-)
 from mission_control.commands import (
     CommandContext,
     CommandContractError,
@@ -64,6 +57,12 @@ from mission_control.entity_details import (
 )
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_runtime import PluginJobSupervisor
+from mission_control.plugin_lifecycle import (
+    PluginLifecycleError,
+    PreparedAgendaPlugin,
+    activate_agenda_plugins_isolated,
+    prepare_agenda_plugins,
+)
 from mission_control.plugins import (
     EntityCapability,
     PluginId,
@@ -108,7 +107,8 @@ class MissionControlApplication:
         demo: bool = False,
         write_token: str | None = None,
         agenda_contributions: Iterable[AgendaContribution] = (),
-        builtin_plugins: Iterable[PreparedBuiltinAgendaPlugin] = (),
+        builtin_plugins: Iterable[PreparedAgendaPlugin] = (),
+        plugin_failures: Mapping[str, tuple[str, str]] | None = None,
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
@@ -117,9 +117,21 @@ class MissionControlApplication:
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
         self.builtin_plugins = tuple(builtin_plugins)
-        self.agenda_providers = activate_builtin_agenda_plugins(
+        self.plugin_activations = activate_agenda_plugins_isolated(
             database, self.builtin_plugins
         )
+        self.active_plugins = tuple(
+            (activation.plugin, activation.provider)
+            for activation in self.plugin_activations
+            if activation.provider is not None
+        )
+        self.failed_plugin_activations = {
+            activation.plugin.registration.plugin_id.value: activation.failure
+            for activation in self.plugin_activations
+            if activation.failure is not None
+        }
+        self.initial_plugin_failures = dict(plugin_failures or {})
+        self.agenda_providers = tuple(provider for _, provider in self.active_plugins)
         self.registrations = {
             plugin.registration.plugin_id.value: plugin.registration
             for plugin in self.builtin_plugins
@@ -182,6 +194,14 @@ class MissionControlApplication:
         """Stop provider jobs before the application is discarded."""
 
         self.job_supervisor.stop()
+        for provider in reversed(self.agenda_providers):
+            stop = getattr(provider, "stop", None)
+            if callable(stop):
+                try:
+                    stop()
+                except Exception:
+                    # Shutdown is best-effort and must continue for other providers.
+                    continue
 
     def health(self) -> dict[str, object]:
         plugins = self._plugin_health()
@@ -201,9 +221,7 @@ class MissionControlApplication:
         closed_contributions = [
             project_core_closed_items(tasks, generated_at=generated_at)
         ]
-        for plugin, provider in zip(
-            self.builtin_plugins, self.agenda_providers, strict=True
-        ):
+        for plugin, provider in self.active_plugins:
             project_closed = getattr(provider, "closed_items", None)
             if not callable(project_closed):
                 continue
@@ -253,9 +271,7 @@ class MissionControlApplication:
         self, generated_at: datetime
     ) -> tuple[AgendaContribution, ...]:
         contributions: list[AgendaContribution] = []
-        for plugin, provider in zip(
-            self.builtin_plugins, self.agenda_providers, strict=True
-        ):
+        for plugin, provider in self.active_plugins:
             plugin_id = plugin.registration.plugin_id.value
             try:
                 contribution = provider.contribution(generated_at=generated_at)
@@ -274,10 +290,20 @@ class MissionControlApplication:
         return tuple(contributions)
 
     def _plugin_health(self) -> list[dict[str, object]]:
-        documents: list[dict[str, object]] = []
-        for plugin, provider in zip(
-            self.builtin_plugins, self.agenda_providers, strict=True
-        ):
+        documents: list[dict[str, object]] = [
+            self._failed_plugin_health(plugin_id, code, detail)
+            for plugin_id, (code, detail) in sorted(
+                self.initial_plugin_failures.items()
+            )
+        ] + [
+            self._failed_plugin_health(
+                plugin_id,
+                failure.code,
+                failure.detail,
+            )
+            for plugin_id, failure in sorted(self.failed_plugin_activations.items())
+        ]
+        for plugin, provider in self.active_plugins:
             plugin_id = plugin.registration.plugin_id.value
             if plugin_id in self._provider_runtime_failures:
                 code, detail = self._provider_runtime_failures[plugin_id]
@@ -289,7 +315,9 @@ class MissionControlApplication:
             try:
                 document = health().to_dict()
                 if document.get("plugin_id") != plugin_id:
-                    raise ValueError("provider health identity does not match registration")
+                    raise ValueError(
+                        "provider health identity does not match registration"
+                    )
             except Exception:
                 document = self._failed_plugin_health(
                     plugin_id,
@@ -313,7 +341,7 @@ class MissionControlApplication:
 
     def _provider_documents(self) -> list[dict[str, object]]:
         health = {item["plugin_id"]: item for item in self._plugin_health()}
-        return [
+        documents = [
             {
                 "id": registration.plugin_id.value,
                 "name": registration.name,
@@ -328,6 +356,17 @@ class MissionControlApplication:
                 self.registrations.values(), key=lambda item: item.plugin_id.value
             )
         ]
+        registered = set(self.registrations)
+        documents.extend(
+            {
+                "id": plugin_id,
+                "name": plugin_id,
+                "capabilities": [],
+                "health": health[plugin_id],
+            }
+            for plugin_id in sorted(set(health) - registered)
+        )
+        return documents
 
     def create_task(self, document: object) -> dict[str, object]:
         payload = _object_payload(document, allowed={"title", "description"})
@@ -737,9 +776,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--plugin",
         action="append",
-        choices=BUILTIN_AGENDA_PLUGIN_IDS,
         default=[],
-        help="load a bundled read-only agenda provider; may be repeated",
+        metavar="PLUGIN_ID",
+        help="load a bundled provider by its manifest ID; may be repeated",
+    )
+    parser.add_argument(
+        "--plugin-root",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="discover additional plugin manifests/resources below PATH; may be repeated",
     )
     parser.add_argument(
         "--plugin-settings",
@@ -771,27 +817,39 @@ def main(argv: list[str] | None = None) -> int:
                 "configuration supplied for unselected plugins: "
                 + ", ".join(unexpected)
             )
-        if args.demo and "google" in selected and "google" not in configurations:
-            configurations["google"] = {"mode": "demo"}
-        builtin_plugins = prepare_builtin_agenda_plugins(
-            args.plugin,
-            configurations=configurations,
-            credentials=credentials,
-        )
-    except (BuiltinPluginError, OSError, ValueError) as error:
+        if len(selected) != len(args.plugin):
+            raise ValueError("plugin selected more than once")
+    except (OSError, ValueError) as error:
         parser.error(str(error))
-    try:
-        application = MissionControlApplication(
-            Database(Path(args.database)),
-            demo=args.demo,
-            builtin_plugins=builtin_plugins,
-        )
-    except BuiltinPluginError as error:
-        parser.error(str(error))
+    builtin_plugins: list[PreparedAgendaPlugin] = []
+    plugin_failures: dict[str, tuple[str, str]] = {}
+    for plugin_id in args.plugin:
+        try:
+            builtin_plugins.extend(
+                prepare_agenda_plugins(
+                    (plugin_id,),
+                    roots=args.plugin_root,
+                    configurations=configurations,
+                    credentials=credentials,
+                )
+            )
+        except (PluginLifecycleError, OSError, ValueError):
+            plugin_failures[plugin_id] = (
+                "preparation-failed",
+                "Plugin validation failed; its contributions are unavailable.",
+            )
+    application = MissionControlApplication(
+        Database(Path(args.database)),
+        demo=args.demo,
+        builtin_plugins=builtin_plugins,
+        plugin_failures=plugin_failures,
+    )
     server = build_server(application, args.host, args.port)
     host, port = server.server_address[:2]
-    mode = "demo" if args.demo else "live"
-    print(f"Mission Control {__version__} ({mode}) listening on http://{host}:{port}")
+    showcase = "house showcase enabled" if args.demo else "operational workspace"
+    print(
+        f"Mission Control {__version__} ({showcase}) listening on http://{host}:{port}"
+    )
     if host not in {"127.0.0.1", "::1", "localhost"}:
         print(
             "warning: the MVP server has no user authentication; expose it only on a trusted network"
@@ -828,14 +886,10 @@ def _plugin_credentials(values: Iterable[str]) -> dict[str, dict[str, str]]:
     for value in values:
         identity, path = _assignment(value, "--plugin-credential")
         if "." not in identity:
-            raise ValueError(
-                "--plugin-credential identity must use PLUGIN_ID.NAME"
-            )
+            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
         plugin_id, name = identity.split(".", 1)
         if not plugin_id or not name:
-            raise ValueError(
-                "--plugin-credential identity must use PLUGIN_ID.NAME"
-            )
+            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
         plugin_credentials = result.setdefault(plugin_id, {})
         if name in plugin_credentials:
             raise ValueError(

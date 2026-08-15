@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Iterable
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,14 +15,13 @@ from rich.console import Console
 
 from mission_control import __version__
 from mission_control.agenda import aggregate_agenda, agenda_to_list, project_core_tasks
-from mission_control.builtin_plugins import (
-    BUILTIN_AGENDA_PLUGIN_IDS,
-    BuiltinPluginError,
-    activate_builtin_agenda_plugins,
-    prepare_builtin_agenda_plugins,
-)
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
+from mission_control.plugin_lifecycle import (
+    PluginLifecycleError,
+    activate_agenda_plugins,
+    prepare_agenda_plugins,
+)
 from mission_control.plugins import (
     PluginDiscoveryError,
     PluginRegistrationError,
@@ -110,7 +110,9 @@ def build_parser() -> argparse.ArgumentParser:
     history = task_commands.add_parser("history", help="show immutable task history")
     history.add_argument("task_id")
 
-    agenda = subcommands.add_parser("agenda", help="render the aggregated read-only agenda")
+    agenda = subcommands.add_parser(
+        "agenda", help="render the aggregated read-only agenda"
+    )
     agenda_commands = agenda.add_subparsers(dest="agenda_command", required=True)
     agenda_list = agenda_commands.add_parser(
         "list", help="list projected core and provider agenda entries"
@@ -124,9 +126,30 @@ def build_parser() -> argparse.ArgumentParser:
     agenda_list.add_argument(
         "--plugin",
         action="append",
-        choices=BUILTIN_AGENDA_PLUGIN_IDS,
         default=[],
-        help="include a bundled read-only agenda provider; may be repeated",
+        metavar="PLUGIN_ID",
+        help="include an agenda provider by manifest ID; may be repeated",
+    )
+    agenda_list.add_argument(
+        "--plugin-root",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="discover additional plugin manifests/resources below PATH; may be repeated",
+    )
+    agenda_list.add_argument(
+        "--plugin-settings",
+        action="append",
+        default=[],
+        metavar="PLUGIN_ID=PATH",
+        help="read one plugin's non-secret JSON settings; may be repeated",
+    )
+    agenda_list.add_argument(
+        "--plugin-credential",
+        action="append",
+        default=[],
+        metavar="PLUGIN_ID.NAME=PATH",
+        help="provide one named credential file to a plugin; may be repeated",
     )
 
     render = subcommands.add_parser("render", help="render read models")
@@ -199,8 +222,15 @@ def main(argv: list[str] | None = None) -> int:
     prepared_plugins = ()
     if args.command == "agenda" and args.agenda_command == "list":
         try:
-            prepared_plugins = prepare_builtin_agenda_plugins(args.plugin)
-        except BuiltinPluginError as error:
+            configurations = _plugin_settings(args.plugin_settings)
+            credentials = _plugin_credentials(args.plugin_credential)
+            prepared_plugins = prepare_agenda_plugins(
+                args.plugin,
+                roots=args.plugin_root,
+                configurations=configurations,
+                credentials=credentials,
+            )
+        except (OSError, PluginLifecycleError, ValueError) as error:
             stderr.print(f"error: {error}", markup=False)
             return 2
 
@@ -209,7 +239,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init":
         applied = runner.apply()
         if applied:
-            print(f"initialized {database.path} (applied: {', '.join(map(str, applied))})")
+            print(
+                f"initialized {database.path} (applied: {', '.join(map(str, applied))})"
+            )
         else:
             print(f"{database.path} is already current")
         return 0
@@ -217,7 +249,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         runner.apply()
         with database.connect() as connection:
-            version = connection.execute("SELECT max(version) FROM schema_migrations").fetchone()[0]
+            version = connection.execute(
+                "SELECT max(version) FROM schema_migrations"
+            ).fetchone()[0]
             connection.execute("SELECT 1").fetchone()
         print(f"ok: database={database.path} schema={version}")
         return 0
@@ -227,8 +261,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "agenda" and args.agenda_command == "list":
         try:
-            providers = activate_builtin_agenda_plugins(database, prepared_plugins)
-        except BuiltinPluginError as error:
+            providers = activate_agenda_plugins(database, prepared_plugins)
+        except PluginLifecycleError as error:
             stderr.print(f"error: {error}", markup=False)
             return 2
         generated_at = datetime.now(UTC)
@@ -255,8 +289,17 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.task_command == "update":
-            fields = ("title", "description", "state", "blocked", "waiting_on", "review_after")
-            changes = {field: getattr(args, field) for field in fields if hasattr(args, field)}
+            fields = (
+                "title",
+                "description",
+                "state",
+                "blocked",
+                "waiting_on",
+                "review_after",
+            )
+            changes = {
+                field: getattr(args, field) for field in fields if hasattr(args, field)
+            }
             task = repository.update(args.task_id, **changes)
             print(json.dumps(asdict(task), sort_keys=True))
             return 0
@@ -282,6 +325,43 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     raise AssertionError("unreachable command")
+
+
+def _plugin_settings(values: Iterable[str]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for value in values:
+        plugin_id, path = _assignment(value, "--plugin-settings")
+        if plugin_id in result:
+            raise ValueError(f"plugin settings supplied more than once: {plugin_id}")
+        result[plugin_id] = json.loads(Path(path).read_text(encoding="utf-8"))
+    return result
+
+
+def _plugin_credentials(values: Iterable[str]) -> dict[str, dict[str, str]]:
+    result: dict[str, dict[str, str]] = {}
+    for value in values:
+        identity, path = _assignment(value, "--plugin-credential")
+        if "." not in identity:
+            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
+        plugin_id, name = identity.split(".", 1)
+        if not plugin_id or not name:
+            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
+        plugin_credentials = result.setdefault(plugin_id, {})
+        if name in plugin_credentials:
+            raise ValueError(
+                f"plugin credential supplied more than once: {plugin_id}.{name}"
+            )
+        plugin_credentials[name] = path
+    return result
+
+
+def _assignment(value: str, option: str) -> tuple[str, str]:
+    if "=" not in value:
+        raise ValueError(f"{option} must use NAME=PATH")
+    name, path = value.split("=", 1)
+    if not name or not path:
+        raise ValueError(f"{option} must use NAME=PATH")
+    return name, path
 
 
 if __name__ == "__main__":

@@ -127,6 +127,14 @@ The check:
 
 Python tests separately exercise the packaged artifacts through runtime parsers and CLI boundaries.
 
+Bundled plugins may add CUE refinements for their own trusted package data
+without changing the public core contracts. Google defines and continuously
+validates its exact registration/capability envelope, explicit configuration,
+evergreen Google-shaped Calendar/Tasks fixture, and one-way mapping conformance
+cases under `schema/google/`. Live Google inputs remain recursively open because
+the upstream APIs may add fields independently; mapped, filtered, and rejected
+outcomes are closed and the production mapper must match their golden fixtures.
+
 ## Boundaries
 
 CUE answers **what exchanged data is valid**. Runtime behavior remains defined by prose and executable contract tests, including:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 from importlib.resources import files
 from typing import Any, cast
 
@@ -20,11 +20,16 @@ class FixtureGoogleClient:
         self.document = document
 
     @classmethod
-    def load(cls) -> FixtureGoogleClient:
+    def load(cls, anchor_date: date | None = None) -> FixtureGoogleClient:
         raw = json.loads(files(__package__).joinpath("demo.json").read_text("utf-8"))
         if not isinstance(raw, Mapping):
             raise ValueError("Google demo fixture must be a JSON object")
-        return cls(cast(Mapping[str, Any], raw))
+        baseline = raw.get("anchor_date")
+        if not isinstance(baseline, str):
+            raise ValueError("Google demo fixture must declare an anchor date")
+        target = anchor_date or (datetime.now(UTC).date() - timedelta(days=1))
+        rebased = _rebase_dates(raw, target - date.fromisoformat(baseline))
+        return cls(cast(Mapping[str, Any], rebased))
 
     def calendars(self) -> tuple[tuple[GoogleCollection, Mapping[str, Any]], ...]:
         items = self._items(self.document.get("calendarList"), "calendarList")
@@ -61,3 +66,23 @@ class FixtureGoogleClient:
                 raise ValueError(f"Google demo {path} contains a non-object item")
             result.append(cast(Mapping[str, Any], item))
         return tuple(result)
+
+
+def _rebase_dates(value: Any, shift: timedelta) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _rebase_dates(item, shift) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_rebase_dates(item, shift) for item in value]
+    if (
+        isinstance(value, str)
+        and len(value) >= 10
+        and value[4:5] == "-"
+        and value[7:8] == "-"
+        and (len(value) == 10 or value[10:11] == "T")
+    ):
+        try:
+            shifted = date.fromisoformat(value[:10]) + shift
+        except ValueError:
+            return value
+        return shifted.isoformat() + value[10:]
+    return value
