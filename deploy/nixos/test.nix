@@ -16,8 +16,23 @@ pkgs.testers.nixosTest {
     environment.systemPackages = [ pkgs.curl ];
   };
 
+  nodes.credentials = { pkgs, ... }: {
+    imports = [ self.nixosModules.default ];
+
+    services.mission-control = {
+      enable = true;
+      plugins = [ "google" ];
+      pluginSettings.google = pkgs.writeText "google-live-settings" ''
+        {"mode":"live","sync_interval_seconds":86400}
+      '';
+      pluginCredentials.google.oauth = toString (pkgs.writeText "test-google-oauth" ''
+        {"client_id":"test","client_secret":"test","refresh_token":"test"}
+      '');
+    };
+  };
+
   testScript = ''
-    start_all()
+    machine.start()
     machine.wait_for_unit("mission-control.service")
     machine.wait_for_open_port(8000)
     machine.succeed(
@@ -39,5 +54,15 @@ pkgs.testers.nixosTest {
       "systemctl show mission-control.service --property=DynamicUser --value | grep -qx yes"
     )
     machine.succeed("test -f /var/lib/mission-control/mission-control.db")
+
+    credentials.start()
+    credentials.wait_for_unit("mission-control.service")
+    credentials.succeed(
+      "test $(stat -c %a /run/mission-control/google-oauth) = 600"
+    )
+    credentials.succeed(
+      "systemctl show mission-control.service --property=ExecStart --value "
+      "| grep -Fq 'google.oauth=/run/mission-control/google-oauth'"
+    )
   '';
 }
