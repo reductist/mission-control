@@ -44,6 +44,8 @@ let detailReturnView = "overview";
 let commandSequence = 0;
 let activityExpanded = false;
 let scheduleFilter = "all";
+let scheduleLayout = "agenda";
+let calendarRangeMode = "three-day";
 let refreshInFlight = false;
 
 document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(undefined, {
@@ -101,7 +103,7 @@ async function refresh() {
     dashboard = nextDashboard;
     entityDetail = nextDetail;
     connectionLabel.textContent = "Online";
-    modeLabel.textContent = dashboard.mode === "demo" ? "Synthetic demo workspace" : "Live workspace";
+    modeLabel.textContent = dashboard.mode === "demo" ? "House showcase enabled" : "Operational workspace";
     versionLabel.textContent = `v${dashboard.version}`;
     statusDot.classList.add("is-online");
     app.setAttribute("aria-busy", "false");
@@ -158,6 +160,8 @@ function focusSignature(element) {
     element.id,
     element.dataset?.view,
     element.dataset?.scheduleFilter,
+    element.dataset?.scheduleLayout,
+    element.dataset?.calendarRange,
     element.dataset?.pluginId,
     element.dataset?.entityType,
     element.dataset?.entityId,
@@ -239,16 +243,8 @@ function renderOverview() {
 function renderSchedule() {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
   const entries = scheduleEntries()
-    .filter((entry) => scheduleFilter === "all"
-      || (scheduleFilter === "events" && entry.kind === "event")
-      || (scheduleFilter === "tasks" && entry.kind === "action"))
+    .filter(scheduleEntryMatchesFilter)
     .sort((left, right) => compareScheduleEntries(left, right, timeZone));
-  const groups = new Map();
-  entries.forEach((entry) => {
-    const key = scheduleDateKey(entry, timeZone);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(entry);
-  });
   const degraded = (dashboard.providers || []).filter((provider) =>
     ["degraded", "failed"].includes(provider.health?.state),
   );
@@ -272,30 +268,97 @@ function renderSchedule() {
       </div>
     ` : ""}
     <div class="schedule-toolbar panel">
-      <div class="schedule-filters" role="group" aria-label="Filter schedule">
-        ${scheduleFilterButton("all", "All")}
-        ${scheduleFilterButton("events", "Events")}
-        ${scheduleFilterButton("tasks", "Tasks & reminders")}
+      <div class="schedule-controls">
+        <div class="schedule-layouts" role="group" aria-label="Schedule layout">
+          ${scheduleLayoutButton("agenda", "Agenda")}
+          ${scheduleLayoutButton("calendar", "Calendar")}
+        </div>
+        ${scheduleLayout === "calendar" ? `
+          <div class="calendar-ranges" role="group" aria-label="Calendar range">
+            ${calendarRangeButton("three-day", "3 days")}
+            ${calendarRangeButton("weekdays", "Weekdays")}
+            ${calendarRangeButton("week", "1 week")}
+            ${calendarRangeButton("month", "1 month")}
+          </div>
+        ` : ""}
+        <div class="schedule-filters" role="group" aria-label="Filter schedule">
+          ${scheduleFilterButton("all", "All")}
+          ${scheduleFilterButton("events", "Events")}
+          ${scheduleFilterButton("tasks", "Tasks & reminders")}
+        </div>
       </div>
       <div class="schedule-freshness">
         <span>Times shown in ${escapeHtml(timeZone)}</span>
         <span>${lastSuccess ? `Updated ${escapeHtml(formatDateTime(lastSuccess))}` : starting.length ? "Waiting for first refresh" : `Loaded ${escapeHtml(formatDateTime(dashboard.generated_at))}`}</span>
       </div>
     </div>
+    ${scheduleLayout === "calendar"
+      ? renderCalendarSchedule(entries, timeZone)
+      : renderAgendaSchedule(entries, timeZone)}
+  `;
+
+  document.querySelectorAll("[data-schedule-layout]").forEach((button) => {
+    button.addEventListener("click", () => {
+      scheduleLayout = button.dataset.scheduleLayout;
+      rerenderSchedulePreservingFocus();
+    });
+  });
+  document.querySelectorAll("[data-calendar-range]").forEach((button) => {
+    button.addEventListener("click", () => {
+      calendarRangeMode = button.dataset.calendarRange;
+      rerenderSchedulePreservingFocus();
+    });
+  });
+  document.querySelectorAll("[data-schedule-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      scheduleFilter = button.dataset.scheduleFilter;
+      rerenderSchedulePreservingFocus();
+    });
+  });
+  wireEntityLinks();
+}
+
+function rerenderSchedulePreservingFocus() {
+  const savedFocus = captureAppFocus();
+  renderSchedule();
+  restoreAppFocus(savedFocus);
+}
+
+function renderAgendaSchedule(entries, timeZone) {
+  const groups = new Map();
+  entries.forEach((entry) => {
+    const key = scheduleDateKey(entry, timeZone);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  });
+  return `
     <div class="schedule-days">
       ${groups.size
         ? [...groups].map(([key, items]) => scheduleDay(key, items)).join("")
         : '<section class="panel empty">Nothing scheduled in this range.</section>'}
     </div>
   `;
+}
 
-  document.querySelectorAll("[data-schedule-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
-      scheduleFilter = button.dataset.scheduleFilter;
-      renderSchedule();
-    });
-  });
-  wireEntityLinks();
+function renderCalendarSchedule(entries, timeZone) {
+  const range = calendarRange(calendarRangeMode, localCivilDate(new Date()));
+  const scheduled = entries.filter((entry) => entry.timing?.kind !== "anytime");
+  const anytimeCount = entries.length - scheduled.length;
+  return `
+    <section class="panel calendar-heading">
+      <div>
+        <p class="kicker">${escapeHtml(calendarRangeLabel(calendarRangeMode))}</p>
+        <h2>${escapeHtml(calendarPeriodLabel(range, calendarRangeMode))}</h2>
+      </div>
+      ${anytimeCount ? `<button class="text-button" data-schedule-layout="agenda" type="button">${anytimeCount} unscheduled ${anytimeCount === 1 ? "item" : "items"} in Agenda</button>` : ""}
+    </section>
+    <div class="calendar-scroll" tabindex="0" aria-label="${escapeHtml(calendarRangeLabel(calendarRangeMode))} calendar">
+      <div class="calendar-grid is-${escapeHtml(calendarRangeMode)}">
+        ${range.days.slice(0, range.columns).map(calendarWeekdayHeading).join("")}
+        ${range.days.map((day) => calendarDayCell(day, scheduled, timeZone, range.month)).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function scheduleEntries() {
@@ -304,9 +367,154 @@ function scheduleEntries() {
   );
 }
 
+function scheduleEntryMatchesFilter(entry) {
+  return scheduleFilter === "all"
+    || (scheduleFilter === "events" && entry.kind === "event")
+    || (scheduleFilter === "tasks" && entry.kind === "action");
+}
+
+function scheduleLayoutButton(value, label) {
+  const selected = scheduleLayout === value;
+  return `<button class="schedule-choice ${selected ? "is-active" : ""}" data-schedule-layout="${value}" type="button" aria-pressed="${selected}">${escapeHtml(label)}</button>`;
+}
+
+function calendarRangeButton(value, label) {
+  const selected = calendarRangeMode === value;
+  return `<button class="schedule-filter ${selected ? "is-active" : ""}" data-calendar-range="${value}" type="button" aria-pressed="${selected}">${escapeHtml(label)}</button>`;
+}
+
 function scheduleFilterButton(value, label) {
   const selected = scheduleFilter === value;
   return `<button class="schedule-filter ${selected ? "is-active" : ""}" data-schedule-filter="${value}" type="button" aria-pressed="${selected}">${escapeHtml(label)}</button>`;
+}
+
+function calendarRange(mode, anchor) {
+  if (mode === "three-day") {
+    return { columns: 3, month: null, days: civilDateSequence(anchor, 3) };
+  }
+  if (mode === "weekdays") {
+    const weekday = civilDateWeekday(anchor);
+    const monday = shiftCivilDate(anchor, -(weekday === 0 ? 6 : weekday - 1));
+    return { columns: 5, month: null, days: civilDateSequence(monday, 5) };
+  }
+  if (mode === "week") {
+    const sunday = shiftCivilDate(anchor, -civilDateWeekday(anchor));
+    return { columns: 7, month: null, days: civilDateSequence(sunday, 7) };
+  }
+  const monthStart = `${anchor.slice(0, 7)}-01`;
+  const nextMonth = shiftCivilMonth(monthStart, 1);
+  const lastDay = shiftCivilDate(nextMonth, -1);
+  const gridStart = shiftCivilDate(monthStart, -civilDateWeekday(monthStart));
+  const gridEnd = shiftCivilDate(lastDay, 6 - civilDateWeekday(lastDay));
+  const length = Math.round((civilDateValue(gridEnd) - civilDateValue(gridStart)) / 86400000) + 1;
+  return { columns: 7, month: anchor.slice(0, 7), days: civilDateSequence(gridStart, length) };
+}
+
+function civilDateSequence(start, length) {
+  return Array.from({ length }, (_, index) => shiftCivilDate(start, index));
+}
+
+function shiftCivilDate(value, amount) {
+  const shifted = new Date(civilDateValue(value));
+  shifted.setUTCDate(shifted.getUTCDate() + amount);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function shiftCivilMonth(value, amount) {
+  const [year, month] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1 + amount, 1)).toISOString().slice(0, 10);
+}
+
+function civilDateWeekday(value) {
+  return new Date(civilDateValue(value)).getUTCDay();
+}
+
+function calendarRangeLabel(mode) {
+  return {
+    "three-day": "3-day view",
+    weekdays: "Weekdays",
+    week: "1-week view",
+    month: "1-month view",
+  }[mode];
+}
+
+function calendarPeriodLabel(range, mode) {
+  if (mode === "month") {
+    return formatCivilDate(`${range.month}-01`, { month: "long", year: "numeric" });
+  }
+  const first = range.days[0];
+  const last = range.days.at(-1);
+  const sameYear = first.slice(0, 4) === last.slice(0, 4);
+  if (sameYear) {
+    return `${formatCivilDate(first, { month: "short", day: "numeric" })}–${formatCivilDate(last, { month: "short", day: "numeric" })}, ${last.slice(0, 4)}`;
+  }
+  return `${formatCivilDate(first, { month: "short", day: "numeric", year: "numeric" })}–${formatCivilDate(last, { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+function formatCivilDate(value, options) {
+  return new Intl.DateTimeFormat(undefined, { ...options, timeZone: "UTC" })
+    .format(new Date(civilDateValue(value)));
+}
+
+function calendarWeekdayHeading(day) {
+  return `<div class="calendar-weekday">${escapeHtml(formatCivilDate(day, { weekday: "short" }))}</div>`;
+}
+
+function calendarDayCell(day, entries, timeZone, month) {
+  const matches = entries.filter((entry) => calendarEntryIntersectsDay(entry, day, timeZone));
+  const classes = [
+    "calendar-day",
+    day === localCivilDate(new Date()) ? "is-today" : "",
+    month && day.slice(0, 7) !== month ? "is-outside" : "",
+  ].filter(Boolean).join(" ");
+  return `
+    <section class="${classes}" aria-label="${escapeHtml(formatCivilDate(day, { weekday: "long", month: "long", day: "numeric", year: "numeric" }))}">
+      <div class="calendar-date"><span>${escapeHtml(formatCivilDate(day, { weekday: "short" }))}</span><strong>${Number(day.slice(-2))}</strong></div>
+      <div class="calendar-items">
+        ${matches.length ? matches.map((entry) => calendarEntryChip(entry, day, timeZone)).join("") : '<span class="calendar-empty">No items</span>'}
+      </div>
+    </section>
+  `;
+}
+
+function calendarEntryIntersectsDay(entry, day, timeZone) {
+  const timing = entry.timing || {};
+  if (timing.kind === "all-day") {
+    return timing.occurs_on <= day && day < (timing.ends_before || shiftCivilDate(timing.occurs_on, 1));
+  }
+  if (timing.kind === "due-on") return timing.due_on === day;
+  if (timing.kind === "due-at") return dateKeyInTimeZone(timing.due_at, timeZone) === day;
+  if (timing.kind === "timed" || timing.kind === "window") {
+    const start = new Date(timing.starts_at).valueOf();
+    const end = new Date(timing.ends_at).valueOf();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return false;
+    const first = dateKeyInTimeZone(timing.starts_at, timeZone);
+    const last = dateKeyInTimeZone(new Date(end - 1).toISOString(), timeZone);
+    return first <= day && day <= last;
+  }
+  return false;
+}
+
+function calendarEntryChip(entry, day, timeZone) {
+  const timing = entry.timing || {};
+  let time = "";
+  if (timing.kind === "timed") {
+    time = dateKeyInTimeZone(timing.starts_at, timeZone) === day ? formatTime(timing.starts_at) : "Continues";
+  } else if (timing.kind === "window") {
+    time = dateKeyInTimeZone(timing.starts_at, timeZone) === day ? formatTime(timing.starts_at) : "Window";
+  } else if (timing.kind === "due-at") {
+    time = `Due ${formatTime(timing.due_at)}`;
+  } else if (timing.kind === "due-on") {
+    time = "Due";
+  } else {
+    time = "All day";
+  }
+  const kindClass = entry.kind === "event" ? "is-event" : "is-task";
+  const content = `<span>${escapeHtml(time)}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(pluginLabel(entry.source?.plugin_id))}</small>`;
+  if (providerHasCapability(entry.source?.plugin_id, "entity-details")) {
+    return `<button class="calendar-item ${kindClass}" type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}">${content}</button>`;
+  }
+  return `<div class="calendar-item ${kindClass}">${content}</div>`;
 }
 
 function scheduleDay(key, entries) {
@@ -1035,7 +1243,7 @@ function escapeHtml(value) {
 }
 
 if (configuredMode === "demo") {
-  modeLabel.textContent = "Synthetic demo workspace";
+  modeLabel.textContent = "House showcase enabled";
 }
 refresh();
 setInterval(refresh, 300000);
