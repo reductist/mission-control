@@ -1,9 +1,10 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.services.mission-control;
   stateDirectory = "/var/lib/mission-control";
   credentialDirectory = "/run/credentials/mission-control.service";
+  runtimeDirectory = "/run/mission-control";
   pluginRootArgs = lib.concatMap (
     root: [ "--plugin-root" (toString root) ]
   ) cfg.pluginRoots;
@@ -15,7 +16,7 @@ let
     lib.concatMap (
       name: [
         "--plugin-credential"
-        "${plugin}.${name}=${credentialDirectory}/${plugin}-${name}"
+        "${plugin}.${name}=${runtimeDirectory}/${plugin}-${name}"
       ]
     ) (lib.attrNames cfg.pluginCredentials.${plugin})
   ) (lib.attrNames cfg.pluginCredentials);
@@ -25,6 +26,16 @@ let
       name: "${plugin}-${name}:${cfg.pluginCredentials.${plugin}.${name}}"
     ) (lib.attrNames cfg.pluginCredentials.${plugin})
   ) (lib.attrNames cfg.pluginCredentials);
+  copyCredentials = lib.concatStringsSep "\n" (lib.concatMap (
+    plugin:
+      map (
+        name: ''
+          ${pkgs.coreutils}/bin/install -m 0600 \
+            ${lib.escapeShellArg "${credentialDirectory}/${plugin}-${name}"} \
+            ${lib.escapeShellArg "${runtimeDirectory}/${plugin}-${name}"}
+        ''
+      ) (lib.attrNames cfg.pluginCredentials.${plugin})
+  ) (lib.attrNames cfg.pluginCredentials));
   command = lib.escapeShellArgs (
     [
       "${cfg.package}/bin/mctrld"
@@ -116,8 +127,9 @@ in
       default = { };
       description = ''
         Runtime credential source paths keyed by plugin ID and credential name.
-        Values are passed through systemd LoadCredential and are not copied into
-        the Nix store by this module.
+        Values are passed through systemd LoadCredential, copied into the
+        service's private ephemeral runtime directory with mode 0600, and are
+        not copied into the Nix store by this module.
       '';
     };
   };
@@ -153,6 +165,7 @@ in
       after = [ "network.target" ];
 
       environment.PYTHONUNBUFFERED = "1";
+      preStart = copyCredentials;
 
       serviceConfig = {
         Type = "simple";
@@ -163,6 +176,8 @@ in
         DynamicUser = true;
         StateDirectory = "mission-control";
         StateDirectoryMode = "0750";
+        RuntimeDirectory = "mission-control";
+        RuntimeDirectoryMode = "0700";
         WorkingDirectory = stateDirectory;
         UMask = "0077";
         LoadCredential = loadedCredentials;
