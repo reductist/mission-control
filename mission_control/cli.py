@@ -230,6 +230,44 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="JSON workspace object supplying principals for semantic references",
     )
+
+    setup = subcommands.add_parser(
+        "setup", help="run a private loopback wizard for one plugin"
+    )
+    setup.add_argument("plugin_id", help="plugin ID to configure")
+    setup.add_argument(
+        "--root",
+        action="append",
+        default=[],
+        type=Path,
+        help="additional plugin root; may be repeated",
+    )
+    setup.add_argument(
+        "--managed-fragment",
+        type=Path,
+        help=(
+            "wizard-owned TOML fragment (default: one plugin-specific file in "
+            "the first --config-dir)"
+        ),
+    )
+    setup.add_argument(
+        "--credential-dir",
+        type=Path,
+        default=Path("mission-control.credentials"),
+        help="private directory for credentials imported by the wizard",
+    )
+    setup.add_argument(
+        "--export-only",
+        action="store_true",
+        help="write configuration only; reject newly uploaded credentials",
+    )
+    setup.add_argument("--port", type=int, default=0, help="loopback port (default: automatic)")
+    setup.add_argument(
+        "--timeout",
+        type=int,
+        default=900,
+        help="session lifetime in seconds (30-3600; default: %(default)s)",
+    )
     return parser
 
 
@@ -241,6 +279,59 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "version":
         print(__version__)
         return 0
+
+    if args.command == "setup":
+        from mission_control.setup_host import SetupHostError, run_setup_host
+
+        try:
+            managed_fragment = args.managed_fragment
+            if managed_fragment is None:
+                if args.export_only:
+                    managed_fragment = Path("mission-control.setup.toml")
+                elif args.config_dir:
+                    safe_plugin_id = args.plugin_id.translate(
+                        str.maketrans({".": "-", ":": "-", "_": "-"})
+                    )
+                    managed_fragment = (
+                        Path(args.config_dir[0])
+                        / f"90-mission-control-setup--{safe_plugin_id}.toml"
+                    )
+                else:
+                    raise SetupHostError(
+                        "managed setup requires --config-dir so the service will "
+                        "consume the wizard-owned fragment"
+                    )
+            result = run_setup_host(
+                args.plugin_id,
+                base_path=args.config,
+                fragment_dirs=args.config_dir,
+                roots=args.root,
+                managed_fragment=managed_fragment,
+                credential_dir=args.credential_dir,
+                export_only=args.export_only,
+                port=args.port,
+                timeout_seconds=args.timeout,
+                announce=lambda url: stdout.print(
+                    f"Open this private setup link:\n{url}", markup=False
+                ),
+            )
+            if result is None:
+                stderr.print("error: setup expired or was cancelled", markup=False)
+                return 2
+            print(json.dumps(result, sort_keys=True))
+            return 0
+        except KeyboardInterrupt:
+            stderr.print("setup cancelled", markup=False)
+            return 130
+        except (
+            ApplicationConfigError,
+            OSError,
+            PluginLifecycleError,
+            SetupHostError,
+            ValueError,
+        ) as error:
+            stderr.print(f"error: {error}", markup=False)
+            return 2
 
     if args.command == "plugin" and args.plugin_command == "validate":
         try:

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mission Control setup</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="eyebrow">Mission Control</p>
+        <h1>Connect the tools that help run your life.</h1>
+        <p class="lede">This private setup page stays on this computer. It turns each integration’s sharp edges into one guided, validated connection.</p>
+      </header>
+      <section class="card" aria-labelledby="step-title">
+        <div id="status" class="status" role="status" aria-live="polite">Opening setup…</div>
+        <div id="content" hidden>
+          <p id="progress" class="progress"></p>
+          <h2 id="step-title"></h2>
+          <p id="step-description" class="description"></p>
+          <div id="notice" class="notice" hidden></div>
+          <form id="setup-form">
+            <div id="fields" class="fields"></div>
+            <div id="actions" class="actions"></div>
+          </form>
+        </div>
+      </section>
+      <p class="privacy">Credentials are stored separately. The local setup page sends a chosen file directly to the setup process and receives only a temporary handle; server paths and credential contents never appear in setup state or generated configuration.</p>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

@@ -193,6 +193,30 @@ demo_anchor_date = "2026-08-14"
     )
 
 
+def test_fragment_order_uses_lexical_entry_names_even_for_symlinks(tmp_path) -> None:
+    fragments = tmp_path / "conf.d"
+    fragments.mkdir()
+    target = _write(
+        tmp_path / "99-resolved-name.toml",
+        """
+[http]
+port = 8100
+""",
+    )
+    (fragments / "10-first.toml").symlink_to(target)
+    _write(
+        fragments / "20-second.toml",
+        """
+[http]
+port = 8200
+""",
+    )
+
+    snapshot = load_application_config(fragment_dirs=(fragments,))
+
+    assert snapshot.port == 8200
+
+
 def test_explain_rejects_invalid_json_pointer_escapes() -> None:
     snapshot = load_application_config()
 

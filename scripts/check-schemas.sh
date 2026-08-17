@@ -27,6 +27,8 @@ SETUP_STATE_GENERATED="$GENERATED_DIR/setup-state.runtime-check.schema.json"
 SETUP_STATE_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-state.schema.json"
 SETUP_TRANSITION_GENERATED="$GENERATED_DIR/setup-transition.runtime-check.schema.json"
 SETUP_TRANSITION_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-transition.schema.json"
+SETUP_COMMIT_GENERATED="$GENERATED_DIR/setup-commit.runtime-check.schema.json"
+SETUP_COMMIT_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-commit.schema.json"
 AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
 ATTRIBUTION_GENERATED="$GENERATED_DIR/attribution-catalog.runtime-check.schema.json"
@@ -110,6 +112,8 @@ python ./scripts/merge-json.py "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$PLUGIN_GENERATE
     -o "$SETUP_STATE_GENERATED" ./setup
   cue def --force --out jsonschema -e '#Transition' \
     -o "$SETUP_TRANSITION_GENERATED" ./setup
+  cue def --force --out jsonschema -e '#CommitResult' \
+    -o "$SETUP_COMMIT_GENERATED" ./setup
 )
 (
   cd ./schema
@@ -237,6 +241,7 @@ compare_schema "$PLUGIN_JOBS_GENERATED" "$PLUGIN_JOBS_RUNTIME" "plugin jobs"
 compare_schema "$PLUGIN_RUNTIME_GENERATED" "$PLUGIN_RUNTIME_RUNTIME" "plugin runtime"
 compare_schema "$SETUP_STATE_GENERATED" "$SETUP_STATE_RUNTIME" "plugin setup state"
 compare_schema "$SETUP_TRANSITION_GENERATED" "$SETUP_TRANSITION_RUNTIME" "plugin setup transition"
+compare_schema "$SETUP_COMMIT_GENERATED" "$SETUP_COMMIT_RUNTIME" "plugin setup commit"
 compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
 compare_schema "$ATTRIBUTION_GENERATED" "$ATTRIBUTION_RUNTIME" "attribution catalog"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"

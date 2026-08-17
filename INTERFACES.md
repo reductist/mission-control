@@ -88,6 +88,12 @@ and review without opening the application database. The web wizard remains the
 reference renderer, while `mcctl` and a future TUI may drive the same documents.
 Credential upload, managed storage, atomic config commit, and browser-session
 security belong to the separate loopback setup host, not to plugin code.
+The host accepts only `127.0.0.1`, requires exact Host and Origin headers, claims
+a URL-fragment invitation once, uses an expiring bearer session, sends no-store
+and restrictive content-security headers, bounds request sizes, and logs no HTTP
+request details. Managed mode writes only a predeclared `.toml` file inside a
+configured fragment directory. Export mode does not copy newly uploaded secrets
+or claim that the service was changed.
 
 ## Event interface
 

@@ -45,6 +45,7 @@ The executable implementation provides:
 - an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, agenda projections, and owner-routed completion
 - an explicitly selected read-only Google Calendar provider with independently isolated account connections; Calendar events, appointments, Tasks, and migrated Reminders project into a generic Schedule view
 - validated per-plugin settings, named runtime credentials, background refresh jobs, stale-cache retention, and safe provider health
+- a private `mcctl setup` browser flow that guides Google connection discovery and selection, validates the result, and writes only its dedicated configuration fragment
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
 - frozen registration domain values, enum-backed finite vocabularies, and an immutable discovery catalog
@@ -84,6 +85,8 @@ mcctl config explain ./mission-control.toml /plugins/google-calendar/settings/co
 mcctl plugin validate ./plugins/reference/registration.json
 mcctl plugin list --root ./plugins
 mcctl plugin list --root ./plugins --format table
+mkdir -p ./config.d
+mcctl --config-dir ./config.d setup google-calendar
 pytest
 ```
 
@@ -232,6 +235,7 @@ mcctl config explain CONFIG.toml /JSON/POINTER [--fragment-dir DIR]
 mcctl plugin validate
 mcctl plugin list [--format json|table]
 mcctl plugin conformance REGISTRATION [--settings SETTINGS.json]
+mcctl [--config CONFIG.toml] --config-dir CONFIG_DIR setup PLUGIN_ID
 mctrld [--config PATH] [--config-dir DIR]
        [--database PATH] [--host HOST] [--port PORT] [--demo]
 ```

@@ -29,8 +29,8 @@ In summary:
    boundary.
 2. Add scoped attribution and Google-owned multi-connection support.
 3. Add the generic setup-action contract and guided Google setup. The
-   storage-free provider flow is complete; the loopback browser host and atomic
-   commit/export adapter are next.
+   storage-free provider flow, loopback browser host, and atomic managed
+   commit/export adapter are complete.
 4. Converge direct and NixOS configuration, move accepted showcase behavior into
    the canonical service, and remove the port-8001 showcase service.
 5. Replace the ad-hoc dashboard response and core-specific task/UI paths with typed

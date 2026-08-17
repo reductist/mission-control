@@ -97,3 +97,15 @@ import common "mission-control.dev/schema/common"
 		detail!: string & !~"^\\s*$"
 	})
 })
+
+#CommitResult: close({
+    schema_version!:   "mission-control.setup-commit/v1"
+    plugin_id!:        common.#PluginID
+    disposition!:      "managed"
+    restart_required!: true
+}) | close({
+    schema_version!:   "mission-control.setup-commit/v1"
+    plugin_id!:        common.#PluginID
+    disposition!:      "exported"
+    restart_required!: false
+})

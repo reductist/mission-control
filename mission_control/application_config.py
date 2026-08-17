@@ -297,19 +297,59 @@ def _read_toml(path: Path) -> dict[str, object]:
 def _configured_layers(
     base_path: str | Path | None,
     fragment_dirs: Sequence[str | Path],
+    fragment_replacements: Mapping[str | Path, Mapping[str, object]] | None = None,
 ) -> tuple[ConfigLayer, ...]:
+    replacements = {
+        Path(path).expanduser().resolve(): _copy_json(document)
+        for path, document in (fragment_replacements or {}).items()
+    }
     layers: list[ConfigLayer] = []
     if base_path is not None:
         path = Path(base_path).expanduser().resolve()
+        if path in replacements:
+            raise ApplicationConfigError("the base configuration cannot be replaced")
         layers.append(ConfigLayer(str(path), _read_toml(path)))
+    consumed_replacements: set[Path] = set()
     for configured in fragment_dirs:
         directory = Path(configured).expanduser().resolve()
         if not directory.is_dir():
             raise ApplicationConfigError(
                 f"configuration fragment directory does not exist: {directory}"
             )
-        for path in sorted(directory.glob("*.toml"), key=lambda item: item.name):
-            layers.append(ConfigLayer(str(path), _read_toml(path)))
+        entries = list(directory.glob("*.toml"))
+        candidates = {path for path in replacements if path.parent == directory}
+        matches: dict[Path, list[Path]] = {path: [] for path in candidates}
+        for path in entries:
+            identity = path.resolve()
+            if identity in matches:
+                matches[identity].append(path)
+        ambiguous = {
+            identity: paths for identity, paths in matches.items() if len(paths) > 1
+        }
+        if ambiguous:
+            identity = sorted(ambiguous, key=str)[0]
+            raise ApplicationConfigError(
+                "replacement fragment has multiple lexical aliases: "
+                f"{identity}"
+            )
+        for identity, paths in matches.items():
+            if not paths:
+                entries.append(identity)
+        for path in sorted(entries, key=lambda item: item.name):
+            identity = path.resolve()
+            if identity in replacements:
+                replacement = replacements[identity]
+                assert isinstance(replacement, Mapping)
+                layers.append(ConfigLayer(str(identity), replacement))
+                consumed_replacements.add(identity)
+            else:
+                layers.append(ConfigLayer(str(path), _read_toml(path)))
+    missing = set(replacements) - consumed_replacements
+    if missing:
+        target = sorted(str(path) for path in missing)[0]
+        raise ApplicationConfigError(
+            f"replacement fragment is outside configured directories: {target}"
+        )
     return tuple(layers)
 
 
@@ -323,6 +363,9 @@ def load_application_config(
     base_path: str | Path | None = None,
     fragment_dirs: Sequence[str | Path] = (),
     overrides: Mapping[str, object] | None = None,
+    fragment_replacements: Mapping[
+        str | Path, Mapping[str, object]
+    ] | None = None,
 ) -> ApplicationConfigSnapshot:
     """Load, merge, validate, and freeze one effective application configuration."""
 
@@ -331,7 +374,13 @@ def load_application_config(
     provenance: dict[tuple[str, ...], list[str]] = {
         path: ["defaults"] for path in _leaf_paths(document, ())
     }
-    layers = list(_configured_layers(base_path, fragment_dirs))
+    layers = list(
+        _configured_layers(
+            base_path,
+            fragment_dirs,
+            fragment_replacements,
+        )
+    )
     if overrides:
         layers.append(ConfigLayer("command line", overrides))
     for layer in layers:

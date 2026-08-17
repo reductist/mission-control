@@ -74,15 +74,16 @@ does not edit operator-owned base files or fragments. In a declaratively managed
 deployment it may validate and export a candidate without being allowed to apply
 it.
 
-The normal web server is currently unauthenticated and therefore must not expose
-configuration or credential writes. The first writable wizard runs as a separate
+The normal web server is currently unauthenticated and therefore does not expose
+configuration or credential writes. The writable wizard runs as a separate
 loopback-only `mcctl setup` bootstrap process protected by a one-time token. It
-returns `restart_required` after a successful commit; it does not pretend the
-startup-only runtime supports hot reload.
+returns `restart_required` after a successful managed commit; export-only mode
+does not claim the candidate was applied. It does not pretend the startup-only
+runtime supports hot reload.
 
 Static CUE fields and form hints are not treated as a setup protocol. A plugin that
-supports guided setup declares a versioned JSON setup capability with typed
-actions with typed intents such as `validate`, `authorize`, `discover`, and
+supports guided setup declares a versioned JSON setup capability with actions
+carrying typed intents such as `validate`, `authorize`, `discover`, and
 `test`. Core owns setup sessions, the accepted draft and compare-and-swap
 revision, action routing, redacted rendering, and commit. A plugin proposes the
 next draft only inside its own configuration namespace and owns provider-specific

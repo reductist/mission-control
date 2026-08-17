@@ -72,6 +72,41 @@ Open `http://127.0.0.1:8000` and select **Schedule**. The packaged fixture inclu
 
 ## Configure live read-only access
 
+### Guided setup
+
+Mission Control can guide the connection-specific part of this process after you
+have an authorized-user OAuth JSON file. Give the service a configuration
+fragment directory, then run the separate loopback setup host:
+
+```sh
+mkdir -p ./config.d
+mcctl --config ./mission-control.toml --config-dir ./config.d \
+  setup google-calendar --credential-dir ./mission-control.credentials
+```
+
+Open the private URL printed in the terminal. The one-time token is carried in
+the URL fragment, claimed once by the local page, and removed from the address
+bar. The browser sends the selected file only to the loopback setup process; it
+receives an opaque handle rather than a server path or OAuth value. The wizard
+tests the credential, discovers calendars and task lists, distinguishes
+defaults/all/selected/disabled policies, offers the existing workspace people
+for attribution, and shows a review step. Core then runs the same generated
+configuration validator used at daemon startup.
+
+On save, imported credentials are stored as mode-0600 files beneath a mode-0700
+directory and the wizard atomically writes only
+`config.d/90-mission-control-setup--google-calendar.toml`. It refuses to overwrite an
+operator-authored file and stops if the input configuration changed during the
+session. Restart the ordinary service with the same `--config` and
+`--config-dir` arguments. `mctrld` itself never exposes these write endpoints.
+
+Declaratively managed deployments can use
+`--export-only --managed-fragment candidate.toml`. Export mode does not copy
+uploaded secrets or apply/restart the
+service; a live export must already refer to an operator-managed credential.
+
+### Manual setup
+
 1. Create a Google Cloud project and configure its OAuth consent screen.
 2. Enable the Google Calendar API and Google Tasks API.
 3. Create an OAuth client and authorize the intended Google account out of band with exactly these scopes:
