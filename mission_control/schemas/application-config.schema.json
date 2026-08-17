@@ -1,0 +1,138 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#CredentialReference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                }
+            },
+            "required": [
+                "file"
+            ]
+        },
+        "#JSONValue": {
+            "anyOf": [
+                {
+                    "type": "boolean"
+                },
+                {
+                    "type": "number"
+                },
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                }
+            ]
+        },
+        "#PluginConfiguration": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "credentials": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23CredentialReference"
+                    },
+                    "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                    }
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "settings": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                }
+            },
+            "required": [
+                "enabled"
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "database": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                }
+            }
+        },
+        "demo": {
+            "type": "boolean"
+        },
+        "http": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "host": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "port": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 65535,
+                            "minimum": 1
+                        }
+                    ]
+                }
+            }
+        },
+        "plugin_roots": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "not": {
+                    "pattern": "^\\s*$"
+                }
+            }
+        },
+        "plugins": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/$defs/%23PluginConfiguration"
+            },
+            "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+            }
+        },
+        "schema_version": {
+            "const": "mission-control.config/v1"
+        }
+    }
+}

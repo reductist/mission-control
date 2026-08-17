@@ -174,6 +174,13 @@ UI contributions are declarative manifests that reference approved extension poi
 
 UI manifests declare required API capabilities and permissions. An unavailable or failed plugin must not prevent unrelated application UI from loading.
 
+The web application is the primary and reference renderer, but UI contribution
+documents are renderer-neutral. They describe data, semantic presentation roles,
+affordances, form controls, validation, and navigation intent—not HTML, CSS
+selectors, DOM events, or executable browser code. A terminal UI may render the
+same contribution differently while preserving capability, validation, and
+command semantics.
+
 ## Authorization interface
 
 Every contribution declares its required permissions. Core evaluates authorization before dispatching to plugin code. Plugins may perform narrower checks but may not bypass or weaken core authorization.

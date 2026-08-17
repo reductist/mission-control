@@ -1,0 +1,9 @@
+{
+  "schema_version": "mission-control.config/v1",
+  "plugins": {
+    "google": {
+      "enabled": true,
+      "unexpected": true
+    }
+  }
+}

@@ -32,7 +32,8 @@ In summary:
 4. Converge direct and NixOS configuration, move accepted showcase behavior into
    the canonical service, and remove the port-8001 showcase service.
 5. Replace the ad-hoc dashboard response and core-specific task/UI paths with typed
-   workspace, creation-form, and declarative UI contracts.
+   workspace, creation-form, and declarative renderer-neutral UI contracts. The
+   web UI remains the reference renderer while fixtures prove future TUI use.
 6. Review real-data UX mockups and implement the compact Schedule and summary
    Dashboard experience.
 7. Add artifact storage and attachment links, followed by tags, saved views, and

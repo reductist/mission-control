@@ -2,9 +2,13 @@
 
 package plugin
 
-import "strings"
+import (
+	common "mission-control.dev/schema/common"
+	"strings"
+)
 
 #Identifier: string & =~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+#CredentialName: common.#CredentialName
 
 #StandardEntityCapability:
 	"entity.annotate" |
@@ -57,9 +61,30 @@ import "strings"
 	capabilities!: [...#Capability]
 	runtime?: #PluginRuntime
 	permissions?: [...#Permission]
-	credentials?: [#Identifier]:  #CredentialRegistration
-	entity_types?: [#Identifier]: #EntityTypeRegistration
+	credentials?: {
+		[string]: #CredentialRegistration
+		[!~common.#CredentialNamePattern]: _|_("invalid credential name")
+	}
+	entity_types?: {
+		[string]: #EntityTypeRegistration
+		[!~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"]: _|_("invalid entity type")
+	}
 	arguments?: [string]:         #ArgumentDefinition
+}
+
+// See config.#ApplicationJSONSchemaOverlay. CUE 0.16 requires the same
+// CUE-owned overlay for dynamic-map key constraints in generated JSON Schema.
+#PluginRegistrationJSONSchemaOverlay: {
+	properties: {
+		credentials: propertyNames: {
+			type:    "string"
+			pattern: common.#CredentialNamePattern
+		}
+		entity_types: propertyNames: {
+			type:    "string"
+			pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+		}
+	}
 }
 
 #Capability:

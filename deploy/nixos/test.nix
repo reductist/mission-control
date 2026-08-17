@@ -53,6 +53,9 @@ pkgs.testers.nixosTest {
     machine.succeed(
       "systemctl show mission-control.service --property=DynamicUser --value | grep -qx yes"
     )
+    machine.succeed(
+      "systemctl show mission-control.service --property=ExecStart --value | grep -q -- '--config'"
+    )
     machine.succeed("test -f /var/lib/mission-control/mission-control.db")
 
     credentials.start()

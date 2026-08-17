@@ -756,7 +756,7 @@ function renderHouse() {
 function renderYard() {
   const entries = landscapeEntries();
   if (!entries.length) {
-    renderNoDemo("Yard planning", "Start mctrld with --plugin landscape to load the Yard workspace.");
+    renderNoDemo("Yard planning", "Enable the landscape plugin in Mission Control configuration to load the Yard workspace.");
     return;
   }
   const initiatives = entries.filter((entry) => entry.kind === "initiative");

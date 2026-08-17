@@ -1,0 +1,14 @@
+{
+  "schema_version": "mission-control.config/v1",
+  "database": {"path": "/var/lib/mission-control/mission-control.db"},
+  "http": {"host": "127.0.0.1", "port": 8000},
+  "demo": false,
+  "plugin_roots": [],
+  "plugins": {
+    "google": {
+      "enabled": true,
+      "settings": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+    },
+    "landscape": {"enabled": false}
+  }
+}

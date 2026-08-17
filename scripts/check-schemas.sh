@@ -2,9 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GENERATED_DIR="./schema/generated"
+GENERATED_DIR="$ROOT_DIR/schema/generated"
 PLUGIN_GENERATED="$GENERATED_DIR/plugin-registration.runtime-check.schema.json"
-PLUGIN_RUNTIME="./mission_control/schemas/plugin-registration.schema.json"
+PLUGIN_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-registration.schema.json"
+PLUGIN_RAW="$GENERATED_DIR/plugin-registration.raw.schema.json"
+PLUGIN_OVERLAY="$GENERATED_DIR/plugin-registration.schema-overlay.json"
 AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
 AGENDA_QUERY_GENERATED="$GENERATED_DIR/agenda-query.runtime-check.schema.json"
@@ -17,14 +19,27 @@ CLOSED_ITEMS_GENERATED="$GENERATED_DIR/closed-items-contribution.runtime-check.s
 CLOSED_ITEMS_RUNTIME="./mission_control/schemas/closed-items-contribution.schema.json"
 ENTITY_DETAIL_GENERATED="$GENERATED_DIR/entity-detail.runtime-check.schema.json"
 ENTITY_DETAIL_RUNTIME="./mission_control/schemas/entity-detail.schema.json"
+APPLICATION_CONFIG_GENERATED="$GENERATED_DIR/application-config.runtime-check.schema.json"
+APPLICATION_CONFIG_RUNTIME="$ROOT_DIR/mission_control/schemas/application-config.schema.json"
+APPLICATION_CONFIG_RAW="$GENERATED_DIR/application-config.raw.schema.json"
+APPLICATION_CONFIG_OVERLAY="$GENERATED_DIR/application-config.schema-overlay.json"
+APPLICATION_DEFAULTS_GENERATED="$GENERATED_DIR/application-config.defaults.runtime-check.json"
+APPLICATION_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/schemas/application-config.defaults.json"
 
 cd "$ROOT_DIR"
 mkdir -p "$GENERATED_DIR"
-trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED" "$CLOSED_ITEMS_GENERATED" "$ENTITY_DETAIL_GENERATED"' EXIT
+trap 'rm -f "$PLUGIN_GENERATED" "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED" "$CLOSED_ITEMS_GENERATED" "$ENTITY_DETAIL_GENERATED" "$APPLICATION_CONFIG_GENERATED" "$APPLICATION_CONFIG_RAW" "$APPLICATION_CONFIG_OVERLAY" "$APPLICATION_DEFAULTS_GENERATED"' EXIT
 
-cue def --force --out jsonschema -e '#PluginRegistration' \
-  -o "$PLUGIN_GENERATED" \
-  ./schema/plugin
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#PluginRegistration' \
+    -o "$PLUGIN_RAW" \
+    ./plugin
+  cue export -e '#PluginRegistrationJSONSchemaOverlay' \
+    -o "$PLUGIN_OVERLAY" \
+    ./plugin
+)
+python ./scripts/merge-json.py "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$PLUGIN_GENERATED"
 cue def --force --out jsonschema -e '#AgendaContribution' \
   -o "$AGENDA_GENERATED" \
   ./schema/agenda
@@ -43,6 +58,25 @@ cue def --force --out jsonschema -e '#ClosedItemsContribution' \
 cue def --force --out jsonschema -e '#EntityDetail' \
   -o "$ENTITY_DETAIL_GENERATED" \
   ./schema/entity-detail
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#ApplicationConfig' \
+    -o "$APPLICATION_CONFIG_RAW" \
+    ./config
+  cue export -e '#ApplicationJSONSchemaOverlay' \
+    -o "$APPLICATION_CONFIG_OVERLAY" \
+    ./config
+)
+python ./scripts/merge-json.py \
+  "$APPLICATION_CONFIG_RAW" \
+  "$APPLICATION_CONFIG_OVERLAY" \
+  "$APPLICATION_CONFIG_GENERATED"
+(
+  cd ./schema
+  cue export -e '#ApplicationDefaults' \
+    -o "$APPLICATION_DEFAULTS_GENERATED" \
+    ./config
+)
 
 compare_schema() {
   local generated="$1"
@@ -79,6 +113,8 @@ compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
 compare_schema "$COMMAND_RESULT_GENERATED" "$COMMAND_RESULT_RUNTIME" "command result"
 compare_schema "$CLOSED_ITEMS_GENERATED" "$CLOSED_ITEMS_RUNTIME" "closed items contribution"
 compare_schema "$ENTITY_DETAIL_GENERATED" "$ENTITY_DETAIL_RUNTIME" "entity detail"
+compare_schema "$APPLICATION_CONFIG_GENERATED" "$APPLICATION_CONFIG_RUNTIME" "application config"
+compare_schema "$APPLICATION_DEFAULTS_GENERATED" "$APPLICATION_DEFAULTS_RUNTIME" "application defaults"
 
 validate_success() {
   local definition="$1"
@@ -86,8 +122,32 @@ validate_success() {
   local generated_schema="$3"
   local fixture="$4"
 
-  cue vet -c -d "$definition" "$cue_path" "$fixture"
-  cue vet -c "$generated_schema" "$fixture"
+  if [[ "$cue_path" == ./schema/plugin || "$cue_path" == ./schema/config ]]; then
+    (
+      cd ./schema
+      cue vet -c -d "$definition" \
+        "./${cue_path#./schema/}" "$ROOT_DIR/${fixture#./}"
+    )
+  else
+    cue vet -c -d "$definition" "$cue_path" "$fixture"
+  fi
+  python - "$generated_schema" "$fixture" <<'PY'
+import json
+import sys
+
+from jsonschema import Draft202012Validator, FormatChecker
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    schema = json.load(source)
+with open(sys.argv[2], encoding="utf-8") as source:
+    document = json.load(source)
+errors = list(
+    Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(document)
+)
+if errors:
+    print(f"generated runtime schema rejected {sys.argv[2]}: {errors[0].message}")
+    raise SystemExit(1)
+PY
 }
 
 validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
@@ -119,6 +179,8 @@ validate_success '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS
   ./schema/examples/valid-landscape-closed-items.json
 validate_success '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/valid-landscape-entity-detail.json
+validate_success '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/valid-application-config.json
 
 validate_cue_success() {
   local definition="$1"
@@ -147,15 +209,36 @@ expect_failure() {
   local generated_schema="$3"
   local fixture="$4"
 
-  if cue vet -c -d "$definition" "$cue_path" "$fixture" >/dev/null 2>&1; then
+  if [[ "$cue_path" == ./schema/plugin || "$cue_path" == ./schema/config ]]; then
+    if (
+      cd ./schema
+      cue vet -c -d "$definition" \
+        "./${cue_path#./schema/}" "$ROOT_DIR/${fixture#./}"
+    ) >/dev/null 2>&1; then
+      echo "expected direct CUE validation to fail: $fixture" >&2
+      exit 1
+    fi
+  elif cue vet -c -d "$definition" "$cue_path" "$fixture" >/dev/null 2>&1; then
     echo "expected direct CUE validation to fail: $fixture" >&2
     exit 1
   fi
 
-  if cue vet -c "$generated_schema" "$fixture" >/dev/null 2>&1; then
-    echo "expected generated JSON Schema validation to fail: $fixture" >&2
-    exit 1
-  fi
+  python - "$generated_schema" "$fixture" <<'PY'
+import json
+import sys
+
+from jsonschema import Draft202012Validator, FormatChecker
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    schema = json.load(source)
+with open(sys.argv[2], encoding="utf-8") as source:
+    document = json.load(source)
+if not list(
+    Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(document)
+):
+    print(f"expected generated JSON Schema validation to fail: {sys.argv[2]}")
+    raise SystemExit(1)
+PY
 }
 
 for fixture in \
@@ -166,6 +249,8 @@ for fixture in \
   ./schema/examples/invalid-default-type.json; do
   expect_failure '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" "$fixture"
 done
+expect_failure '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
+  ./schema/examples/invalid-plugin-credential-name.json
 
 expect_failure '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
   ./schema/examples/invalid-command-key.json
@@ -175,6 +260,14 @@ expect_failure '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_G
   ./schema/examples/invalid-closed-item-key.json
 expect_failure '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/invalid-entity-detail-key.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-config.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-plugin-block.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-plugin-id.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-credential-name.json
 
 expect_cue_failure() {
   local definition="$1"

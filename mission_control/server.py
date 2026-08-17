@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import os
 import re
 import secrets
 from collections.abc import Iterable
@@ -31,6 +30,11 @@ from mission_control.annotations import (
     AnnotationCommandHandler,
     AnnotationLifecycleCommandHandler,
     AnnotationRepository,
+)
+from mission_control.application_config import (
+    ApplicationConfigError,
+    load_application_config,
+    prepare_application_plugins,
 )
 from mission_control.commands import (
     CommandContext,
@@ -58,10 +62,8 @@ from mission_control.entity_details import (
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_runtime import PluginJobSupervisor
 from mission_control.plugin_lifecycle import (
-    PluginLifecycleError,
     PreparedAgendaPlugin,
     activate_agenda_plugins_isolated,
-    prepare_agenda_plugins,
 )
 from mission_control.plugins import (
     EntityCapability,
@@ -753,53 +755,38 @@ def _web_resource(name: str):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mctrld")
     parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="read the canonical TOML application configuration",
+    )
+    parser.add_argument(
+        "--config-dir",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="merge lexically ordered *.toml fragments from PATH; may be repeated",
+    )
+    parser.add_argument(
         "--database",
-        default=os.environ.get("MC_DATABASE", "mission-control.db"),
-        help="SQLite database path (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured SQLite database path",
     )
     parser.add_argument(
         "--host",
-        default=os.environ.get("MC_HOST", "127.0.0.1"),
-        help="listen address (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured listen address",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("MC_PORT", "8000")),
-        help="listen port (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured listen port",
     )
     parser.add_argument(
         "--demo",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="load the synthetic House fixture and seed its example task",
-    )
-    parser.add_argument(
-        "--plugin",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID",
-        help="load a bundled provider by its manifest ID; may be repeated",
-    )
-    parser.add_argument(
-        "--plugin-root",
-        action="append",
-        default=[],
-        metavar="PATH",
-        help="discover additional plugin manifests/resources below PATH; may be repeated",
-    )
-    parser.add_argument(
-        "--plugin-settings",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID=PATH",
-        help="read one plugin's non-secret JSON settings; may be repeated",
-    )
-    parser.add_argument(
-        "--plugin-credential",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID.NAME=PATH",
-        help="provide one named credential file to a plugin; may be repeated",
     )
     return parser
 
@@ -807,46 +794,35 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    overrides: dict[str, object] = {}
+    if hasattr(args, "database"):
+        overrides["database"] = {"path": args.database}
+    http: dict[str, object] = {}
+    if hasattr(args, "host"):
+        http["host"] = args.host
+    if hasattr(args, "port"):
+        http["port"] = args.port
+    if http:
+        overrides["http"] = http
+    if hasattr(args, "demo"):
+        overrides["demo"] = args.demo
     try:
-        configurations = _plugin_settings(args.plugin_settings)
-        credentials = _plugin_credentials(args.plugin_credential)
-        selected = set(args.plugin)
-        unexpected = sorted((set(configurations) | set(credentials)) - selected)
-        if unexpected:
-            raise ValueError(
-                "configuration supplied for unselected plugins: "
-                + ", ".join(unexpected)
-            )
-        if len(selected) != len(args.plugin):
-            raise ValueError("plugin selected more than once")
-    except (OSError, ValueError) as error:
+        snapshot = load_application_config(
+            base_path=args.config,
+            fragment_dirs=args.config_dir,
+            overrides=overrides,
+        )
+        builtin_plugins = prepare_application_plugins(snapshot)
+    except ApplicationConfigError as error:
         parser.error(str(error))
-    builtin_plugins: list[PreparedAgendaPlugin] = []
-    plugin_failures: dict[str, tuple[str, str]] = {}
-    for plugin_id in args.plugin:
-        try:
-            builtin_plugins.extend(
-                prepare_agenda_plugins(
-                    (plugin_id,),
-                    roots=args.plugin_root,
-                    configurations=configurations,
-                    credentials=credentials,
-                )
-            )
-        except (PluginLifecycleError, OSError, ValueError):
-            plugin_failures[plugin_id] = (
-                "preparation-failed",
-                "Plugin validation failed; its contributions are unavailable.",
-            )
     application = MissionControlApplication(
-        Database(Path(args.database)),
-        demo=args.demo,
+        Database(Path(snapshot.database_path)),
+        demo=snapshot.demo,
         builtin_plugins=builtin_plugins,
-        plugin_failures=plugin_failures,
     )
-    server = build_server(application, args.host, args.port)
+    server = build_server(application, snapshot.host, snapshot.port)
     host, port = server.server_address[:2]
-    showcase = "house showcase enabled" if args.demo else "operational workspace"
+    showcase = "house showcase enabled" if snapshot.demo else "operational workspace"
     print(
         f"Mission Control {__version__} ({showcase}) listening on http://{host}:{port}"
     )
@@ -863,49 +839,6 @@ def main(argv: list[str] | None = None) -> int:
         server.server_close()
         application.stop()
     return 0
-
-
-def _plugin_settings(values: Iterable[str]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for value in values:
-        plugin_id, path = _assignment(value, "--plugin-settings")
-        if plugin_id in result:
-            raise ValueError(f"plugin settings supplied more than once: {plugin_id}")
-        try:
-            result[plugin_id] = json.loads(Path(path).read_text(encoding="utf-8"))
-        except json.JSONDecodeError as error:
-            raise ValueError(
-                f"{plugin_id}: invalid settings JSON at line {error.lineno}, "
-                f"column {error.colno}"
-            ) from error
-    return result
-
-
-def _plugin_credentials(values: Iterable[str]) -> dict[str, dict[str, str]]:
-    result: dict[str, dict[str, str]] = {}
-    for value in values:
-        identity, path = _assignment(value, "--plugin-credential")
-        if "." not in identity:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_id, name = identity.split(".", 1)
-        if not plugin_id or not name:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_credentials = result.setdefault(plugin_id, {})
-        if name in plugin_credentials:
-            raise ValueError(
-                f"plugin credential supplied more than once: {plugin_id}.{name}"
-            )
-        plugin_credentials[name] = path
-    return result
-
-
-def _assignment(value: str, option: str) -> tuple[str, str]:
-    if "=" not in value:
-        raise ValueError(f"{option} must use NAME=PATH")
-    name, path = value.split("=", 1)
-    if not name or not path:
-        raise ValueError(f"{option} must use NAME=PATH")
-    return name, path
 
 
 if __name__ == "__main__":

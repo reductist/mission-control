@@ -33,14 +33,24 @@ translates Mission Control changes into Google API writes.
 
 ## Try the synthetic wall view
 
-No Google account or secret is needed:
+No Google account or secret is needed. Create `mission-control-demo.toml`:
+
+```toml
+schema_version = "mission-control.config/v1"
+demo = true
+[database]
+path = "mission-control-demo.db"
+[plugins.google]
+enabled = true
+[plugins.google.settings]
+mode = "demo"
+demo_anchor_date = "2026-08-14"
+[plugins.landscape]
+enabled = true
+```
 
 ```sh
-mctrld --database ./mission-control-demo.db \
-  --demo \
-  --plugin google \
-  --plugin-settings google=./mission_control/builtin_plugins/google/demo-settings.json \
-  --plugin landscape
+mctrld --config ./mission-control-demo.toml
 ```
 
 Open `http://127.0.0.1:8000` and select **Schedule**. The packaged fixture includes events in New York and Zürich offsets, an all-day Switzerland trip, an appointment, Tasks, and Reminders.
@@ -68,30 +78,35 @@ Open `http://127.0.0.1:8000` and select **Schedule**. The packaged fixture inclu
 
 On POSIX systems, Mission Control rejects files accessible by group or other users. It refreshes access tokens in memory and never writes the client secret, refresh token, or access token to SQLite.
 
-5. Create a non-secret settings file, for example:
+5. Create the canonical non-secret application configuration, for example
+   `mission-control.toml`:
 
-```json
-{
-  "mode": "live",
-  "calendar_ids": [],
-  "task_list_ids": [],
-  "lookback_days": 42,
-  "lookahead_days": 42,
-  "sync_interval_seconds": 300,
-  "request_timeout_seconds": 15
-}
+```toml
+schema_version = "mission-control.config/v1"
+[database]
+path = "mission-control.db"
+[plugins.google]
+enabled = true
+[plugins.google.credentials.oauth]
+file = "/run/secrets/mission-control-google-oauth.json"
+[plugins.google.settings]
+mode = "live"
+calendar_ids = []
+task_list_ids = []
+lookback_days = 42
+lookahead_days = 42
+sync_interval_seconds = 300
+request_timeout_seconds = 15
 ```
 
 Empty calendar IDs select the primary and Google-selected calendars. Empty task-list IDs select every available task list. Explicit IDs limit either set.
 
-6. Start the daemon with separate settings and credential references:
+6. Validate and start the daemon. Configuration stores only the credential file
+   reference, never its contents:
 
 ```sh
-mctrld \
-  --database ./mission-control.db \
-  --plugin google \
-  --plugin-settings google=./google-settings.json \
-  --plugin-credential google.oauth=/run/secrets/mission-control-google-oauth.json
+mcctl config validate ./mission-control.toml
+mctrld --config ./mission-control.toml
 ```
 
 The first live refresh begins after application initialization. Calendar pages use a bounded moving window sized to cover the current month view by default; Tasks pages are fully polled because the Tasks API does not expose a compatible sync token. A source replaces its cached collection only after every page and resource validates. Other sources and the last good cache remain readable after transient failures. The plugin fingerprints the OAuth authorization without persisting a recoverable credential and clears cached imports before switching between fixture/live modes or authorizations, preventing one source's rows from appearing under another. If Google reports that authorization is no longer valid, Mission Control marks the provider `reconnect-required` and erases imported Google cache data rather than retaining private records after revocation.

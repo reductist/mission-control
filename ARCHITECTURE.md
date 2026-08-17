@@ -92,6 +92,13 @@ The interface catalog is defined in `INTERFACES.md`. At minimum, the public API 
 
 The source of truth for these contracts should eventually be machine-readable and language-agnostic. CUE is the canonical public contract language, with generated JSON Schema, validation artifacts, and future reference documentation tracked in #3.
 
+The web application is the primary and reference user interface, but it is not
+the definition of a view. Workspace snapshots, affordances, setup actions, form
+descriptors, and declarative plugin contributions remain transport-neutral. A
+future terminal UI must be able to consume those same contracts without importing
+web modules or reimplementing plugin semantics; renderers own layout and interaction
+appropriate to their medium.
+
 ## Isolation guarantees
 
 The architecture should preserve these properties:

@@ -77,6 +77,8 @@ actions such as `validate`, `authorize`, `discover`, and `test`. Core owns setup
 sessions, draft configuration, action routing, redacted rendering, and commit;
 the plugin owns provider-specific authorization, discovery, and remediation.
 Responses are data rendered by core, never arbitrary plugin JavaScript.
+The web wizard is the reference renderer for those documents; the same setup
+actions remain usable by `mcctl` or a future terminal UI.
 
 Credential handles are scoped by plugin ID, connection ID, and credential name.
 Configuration contains only the handle/reference. In a directly managed install,
@@ -213,7 +215,9 @@ evidence shows it should be split further.
 10. Move Tasks through the public plugin lifecycle and add a typed creation/form
    contract before enriching task creation.
 11. Define declarative UI contributions and extract or retire prototype-specific
-    navigation and renderers.
+    navigation and renderers. Contributions describe transport-neutral view data,
+    affordances, and forms rather than HTML or browser code, preserving a future
+    TUI over the same contracts.
 12. Review UX mockups using real typed data, then implement compact schedule filters
     and the higher-level dashboard.
 13. Add artifact storage/link contracts and secure image/document upload.

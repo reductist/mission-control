@@ -1,0 +1,6 @@
+{
+  "schema_version": "mission-control.config/v1",
+  "http": {"host": "127.0.0.1", "port": 70000},
+  "plugins": {},
+  "unexpected": true
+}

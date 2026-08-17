@@ -117,6 +117,80 @@
                 "health"
             ]
         },
+        "#CredentialCondition": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "argument": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "equals": {
+                    "anyOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "argument",
+                "equals"
+            ]
+        },
+        "#CredentialRegistration": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "required_when": {
+                    "$ref": "#/$defs/%23CredentialCondition"
+                }
+            }
+        },
+        "#EntityCapability": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/%23StandardEntityCapability"
+                },
+                {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*\\.[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                }
+            ]
+        },
+        "#EntityTypeRegistration": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23EntityCapability"
+                    }
+                }
+            },
+            "required": [
+                "capabilities"
+            ]
+        },
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
         "#IntegerArgument": {
             "type": "object",
             "additionalProperties": false,
@@ -244,6 +318,19 @@
                 "entrypoint"
             ]
         },
+        "#StandardEntityCapability": {
+            "enum": [
+                "entity.annotate",
+                "entity.attach",
+                "activity.read",
+                "lifecycle.complete",
+                "lifecycle.reopen",
+                "lifecycle.acknowledge",
+                "lifecycle.dismiss",
+                "entity.edit",
+                "entity.delete"
+            ]
+        },
         "#StringArgument": {
             "type": "object",
             "additionalProperties": false,
@@ -315,11 +402,23 @@
         },
         "credentials": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": {
+                "$ref": "#/$defs/%23CredentialRegistration"
+            },
+            "propertyNames": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            }
         },
         "entity_types": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": {
+                "$ref": "#/$defs/%23EntityTypeRegistration"
+            },
+            "propertyNames": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            }
         },
         "id": {
             "type": "string",

@@ -23,3 +23,17 @@ Favor plugin-author simplicity and small, enforceable contracts over preserving
 an earlier design or accumulating compatibility edge cases. During the
 pre-release phase, breaking changes are acceptable when they produce a cleaner
 schema and migration path.
+
+Treat the web UI as Mission Control's primary and reference interface, not as the
+contract itself. Keep shared snapshots, affordances, setup actions, forms, and
+plugin UI contributions transport-neutral so a future TUI can use them without
+depending on DOM structures, browser code, or duplicated plugin semantics.
+
+## Product communication
+
+Lead user-facing documentation with the human outcome: Mission Control absorbs
+the sharp edges and interface churn of many tools into calm, consistent controls
+that reduce cognitive load and required attention. Keep the README approachable,
+personal, and task-oriented for unfamiliar users. Move dense contract terminology
+and contributor design detail into clearly linked reference documents rather than
+making it the product introduction.

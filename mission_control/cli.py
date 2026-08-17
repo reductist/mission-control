@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from collections.abc import Iterable
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,12 +13,16 @@ from rich.console import Console
 
 from mission_control import __version__
 from mission_control.agenda import aggregate_agenda, agenda_to_list, project_core_tasks
+from mission_control.application_config import (
+    ApplicationConfigError,
+    load_application_config,
+    prepare_application_plugins,
+)
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_lifecycle import (
     PluginLifecycleError,
     activate_agenda_plugins,
-    prepare_agenda_plugins,
 )
 from mission_control.plugins import (
     PluginDiscoveryError,
@@ -40,15 +42,55 @@ OUTPUT_FORMATS = ("json", "table")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mcctl")
     parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="read the canonical TOML application configuration",
+    )
+    parser.add_argument(
+        "--config-dir",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="merge lexically ordered *.toml fragments from PATH; may be repeated",
+    )
+    parser.add_argument(
         "--database",
-        default=os.environ.get("MC_DATABASE", "mission-control.db"),
-        help="SQLite database path (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured SQLite database path",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("version", help="print the installed version")
     subcommands.add_parser("init", help="initialize or migrate the database")
     subcommands.add_parser("doctor", help="check database readiness")
+
+    config = subcommands.add_parser("config", help="inspect application configuration")
+    config_commands = config.add_subparsers(dest="config_command", required=True)
+    for name, help_text in (
+        ("validate", "validate configuration and enabled plugin preflight"),
+        ("effective", "render the redacted effective configuration"),
+    ):
+        command = config_commands.add_parser(name, help=help_text)
+        command.add_argument("path", help="base TOML configuration path")
+        command.add_argument(
+            "--fragment-dir",
+            action="append",
+            default=[],
+            metavar="PATH",
+            help="merge lexically ordered *.toml fragments from PATH",
+        )
+    explain = config_commands.add_parser(
+        "explain", help="show a value and the layers that assigned it"
+    )
+    explain.add_argument("path", help="base TOML configuration path")
+    explain.add_argument("pointer", help="effective value as an RFC 6901 JSON Pointer")
+    explain.add_argument(
+        "--fragment-dir",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="merge lexically ordered *.toml fragments from PATH",
+    )
 
     task = subcommands.add_parser("task", help="manage tasks")
     task_commands = task.add_subparsers(dest="task_command", required=True)
@@ -123,34 +165,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="json",
         help="output format (default: %(default)s)",
     )
-    agenda_list.add_argument(
-        "--plugin",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID",
-        help="include an agenda provider by manifest ID; may be repeated",
-    )
-    agenda_list.add_argument(
-        "--plugin-root",
-        action="append",
-        default=[],
-        metavar="PATH",
-        help="discover additional plugin manifests/resources below PATH; may be repeated",
-    )
-    agenda_list.add_argument(
-        "--plugin-settings",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID=PATH",
-        help="read one plugin's non-secret JSON settings; may be repeated",
-    )
-    agenda_list.add_argument(
-        "--plugin-credential",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID.NAME=PATH",
-        help="provide one named credential file to a plugin; may be repeated",
-    )
 
     render = subcommands.add_parser("render", help="render read models")
     render_commands = render.add_subparsers(dest="render_command", required=True)
@@ -191,7 +205,6 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     stdout = Console(file=sys.stdout, highlight=False)
     stderr = Console(file=sys.stderr, highlight=False)
-    database = Database(Path(args.database))
 
     if args.command == "version":
         print(__version__)
@@ -219,20 +232,46 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(catalog_to_list(catalog), sort_keys=True))
         return 0
 
-    prepared_plugins = ()
-    if args.command == "agenda" and args.agenda_command == "list":
+    if args.command == "config":
         try:
-            configurations = _plugin_settings(args.plugin_settings)
-            credentials = _plugin_credentials(args.plugin_credential)
-            prepared_plugins = prepare_agenda_plugins(
-                args.plugin,
-                roots=args.plugin_root,
-                configurations=configurations,
-                credentials=credentials,
+            snapshot = load_application_config(
+                base_path=args.path,
+                fragment_dirs=args.fragment_dir,
             )
-        except (OSError, PluginLifecycleError, ValueError) as error:
+            prepare_application_plugins(snapshot)
+            if args.config_command == "validate":
+                print(
+                    json.dumps(
+                        {
+                            "schema_version": snapshot.to_dict()["schema_version"],
+                            "valid": True,
+                        },
+                        sort_keys=True,
+                    )
+                )
+            elif args.config_command == "effective":
+                print(json.dumps(snapshot.to_dict(redacted=True), sort_keys=True))
+            else:
+                print(json.dumps(asdict(snapshot.explain(args.pointer)), sort_keys=True))
+        except ApplicationConfigError as error:
             stderr.print(f"error: {error}", markup=False)
             return 2
+        return 0
+
+    overrides = (
+        {"database": {"path": args.database}} if hasattr(args, "database") else None
+    )
+    try:
+        snapshot = load_application_config(
+            base_path=args.config,
+            fragment_dirs=args.config_dir,
+            overrides=overrides,
+        )
+        prepared_plugins = prepare_application_plugins(snapshot)
+    except ApplicationConfigError as error:
+        stderr.print(f"error: {error}", markup=False)
+        return 2
+    database = Database(Path(snapshot.database_path))
 
     runner = MigrationRunner(database)
 
@@ -325,44 +364,5 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     raise AssertionError("unreachable command")
-
-
-def _plugin_settings(values: Iterable[str]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for value in values:
-        plugin_id, path = _assignment(value, "--plugin-settings")
-        if plugin_id in result:
-            raise ValueError(f"plugin settings supplied more than once: {plugin_id}")
-        result[plugin_id] = json.loads(Path(path).read_text(encoding="utf-8"))
-    return result
-
-
-def _plugin_credentials(values: Iterable[str]) -> dict[str, dict[str, str]]:
-    result: dict[str, dict[str, str]] = {}
-    for value in values:
-        identity, path = _assignment(value, "--plugin-credential")
-        if "." not in identity:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_id, name = identity.split(".", 1)
-        if not plugin_id or not name:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_credentials = result.setdefault(plugin_id, {})
-        if name in plugin_credentials:
-            raise ValueError(
-                f"plugin credential supplied more than once: {plugin_id}.{name}"
-            )
-        plugin_credentials[name] = path
-    return result
-
-
-def _assignment(value: str, option: str) -> tuple[str, str]:
-    if "=" not in value:
-        raise ValueError(f"{option} must use NAME=PATH")
-    name, path = value.split("=", 1)
-    if not name or not path:
-        raise ValueError(f"{option} must use NAME=PATH")
-    return name, path
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

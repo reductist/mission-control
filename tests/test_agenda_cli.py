@@ -141,17 +141,19 @@ def test_done_core_tasks_are_not_projected(tmp_path, capsys):
 
 def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
     database = tmp_path / "mission-control.db"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+schema_version = "mission-control.config/v1"
+[database]
+path = "{database}"
+[plugins.landscape]
+enabled = true
+""",
+        encoding="utf-8",
+    )
 
-    assert main(
-        [
-            "--database",
-            str(database),
-            "agenda",
-            "list",
-            "--plugin",
-            "landscape",
-        ]
-    ) == 0
+    assert main(["--config", str(config), "agenda", "list"]) == 0
     output = json.loads(capsys.readouterr().out)
 
     assert {entry["source"]["plugin_id"] for entry in output} == {"landscape"}
@@ -164,24 +166,22 @@ def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
 
 def test_cli_accepts_explicit_google_demo_settings(tmp_path, capsys):
     database = tmp_path / "mission-control.db"
-    settings = tmp_path / "google.json"
-    settings.write_text(
-        json.dumps({"mode": "demo", "demo_anchor_date": "2026-08-14"}),
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+schema_version = "mission-control.config/v1"
+[database]
+path = "{database}"
+[plugins.google]
+enabled = true
+[plugins.google.settings]
+mode = "demo"
+demo_anchor_date = "2026-08-14"
+""",
         encoding="utf-8",
     )
 
-    assert main(
-        [
-            "--database",
-            str(database),
-            "agenda",
-            "list",
-            "--plugin",
-            "google",
-            "--plugin-settings",
-            f"google={settings}",
-        ]
-    ) == 0
+    assert main(["--config", str(config), "agenda", "list"]) == 0
     output = json.loads(capsys.readouterr().out)
 
     assert {entry["source"]["plugin_id"] for entry in output} == {"google"}
@@ -191,21 +191,21 @@ def test_cli_accepts_explicit_google_demo_settings(tmp_path, capsys):
     }
 
 
-def test_invalid_provider_selection_does_not_initialize_database(tmp_path, capsys):
+def test_invalid_enabled_provider_does_not_initialize_database(tmp_path, capsys):
     database = tmp_path / "must-not-exist.db"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+schema_version = "mission-control.config/v1"
+[database]
+path = "{database}"
+[plugins.unavailable]
+enabled = true
+""",
+        encoding="utf-8",
+    )
 
-    assert main(
-        [
-            "--database",
-            str(database),
-            "agenda",
-            "list",
-            "--plugin",
-            "landscape",
-            "--plugin",
-            "landscape",
-        ]
-    ) == 2
+    assert main(["--config", str(config), "agenda", "list"]) == 2
 
-    assert "selected more than once" in capsys.readouterr().err
+    assert "unknown agenda plugin 'unavailable'" in capsys.readouterr().err
     assert not database.exists()
