@@ -40,10 +40,10 @@ plugin_roots = ["base"]
 [http]
 host = "127.0.0.2"
 
-[plugins.google]
+[plugins.google-calendar]
 enabled = false
 
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "demo"
 """,
     )
@@ -60,9 +60,9 @@ port = 9000
     _write(
         fragments / "10-google.toml",
         """
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 demo_anchor_date = "2026-08-14"
 """,
     )
@@ -72,7 +72,7 @@ demo_anchor_date = "2026-08-14"
     assert snapshot.host == "127.0.0.2"
     assert snapshot.port == 9000
     assert snapshot.plugin_roots == ("replacement",)
-    assert snapshot.plugin_settings()["google"] == {
+    assert snapshot.plugin_settings()["google-calendar"] == {
         "demo_anchor_date": "2026-08-14",
         "mode": "demo",
     }
@@ -80,7 +80,7 @@ demo_anchor_date = "2026-08-14"
         "defaults",
         str((fragments / "20-http.toml").resolve()),
     )
-    assert snapshot.explain("/plugins/google/enabled").sources == (
+    assert snapshot.explain("/plugins/google-calendar/enabled").sources == (
         str(base.resolve()),
         str((fragments / "10-google.toml").resolve()),
     )
@@ -138,11 +138,11 @@ def test_malformed_toml_is_attributed_to_its_file(tmp_path) -> None:
         ('[http]\nport = 70000\n', "greater than the maximum"),
         ('[plugins.Bad_ID]\nenabled = false\n', "does not match"),
         (
-            '[plugins.google]\nenabled = false\n'
-            '[plugins.google.credentials."oauth:prod"]\nfile = "/run/value"\n',
+            '[plugins.google-calendar]\nenabled = false\n'
+            '[plugins.google-calendar.credentials."oauth:prod"]\nfile = "/run/value"\n',
             "does not match",
         ),
-        ('[plugins.google]\n', "'enabled' is a required property"),
+        ('[plugins.google-calendar]\n', "'enabled' is a required property"),
         ('value = 2026-08-17\n', "date is not a valid JSON configuration value"),
         ('value = inf\n', "non-finite numbers are not valid JSON"),
     ),
@@ -182,12 +182,34 @@ future_field = "preserved"
     }
 
 
+def test_enabled_non_agenda_plugin_uses_capability_neutral_preflight(tmp_path) -> None:
+    reference_root = Path(__file__).parents[1] / "plugins" / "reference"
+    path = _write(
+        tmp_path / "config.toml",
+        f'''
+schema_version = "mission-control.config/v1"
+plugin_roots = ["{reference_root}"]
+[plugins.reference]
+enabled = true
+[plugins.reference.settings]
+message = "hello"
+''',
+    )
+
+    (prepared,) = prepare_application_plugins(
+        load_application_config(base_path=path)
+    )
+
+    assert prepared.registration.plugin_id.value == "reference"
+    assert prepared.configuration.to_dict() == {"message": "hello", "repeat": 1}
+
+
 def test_null_is_not_in_the_portable_toml_configuration_value_set() -> None:
     with pytest.raises(ApplicationConfigError, match="not valid under any"):
         load_application_config(
             overrides={
                 "plugins": {
-                    "google": {
+                    "google-calendar": {
                         "enabled": False,
                         "settings": {"unsupported": None},
                     }
@@ -201,16 +223,16 @@ def test_enabled_plugin_configuration_is_validated_before_activation(tmp_path) -
         tmp_path / "config.toml",
         """
 schema_version = "mission-control.config/v1"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "invalid"
 """,
     )
 
     snapshot = load_application_config(base_path=path)
 
-    with pytest.raises(ApplicationConfigError, match="google: mode"):
+    with pytest.raises(ApplicationConfigError, match=r"google-calendar: .*settings/mode"):
         prepare_application_plugins(snapshot)
 
 
@@ -220,11 +242,11 @@ def test_credential_references_and_sensitive_settings_are_redacted(tmp_path) -> 
         tmp_path / "config.toml",
         f"""
 schema_version = "mission-control.config/v1"
-[plugins.google]
+[plugins.google-calendar]
 enabled = false
-[plugins.google.credentials.oauth]
+[plugins.google-calendar.credentials.oauth]
 file = "{credential}"
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 api_token = "must-not-appear"
 """,
     )
@@ -232,12 +254,12 @@ api_token = "must-not-appear"
     snapshot = load_application_config(base_path=path)
     redacted = snapshot.to_dict(redacted=True)
 
-    assert redacted["plugins"]["google"]["credentials"] == {  # type: ignore[index]
+    assert redacted["plugins"]["google-calendar"]["credentials"] == {  # type: ignore[index]
         "oauth": {"file": "<redacted>"}
     }
-    assert redacted["plugins"]["google"]["settings"] == "<redacted>"  # type: ignore[index]
+    assert redacted["plugins"]["google-calendar"]["settings"] == "<redacted>"  # type: ignore[index]
     assert snapshot.explain(
-        "/plugins/google/credentials/oauth/file"
+        "/plugins/google-calendar/credentials/oauth/file"
     ).value == "<redacted>"
 
 
@@ -271,11 +293,11 @@ def test_enabled_credential_reference_must_be_available(tmp_path) -> None:
         tmp_path / "config.toml",
         f"""
 schema_version = "mission-control.config/v1"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "live"
-[plugins.google.credentials.oauth]
+[plugins.google-calendar.credentials.oauth]
 file = "{missing}"
 """,
     )
@@ -293,11 +315,11 @@ def test_enabled_credential_reference_must_not_be_broadly_readable(tmp_path) -> 
         tmp_path / "config.toml",
         f"""
 schema_version = "mission-control.config/v1"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "live"
-[plugins.google.credentials.oauth]
+[plugins.google-calendar.credentials.oauth]
 file = "{credential}"
 """,
     )

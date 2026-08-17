@@ -39,7 +39,7 @@
           "id": "gcal-ae74fd81e7438ed44de5fad5f03913987ee7b279423233acc9cbe0c42ed8ab9c",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "calendar-event",
             "entity_id": "gcal-ae74fd81e7438ed44de5fad5f03913987ee7b279423233acc9cbe0c42ed8ab9c"
           },

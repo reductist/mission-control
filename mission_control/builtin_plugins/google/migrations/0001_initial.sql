@@ -1,11 +1,11 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE google_schema_migrations (
+CREATE TABLE google_calendar_schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) STRICT;
 
-CREATE TABLE google_collections (
+CREATE TABLE google_calendar_collections (
   collection_key TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('calendar', 'task-list')),
   external_id TEXT NOT NULL,
@@ -18,9 +18,9 @@ CREATE TABLE google_collections (
   UNIQUE(kind, external_id)
 ) STRICT;
 
-CREATE TABLE google_entries (
+CREATE TABLE google_calendar_entries (
   entity_id TEXT PRIMARY KEY,
-  collection_key TEXT NOT NULL REFERENCES google_collections(collection_key) ON DELETE CASCADE,
+  collection_key TEXT NOT NULL REFERENCES google_calendar_collections(collection_key) ON DELETE CASCADE,
   remote_id TEXT NOT NULL,
   entity_type TEXT NOT NULL CHECK (entity_type IN ('calendar-event', 'task')),
   title TEXT NOT NULL CHECK (length(trim(title)) > 0),
@@ -46,10 +46,10 @@ CREATE TABLE google_entries (
   )
 ) STRICT;
 
-CREATE INDEX google_entries_collection_idx
-  ON google_entries(collection_key, entity_type, entity_id);
+CREATE INDEX google_calendar_entries_collection_idx
+  ON google_calendar_entries(collection_key, entity_type, entity_id);
 
-CREATE TABLE google_sync_status (
+CREATE TABLE google_calendar_sync_status (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   last_attempt_at TEXT,
   last_success_at TEXT,
@@ -57,5 +57,5 @@ CREATE TABLE google_sync_status (
   error_detail TEXT
 ) STRICT;
 
-INSERT INTO google_sync_status(singleton) VALUES (1);
-INSERT INTO google_schema_migrations(version) VALUES (1);
+INSERT INTO google_calendar_sync_status(singleton) VALUES (1);
+INSERT INTO google_calendar_schema_migrations(version) VALUES (1);

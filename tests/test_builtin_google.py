@@ -32,9 +32,9 @@ from mission_control.server import MissionControlApplication
 
 def google_plugins():
     return prepare_builtin_agenda_plugins(
-        ("google",),
+        ("google-calendar",),
         configurations={
-            "google": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+            "google-calendar": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
         },
     )
 
@@ -79,7 +79,7 @@ def test_demo_sync_projects_events_tasks_details_and_independent_migration(tmp_p
     application = MissionControlApplication(database, builtin_plugins=google_plugins())
     dashboard = application.dashboard()
     google = [
-        item for item in dashboard["agenda"] if item["source"]["plugin_id"] == "google"
+        item for item in dashboard["agenda"] if item["source"]["plugin_id"] == "google-calendar"
     ]
 
     assert {item["title"] for item in google} >= {
@@ -98,7 +98,7 @@ def test_demo_sync_projects_events_tasks_details_and_independent_migration(tmp_p
     task = next(item for item in google if item["title"] == "Download offline maps")
     assert task["timing"] == {"kind": "due-on", "due_on": "2026-08-15"}
     detail = application.entity_detail(
-        "google", task["source"]["entity_type"], task["source"]["entity_id"]
+        "google-calendar", task["source"]["entity_type"], task["source"]["entity_id"]
     )
     assert detail["title"] == "Download offline maps"
     assert detail["affordances"] == [
@@ -110,17 +110,22 @@ def test_demo_sync_projects_events_tasks_details_and_independent_migration(tmp_p
         assert [
             row[0]
             for row in connection.execute(
-                "SELECT version FROM google_schema_migrations"
+                "SELECT version FROM google_calendar_schema_migrations"
             ).fetchall()
         ] == [1, 2]
-        assert connection.execute("SELECT count(*) FROM google_entries").fetchone()[0] == 8
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM google_calendar_entries"
+            ).fetchone()[0]
+            == 8
+        )
 
     restarted = MissionControlApplication(database, builtin_plugins=google_plugins())
     assert len(
         [
             item
             for item in restarted.dashboard()["agenda"]
-            if item["source"]["plugin_id"] == "google"
+            if item["source"]["plugin_id"] == "google-calendar"
         ]
     ) == 8
 
@@ -132,11 +137,11 @@ def test_generic_lifecycle_adopts_deployed_google_migrations(tmp_path):
 
     (provider,) = activate_builtin_agenda_plugins(database, google_plugins())
 
-    assert provider.plugin_id.value == "google"
+    assert provider.plugin_id.value == "google-calendar"
     with database.connect() as connection:
         adopted = connection.execute(
             "SELECT version FROM plugin_schema_migrations "
-            "WHERE plugin_id = 'google' ORDER BY version"
+            "WHERE plugin_id = 'google-calendar' ORDER BY version"
         ).fetchall()
     assert [row["version"] for row in adopted] == [1, 2]
 
@@ -287,8 +292,8 @@ def test_partial_refresh_retains_last_good_collection_and_reports_degraded(tmp_p
 
 
 def test_live_google_requires_named_oauth_credential(tmp_path):
-    with pytest.raises(BuiltinPluginError, match="required named credentials.*oauth"):
-        prepare_builtin_agenda_plugins(("google",))
+    with pytest.raises(BuiltinPluginError, match=r"credentials/oauth.*required"):
+        prepare_builtin_agenda_plugins(("google-calendar",))
 
 
 def test_reconnect_required_is_actionable_and_erases_private_cache(tmp_path):

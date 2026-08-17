@@ -390,11 +390,11 @@ def prepare_application_plugins(snapshot: ApplicationConfigSnapshot) -> tuple[An
 
     from mission_control.plugin_lifecycle import (  # Imported without plugin entrypoints.
         PluginLifecycleError,
-        prepare_agenda_plugins,
+        prepare_plugins,
     )
 
     try:
-        prepared = prepare_agenda_plugins(
+        prepared = prepare_plugins(
             snapshot.enabled_plugin_ids,
             roots=snapshot.plugin_roots,
             configurations=snapshot.plugin_settings(),

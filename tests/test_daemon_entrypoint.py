@@ -10,8 +10,15 @@ def test_daemon_parser_uses_canonical_command_name() -> None:
     assert build_parser().prog == "mctrld"
 
 
+@pytest.mark.parametrize(
+    "settings",
+    (
+        'mode = "invalid"',
+        'mode = "demo"\ndemo_anchor_date = "2026-02-31"',
+    ),
+)
 def test_invalid_enabled_plugin_configuration_aborts_before_database_or_import(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, settings
 ) -> None:
     database = tmp_path / "mission-control.db"
     config = tmp_path / "config.toml"
@@ -20,10 +27,10 @@ def test_invalid_enabled_plugin_configuration_aborts_before_database_or_import(
 schema_version = "mission-control.config/v1"
 [database]
 path = "{database}"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
-mode = "invalid"
+[plugins.google-calendar.settings]
+{settings}
 [plugins.landscape]
 enabled = true
 """,

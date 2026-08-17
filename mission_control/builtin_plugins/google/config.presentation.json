@@ -1,0 +1,28 @@
+{
+    "schema_version": "mission-control.plugin-config-presentation/v1",
+    "configuration_schema": "mission-control.google-calendar.config/v1",
+    "fields": [
+        {
+            "path": "/settings/mode",
+            "label": "Connection mode",
+            "order": 10,
+            "widget": "select"
+        },
+        {
+            "path": "/credentials/oauth/file",
+            "label": "Google authorization",
+            "order": 20,
+            "widget": "credential-file"
+        },
+        {
+            "path": "/settings/calendar_ids",
+            "label": "Calendars",
+            "order": 30
+        },
+        {
+            "path": "/settings/task_list_ids",
+            "label": "Task lists",
+            "order": 40
+        }
+    ]
+}

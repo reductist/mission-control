@@ -8,16 +8,12 @@ import common "mission-control.dev/schema/common"
 	[string]: #JSONValue
 }
 
-#CredentialReference: close({
-	file!: string & !~"^\\s*$"
-})
-
 #PluginConfiguration: close({
 	enabled!: bool
 	// Settings are owned and validated by the selected plugin's CUE contract.
 	settings?: [string]: #JSONValue
 	credentials?: {
-		[string]: #CredentialReference
+		[string]:                          common.#CredentialReference
 		[!~common.#CredentialNamePattern]: _|_("invalid credential name")
 	}
 })
@@ -34,7 +30,7 @@ import common "mission-control.dev/schema/common"
 	demo?: bool
 	plugin_roots?: [...string & !~"^\\s*$"]
 	plugins?: {
-		[string]: #PluginConfiguration
+		[string]:                    #PluginConfiguration
 		[!~common.#PluginIDPattern]: _|_("invalid plugin ID")
 	}
 })
@@ -48,9 +44,9 @@ import common "mission-control.dev/schema/common"
 		host: "127.0.0.1"
 		port: 8000
 	}
-	demo:         false
+	demo: false
 	plugin_roots: []
-	plugins:      {}
+	plugins: {}
 }
 
 // CUE 0.16's JSON Schema exporter preserves dynamic-map value constraints but

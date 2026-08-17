@@ -172,9 +172,9 @@ def test_cli_accepts_explicit_google_demo_settings(tmp_path, capsys):
 schema_version = "mission-control.config/v1"
 [database]
 path = "{database}"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "demo"
 demo_anchor_date = "2026-08-14"
 """,
@@ -184,7 +184,7 @@ demo_anchor_date = "2026-08-14"
     assert main(["--config", str(config), "agenda", "list"]) == 0
     output = json.loads(capsys.readouterr().out)
 
-    assert {entry["source"]["plugin_id"] for entry in output} == {"google"}
+    assert {entry["source"]["plugin_id"] for entry in output} == {"google-calendar"}
     assert {entry["title"] for entry in output} >= {
         "Switzerland trip",
         "Download offline maps",

@@ -7,6 +7,10 @@ PLUGIN_GENERATED="$GENERATED_DIR/plugin-registration.runtime-check.schema.json"
 PLUGIN_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-registration.schema.json"
 PLUGIN_RAW="$GENERATED_DIR/plugin-registration.raw.schema.json"
 PLUGIN_OVERLAY="$GENERATED_DIR/plugin-registration.schema-overlay.json"
+PLUGIN_DEFAULTS_GENERATED="$GENERATED_DIR/plugin-config-defaults.runtime-check.schema.json"
+PLUGIN_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-config-defaults.schema.json"
+PLUGIN_PRESENTATION_GENERATED="$GENERATED_DIR/plugin-config-presentation.runtime-check.schema.json"
+PLUGIN_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-config-presentation.schema.json"
 AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
 AGENDA_QUERY_GENERATED="$GENERATED_DIR/agenda-query.runtime-check.schema.json"
@@ -25,10 +29,34 @@ APPLICATION_CONFIG_RAW="$GENERATED_DIR/application-config.raw.schema.json"
 APPLICATION_CONFIG_OVERLAY="$GENERATED_DIR/application-config.schema-overlay.json"
 APPLICATION_DEFAULTS_GENERATED="$GENERATED_DIR/application-config.defaults.runtime-check.json"
 APPLICATION_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/schemas/application-config.defaults.json"
+GOOGLE_CONFIG_GENERATED="$GENERATED_DIR/google-config.runtime-check.schema.json"
+GOOGLE_CONFIG_RAW="$GENERATED_DIR/google-config.raw.schema.json"
+GOOGLE_CONFIG_OVERLAY="$GENERATED_DIR/google-config.schema-overlay.json"
+GOOGLE_DEFAULTS_GENERATED="$GENERATED_DIR/google-config.defaults.runtime-check.json"
+GOOGLE_PRESENTATION_GENERATED="$GENERATED_DIR/google-config.presentation.runtime-check.json"
+GOOGLE_CONFIG_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/google/config.schema.json"
+GOOGLE_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/google/config.defaults.json"
+GOOGLE_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/google/config.presentation.json"
+LANDSCAPE_CONFIG_GENERATED="$GENERATED_DIR/landscape-config.runtime-check.schema.json"
+LANDSCAPE_CONFIG_RAW="$GENERATED_DIR/landscape-config.raw.schema.json"
+LANDSCAPE_CONFIG_OVERLAY="$GENERATED_DIR/landscape-config.schema-overlay.json"
+LANDSCAPE_DEFAULTS_GENERATED="$GENERATED_DIR/landscape-config.defaults.runtime-check.json"
+LANDSCAPE_PRESENTATION_GENERATED="$GENERATED_DIR/landscape-config.presentation.runtime-check.json"
+LANDSCAPE_CONFIG_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.schema.json"
+LANDSCAPE_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.defaults.json"
+LANDSCAPE_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.presentation.json"
+REFERENCE_CONFIG_GENERATED="$GENERATED_DIR/reference-config.runtime-check.schema.json"
+REFERENCE_CONFIG_RAW="$GENERATED_DIR/reference-config.raw.schema.json"
+REFERENCE_CONFIG_OVERLAY="$GENERATED_DIR/reference-config.schema-overlay.json"
+REFERENCE_DEFAULTS_GENERATED="$GENERATED_DIR/reference-config.defaults.runtime-check.json"
+REFERENCE_PRESENTATION_GENERATED="$GENERATED_DIR/reference-config.presentation.runtime-check.json"
+REFERENCE_CONFIG_RUNTIME="$ROOT_DIR/plugins/reference/config.schema.json"
+REFERENCE_DEFAULTS_RUNTIME="$ROOT_DIR/plugins/reference/config.defaults.json"
+REFERENCE_PRESENTATION_RUNTIME="$ROOT_DIR/plugins/reference/config.presentation.json"
 
 cd "$ROOT_DIR"
 mkdir -p "$GENERATED_DIR"
-trap 'rm -f "$PLUGIN_GENERATED" "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED" "$CLOSED_ITEMS_GENERATED" "$ENTITY_DETAIL_GENERATED" "$APPLICATION_CONFIG_GENERATED" "$APPLICATION_CONFIG_RAW" "$APPLICATION_CONFIG_OVERLAY" "$APPLICATION_DEFAULTS_GENERATED"' EXIT
+trap 'rm -f "$GENERATED_DIR"/*.runtime-check.* "$GENERATED_DIR"/*.raw.schema.json "$GENERATED_DIR"/*.schema-overlay.json' EXIT
 
 (
   cd ./schema
@@ -40,6 +68,15 @@ trap 'rm -f "$PLUGIN_GENERATED" "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$AGENDA_GENERAT
     ./plugin
 )
 python ./scripts/merge-json.py "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$PLUGIN_GENERATED"
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#ConfigurationDefaults' \
+    -o "$PLUGIN_DEFAULTS_GENERATED" \
+    ./plugin
+  cue def --force --out jsonschema -e '#ConfigurationPresentation' \
+    -o "$PLUGIN_PRESENTATION_GENERATED" \
+    ./plugin
+)
 cue def --force --out jsonschema -e '#AgendaContribution' \
   -o "$AGENDA_GENERATED" \
   ./schema/agenda
@@ -67,6 +104,52 @@ cue def --force --out jsonschema -e '#EntityDetail' \
     -o "$APPLICATION_CONFIG_OVERLAY" \
     ./config
 )
+
+generate_plugin_bundle() {
+  local cue_path="$1"
+  local config_definition="$2"
+  local overlay_definition="$3"
+  local defaults_definition="$4"
+  local presentation_definition="$5"
+  local raw="$6"
+  local overlay="$7"
+  local schema_output="$8"
+  local defaults_output="$9"
+  local presentation_output="${10}"
+
+  if [[ "$cue_path" == ./schema/* ]]; then
+    (
+      cd ./schema
+      cue def --force --out jsonschema -e "$config_definition" -o "$raw" \
+        "./${cue_path#./schema/}"
+      cue export -e "$overlay_definition" -o "$overlay" \
+        "./${cue_path#./schema/}"
+      cue export -e "$defaults_definition" -o "$defaults_output" \
+        "./${cue_path#./schema/}"
+      cue export -e "$presentation_definition" -o "$presentation_output" \
+        "./${cue_path#./schema/}"
+    )
+  else
+    cue def --force --out jsonschema -e "$config_definition" -o "$raw" "$cue_path"
+    cue export -e "$overlay_definition" -o "$overlay" "$cue_path"
+    cue export -e "$defaults_definition" -o "$defaults_output" "$cue_path"
+    cue export -e "$presentation_definition" -o "$presentation_output" "$cue_path"
+  fi
+  python ./scripts/merge-json.py "$raw" "$overlay" "$schema_output"
+}
+
+generate_plugin_bundle ./schema/google '#GoogleConfiguration' \
+  '#GoogleConfigurationJSONSchemaOverlay' '#GoogleConfigurationDefaults' \
+  '#GoogleConfigurationPresentation' "$GOOGLE_CONFIG_RAW" "$GOOGLE_CONFIG_OVERLAY" \
+  "$GOOGLE_CONFIG_GENERATED" "$GOOGLE_DEFAULTS_GENERATED" "$GOOGLE_PRESENTATION_GENERATED"
+generate_plugin_bundle ./schema/landscape '#LandscapeConfiguration' \
+  '#LandscapeConfigurationJSONSchemaOverlay' '#LandscapeConfigurationDefaults' \
+  '#LandscapeConfigurationPresentation' "$LANDSCAPE_CONFIG_RAW" "$LANDSCAPE_CONFIG_OVERLAY" \
+  "$LANDSCAPE_CONFIG_GENERATED" "$LANDSCAPE_DEFAULTS_GENERATED" "$LANDSCAPE_PRESENTATION_GENERATED"
+generate_plugin_bundle ./plugins/reference '#ReferenceConfiguration' \
+  '#ReferenceConfigurationJSONSchemaOverlay' '#ReferenceConfigurationDefaults' \
+  '#ReferenceConfigurationPresentation' "$REFERENCE_CONFIG_RAW" "$REFERENCE_CONFIG_OVERLAY" \
+  "$REFERENCE_CONFIG_GENERATED" "$REFERENCE_DEFAULTS_GENERATED" "$REFERENCE_PRESENTATION_GENERATED"
 python ./scripts/merge-json.py \
   "$APPLICATION_CONFIG_RAW" \
   "$APPLICATION_CONFIG_OVERLAY" \
@@ -107,6 +190,8 @@ PY
 }
 
 compare_schema "$PLUGIN_GENERATED" "$PLUGIN_RUNTIME" "plugin registration"
+compare_schema "$PLUGIN_DEFAULTS_GENERATED" "$PLUGIN_DEFAULTS_RUNTIME" "plugin configuration defaults"
+compare_schema "$PLUGIN_PRESENTATION_GENERATED" "$PLUGIN_PRESENTATION_RUNTIME" "plugin configuration presentation"
 compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
 compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
@@ -115,6 +200,15 @@ compare_schema "$CLOSED_ITEMS_GENERATED" "$CLOSED_ITEMS_RUNTIME" "closed items c
 compare_schema "$ENTITY_DETAIL_GENERATED" "$ENTITY_DETAIL_RUNTIME" "entity detail"
 compare_schema "$APPLICATION_CONFIG_GENERATED" "$APPLICATION_CONFIG_RUNTIME" "application config"
 compare_schema "$APPLICATION_DEFAULTS_GENERATED" "$APPLICATION_DEFAULTS_RUNTIME" "application defaults"
+compare_schema "$GOOGLE_CONFIG_GENERATED" "$GOOGLE_CONFIG_RUNTIME" "Google configuration"
+compare_schema "$GOOGLE_DEFAULTS_GENERATED" "$GOOGLE_DEFAULTS_RUNTIME" "Google configuration defaults"
+compare_schema "$GOOGLE_PRESENTATION_GENERATED" "$GOOGLE_PRESENTATION_RUNTIME" "Google configuration presentation"
+compare_schema "$LANDSCAPE_CONFIG_GENERATED" "$LANDSCAPE_CONFIG_RUNTIME" "Landscape configuration"
+compare_schema "$LANDSCAPE_DEFAULTS_GENERATED" "$LANDSCAPE_DEFAULTS_RUNTIME" "Landscape configuration defaults"
+compare_schema "$LANDSCAPE_PRESENTATION_GENERATED" "$LANDSCAPE_PRESENTATION_RUNTIME" "Landscape configuration presentation"
+compare_schema "$REFERENCE_CONFIG_GENERATED" "$REFERENCE_CONFIG_RUNTIME" "reference configuration"
+compare_schema "$REFERENCE_DEFAULTS_GENERATED" "$REFERENCE_DEFAULTS_RUNTIME" "reference configuration defaults"
+compare_schema "$REFERENCE_PRESENTATION_GENERATED" "$REFERENCE_PRESENTATION_RUNTIME" "reference configuration presentation"
 
 validate_success() {
   local definition="$1"
@@ -122,7 +216,7 @@ validate_success() {
   local generated_schema="$3"
   local fixture="$4"
 
-  if [[ "$cue_path" == ./schema/plugin || "$cue_path" == ./schema/config ]]; then
+  if [[ "$cue_path" == ./schema/* ]]; then
     (
       cd ./schema
       cue vet -c -d "$definition" \
@@ -181,6 +275,8 @@ validate_success '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATE
   ./schema/examples/valid-landscape-entity-detail.json
 validate_success '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
   ./schema/examples/valid-application-config.json
+validate_success '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/valid-demo-config.json
 
 validate_cue_success() {
   local definition="$1"
@@ -195,7 +291,7 @@ validate_cue_success() {
 validate_cue_success '#GoogleRegistration' \
   ../mission_control/builtin_plugins/google/registration.json
 validate_cue_success '#GoogleDemoConfiguration' \
-  ../mission_control/builtin_plugins/google/demo-settings.json
+  ./google/examples/valid-demo-config.json
 validate_cue_success '#GoogleDemoFixture' \
   ../mission_control/builtin_plugins/google/demo.json
 validate_cue_success '#GoogleMappingCases' \
@@ -209,7 +305,7 @@ expect_failure() {
   local generated_schema="$3"
   local fixture="$4"
 
-  if [[ "$cue_path" == ./schema/plugin || "$cue_path" == ./schema/config ]]; then
+  if [[ "$cue_path" == ./schema/* ]]; then
     if (
       cd ./schema
       cue vet -c -d "$definition" \
@@ -243,14 +339,11 @@ PY
 
 for fixture in \
   ./schema/examples/invalid-misspelled-key.json \
-  ./schema/examples/invalid-argument-key.json \
-  ./schema/examples/invalid-argument-type.json \
-  ./schema/examples/invalid-value-type.json \
-  ./schema/examples/invalid-default-type.json; do
+  ./schema/examples/invalid-plugin-resource-path.json \
+  ./schema/examples/invalid-plugin-configuration-key.json \
+  ./schema/examples/invalid-plugin-v1.json; do
   expect_failure '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" "$fixture"
 done
-expect_failure '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
-  ./schema/examples/invalid-plugin-credential-name.json
 
 expect_failure '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
   ./schema/examples/invalid-command-key.json
@@ -268,6 +361,12 @@ expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERAT
   ./schema/examples/invalid-application-plugin-id.json
 expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
   ./schema/examples/invalid-application-credential-name.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-demo-settings.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-live-demo-anchor.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-demo-date.json
 
 expect_cue_failure() {
   local definition="$1"

@@ -1,4 +1,7 @@
 {
-  "mode": "demo",
-  "demo_anchor_date": "2026-02-31"
+  "settings": {
+    "mode": "demo",
+    "demo_anchor_date": "2026-02-31"
+  },
+  "credentials": {}
 }

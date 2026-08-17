@@ -58,6 +58,9 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Contract | CUE definition | Packaged runtime schema |
 | --- | --- | --- |
 | Plugin registration | `schema/plugin/registration.cue` | `mission_control/schemas/plugin-registration.schema.json` |
+| Plugin configuration defaults | `schema/plugin/configuration.cue` | `mission_control/schemas/plugin-config-defaults.schema.json` |
+| Plugin configuration presentation | `schema/plugin/configuration.cue` | `mission_control/schemas/plugin-config-presentation.schema.json` |
+| Application configuration | `schema/config/application.cue` | `mission_control/schemas/application-config.schema.json` |
 | Agenda contribution | `schema/agenda/contribution.cue` | `mission_control/schemas/agenda-contribution.schema.json` |
 | Agenda query | `schema/agenda/query.cue` | `mission_control/schemas/agenda-query.schema.json` |
 | Closed-item contribution | `schema/closed-items/contribution.cue` | `mission_control/schemas/closed-items-contribution.schema.json` |
@@ -65,48 +68,11 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Command envelope | `schema/command/contract.cue` | `mission_control/schemas/command-envelope.schema.json` |
 | Command result | `schema/command/contract.cue` | `mission_control/schemas/command-result.schema.json` |
 
-The generated artifacts are packaged with the Python application and consumed at untrusted runtime boundaries. They must not be edited by hand.
-
-To regenerate them deliberately from `mission-control/`:
-
-```sh
-cue def --force --out jsonschema \
-  -e '#PluginRegistration' \
-  -o mission_control/schemas/plugin-registration.schema.json \
-  ./schema/plugin
-
-cue def --force --out jsonschema \
-  -e '#AgendaContribution' \
-  -o mission_control/schemas/agenda-contribution.schema.json \
-  ./schema/agenda
-
-cue def --force --out jsonschema \
-  -e '#CommandEnvelope' \
-  -o mission_control/schemas/command-envelope.schema.json \
-  ./schema/command
-
-cue def --force --out jsonschema \
-  -e '#CommandResult' \
-  -o mission_control/schemas/command-result.schema.json \
-  ./schema/command
-
-cue def --force --out jsonschema \
-  -e '#AgendaQuery' \
-  -o mission_control/schemas/agenda-query.schema.json \
-  ./schema/agenda
-
-cue def --force --out jsonschema \
-  -e '#ClosedItemsContribution' \
-  -o mission_control/schemas/closed-items-contribution.schema.json \
-  ./schema/closed-items
-
-cue def --force --out jsonschema \
-  -e '#EntityDetail' \
-  -o mission_control/schemas/entity-detail.schema.json \
-  ./schema/entity-detail
-```
-
-Formatting is not part of the contract; CI compares generated and packaged schemas as decoded JSON values.
+The generated artifacts are packaged with the Python application and consumed
+at untrusted runtime boundaries. They must not be edited by hand. Run
+`scripts/check-schemas.sh` to regenerate them into temporary files, apply the
+CUE-owned exporter overlays, and compare decoded JSON with the packaged copies.
+The same check validates direct CUE fixtures and generated-schema fixtures.
 
 ## Run locally
 
@@ -127,9 +93,11 @@ The check:
 
 Python tests separately exercise the packaged artifacts through runtime parsers and CLI boundaries.
 
-Bundled plugins may add CUE refinements for their own trusted package data
-without changing the public core contracts. Google defines and continuously
-validates its exact registration/capability envelope, explicit configuration,
+Bundled plugins own their CUE configuration definitions and package generated
+JSON Schema, explicit-default, and renderer-neutral presentation artifacts.
+The manifest contains resource references rather than a second argument DSL.
+Google Calendar defines and continuously validates its exact
+registration/capability envelope, explicit configuration,
 evergreen Google-shaped Calendar/Tasks fixture, and one-way mapping conformance
 cases under `schema/google/`. Live Google inputs remain recursively open because
 the upstream APIs may add fields independently; mapped, filtered, and rejected

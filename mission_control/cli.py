@@ -23,6 +23,7 @@ from mission_control.migrations import MigrationRunner
 from mission_control.plugin_lifecycle import (
     PluginLifecycleError,
     activate_agenda_plugins,
+    require_agenda_plugins,
 )
 from mission_control.plugins import (
     PluginDiscoveryError,
@@ -300,7 +301,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "agenda" and args.agenda_command == "list":
         try:
-            providers = activate_agenda_plugins(database, prepared_plugins)
+            providers = activate_agenda_plugins(
+                database, require_agenda_plugins(prepared_plugins)
+            )
         except PluginLifecycleError as error:
             stderr.print(f"error: {error}", markup=False)
             return 2

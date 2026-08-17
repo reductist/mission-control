@@ -130,12 +130,18 @@ def test_affordances_require_revision_and_unambiguous_mappings():
 def test_registration_envelopes_bound_projected_entity_types_and_affordances():
     registration = parse_plugin_registration(
         {
-            "schema_version": "mission-control.plugin/v1",
+            "schema_version": "mission-control.plugin/v2",
             "id": "landscape",
             "name": "Landscape",
             "version": "1",
             "plugin_api": ">=1 <2",
             "capabilities": ["agenda", "commands"],
+            "configuration": {
+                "document_version": "mission-control.landscape.config/v1",
+                "schema_resource": "config.schema.json",
+                "defaults_resource": "config.defaults.json",
+                "presentation_resource": "config.presentation.json",
+            },
             "entity_types": {
                 "initiative": {"capabilities": []},
                 "task": {"capabilities": ["lifecycle.complete"]},

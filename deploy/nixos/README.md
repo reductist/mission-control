@@ -48,8 +48,8 @@ slice is selected separately through the bundled Landscape provider:
 services.mission-control = {
   enable = true;
   demo = true;
-  plugins = [ "google" "landscape" ];
-  pluginSettings.google = ./google-demo-settings.json;
+  plugins = [ "google-calendar" "landscape" ];
+  pluginSettings."google-calendar" = ./google-demo-settings.json;
 };
 ```
 
@@ -62,9 +62,9 @@ Google fixture mode requires no credential. For live mode, keep non-secret setti
 ```nix
 services.mission-control = {
   enable = true;
-  plugins = [ "google" ];
-  pluginSettings.google = ./google-settings.json;
-  pluginCredentials.google.oauth = "/run/secrets/mission-control-google-oauth.json";
+  plugins = [ "google-calendar" ];
+  pluginSettings."google-calendar" = ./google-settings.json;
+  pluginCredentials."google-calendar".oauth = "/run/secrets/mission-control-google-oauth.json";
 };
 ```
 

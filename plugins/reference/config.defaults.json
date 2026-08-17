@@ -1,0 +1,10 @@
+{
+    "schema_version": "mission-control.plugin-config-defaults/v1",
+    "configuration_schema": "mission-control.reference.config/v1",
+    "defaults": {
+        "settings": {
+            "repeat": 1
+        },
+        "credentials": {}
+    }
+}

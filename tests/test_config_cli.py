@@ -10,9 +10,9 @@ def test_config_validate_and_effective_use_the_same_preflight(tmp_path, capsys) 
     config.write_text(
         """
 schema_version = "mission-control.config/v1"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "demo"
 demo_anchor_date = "2026-08-14"
 """,
@@ -28,7 +28,7 @@ demo_anchor_date = "2026-08-14"
     assert main(["config", "effective", str(config)]) == 0
     effective = json.loads(capsys.readouterr().out)
     assert effective["http"] == {"host": "127.0.0.1", "port": 8000}
-    assert effective["plugins"]["google"]["settings"] == "<redacted>"
+    assert effective["plugins"]["google-calendar"]["settings"] == "<redacted>"
 
 
 def test_config_explain_reports_ordered_sources_and_redacts(tmp_path, capsys) -> None:
@@ -36,9 +36,9 @@ def test_config_explain_reports_ordered_sources_and_redacts(tmp_path, capsys) ->
     config.write_text(
         """
 schema_version = "mission-control.config/v1"
-[plugins.google]
+[plugins.google-calendar]
 enabled = false
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 api_token = "do-not-print"
 """,
         encoding="utf-8",
@@ -50,14 +50,14 @@ api_token = "do-not-print"
                 "config",
                 "explain",
                 str(config),
-                "/plugins/google/settings/api_token",
+                "/plugins/google-calendar/settings/api_token",
             ]
         )
         == 0
     )
     explanation = json.loads(capsys.readouterr().out)
     assert explanation == {
-        "path": "/plugins/google/settings/api_token",
+        "path": "/plugins/google-calendar/settings/api_token",
         "sources": [str(config.resolve())],
         "value": "<redacted>",
     }

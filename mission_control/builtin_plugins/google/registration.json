@@ -1,20 +1,20 @@
 {
-  "schema_version": "mission-control.plugin/v1",
-  "id": "google",
-  "name": "Google",
+  "schema_version": "mission-control.plugin/v2",
+  "id": "google-calendar",
+  "name": "Google Calendar & Tasks",
   "version": "0.1.0",
   "plugin_api": ">=1.0.0 <2.0.0",
   "capabilities": ["agenda", "entity-details", "jobs", "health"],
   "runtime": {
     "entrypoint": "mission_control.builtin_plugins.google:activate",
-    "migration_set": "google"
+    "migration_set": "google_calendar"
   },
   "permissions": ["database", "network", "credentials"],
-  "credentials": {
-    "oauth": {
-      "required_when": {"argument": "mode", "equals": "live"},
-      "description": "OAuth authorized-user JSON for live Calendar and Tasks access."
-    }
+  "configuration": {
+    "document_version": "mission-control.google-calendar.config/v1",
+    "schema_resource": "config.schema.json",
+    "defaults_resource": "config.defaults.json",
+    "presentation_resource": "config.presentation.json"
   },
   "entity_types": {
     "calendar-event": {
@@ -22,54 +22,6 @@
     },
     "task": {
       "capabilities": ["entity.annotate", "activity.read"]
-    }
-  },
-  "arguments": {
-    "calendar_ids": {
-      "type": "array",
-      "items": {"type": "string", "min_length": 1},
-      "default": [],
-      "description": "Calendar IDs to import. Empty selects the primary and Google-selected calendars."
-    },
-    "demo_anchor_date": {
-      "type": "string",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-      "description": "Optional deterministic anchor for the synthetic fixture; omitted keeps the showcase current."
-    },
-    "lookahead_days": {
-      "type": "integer",
-      "default": 42,
-      "minimum": 1,
-      "maximum": 366
-    },
-    "lookback_days": {
-      "type": "integer",
-      "default": 42,
-      "minimum": 0,
-      "maximum": 366
-    },
-    "mode": {
-      "type": "string",
-      "default": "live",
-      "enum": ["live", "demo"]
-    },
-    "request_timeout_seconds": {
-      "type": "integer",
-      "default": 15,
-      "minimum": 3,
-      "maximum": 60
-    },
-    "sync_interval_seconds": {
-      "type": "integer",
-      "default": 300,
-      "minimum": 60,
-      "maximum": 86400
-    },
-    "task_list_ids": {
-      "type": "array",
-      "items": {"type": "string", "min_length": 1},
-      "default": [],
-      "description": "Task-list IDs to import. Empty selects every available task list."
     }
   }
 }

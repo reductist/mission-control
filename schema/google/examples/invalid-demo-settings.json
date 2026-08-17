@@ -1,4 +1,7 @@
 {
-  "mode": "demo",
-  "oauth": "must-not-be-plugin-settings"
+  "settings": {
+    "mode": "demo",
+    "oauth": "must-not-be-plugin-settings"
+  },
+  "credentials": {}
 }

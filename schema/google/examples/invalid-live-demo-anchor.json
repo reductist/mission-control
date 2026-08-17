@@ -1,4 +1,9 @@
 {
-  "mode": "live",
-  "demo_anchor_date": "2026-08-14"
+  "settings": {
+    "mode": "live",
+    "demo_anchor_date": "2026-08-14"
+  },
+  "credentials": {
+    "oauth": {"file": "/run/credentials/google-oauth"}
+  }
 }

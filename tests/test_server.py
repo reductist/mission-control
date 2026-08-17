@@ -173,15 +173,15 @@ def test_failed_plugin_activation_is_isolated_from_other_plugins(
     tmp_path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     prepared = prepare_builtin_agenda_plugins(
-        ("google", "landscape"),
+        ("google-calendar", "landscape"),
         configurations={
-            "google": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+            "google-calendar": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
         },
     )
     activate_one = plugin_lifecycle._activate_one
 
     def fail_google(database, plugin):
-        if plugin.registration.plugin_id.value == "google":
+        if plugin.registration.plugin_id.value == "google-calendar":
             raise RuntimeError("private initialization failure")
         return activate_one(database, plugin)
 
@@ -192,9 +192,9 @@ def test_failed_plugin_activation_is_isolated_from_other_plugins(
 
     dashboard = application.dashboard()
     providers = {item["id"]: item for item in dashboard["providers"]}
-    assert providers["google"]["health"]["state"] == "failed"
-    assert providers["google"]["health"]["code"] == "activation-failed"
-    assert "private initialization failure" not in providers["google"]["health"]["detail"]
+    assert providers["google-calendar"]["health"]["state"] == "failed"
+    assert providers["google-calendar"]["health"]["code"] == "activation-failed"
+    assert "private initialization failure" not in providers["google-calendar"]["health"]["detail"]
     assert "private initialization failure" not in caplog.text
     assert any(
         entry["source"]["plugin_id"] == "landscape"

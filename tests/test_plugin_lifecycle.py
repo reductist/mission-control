@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -12,9 +13,28 @@ from mission_control.plugin_lifecycle import (
     PluginDatabase,
     _execute_migration_script,
     _validate_permissions,
+    bundled_plugin_ids,
     prepare_agenda_plugins,
+    prepare_plugins,
 )
 from mission_control.plugins import Permission, PluginId
+
+
+def test_bundled_manifest_identity_does_not_depend_on_directory_name() -> None:
+    assert bundled_plugin_ids() == ("google-calendar", "landscape")
+
+
+def test_generic_preflight_accepts_external_non_agenda_bundle() -> None:
+    root = Path(__file__).parents[1] / "plugins" / "reference"
+
+    (prepared,) = prepare_plugins(
+        ("reference",),
+        roots=(root,),
+        configurations={"reference": {"message": "hello"}},
+    )
+
+    assert prepared.registration.plugin_id == PluginId("reference")
+    assert prepared.configuration.to_dict() == {"message": "hello", "repeat": 1}
 
 
 def test_plugin_database_enforces_declared_namespace(tmp_path) -> None:
@@ -88,11 +108,11 @@ def test_migration_executor_accepts_multiple_statements_on_one_line(tmp_path) ->
     assert tables == {"one", "two"}
 
 
-def test_declared_storage_and_credentials_require_matching_permissions() -> None:
+def test_declared_storage_requires_matching_permission() -> None:
     (prepared,) = prepare_agenda_plugins(
-        ("google",),
+        ("google-calendar",),
         configurations={
-            "google": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+            "google-calendar": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
         },
     )
     without_database = replace(
@@ -103,19 +123,8 @@ def test_declared_storage_and_credentials_require_matching_permissions() -> None
             if permission is not Permission.DATABASE
         ),
     )
-    without_credentials = replace(
-        prepared.registration,
-        permissions=tuple(
-            permission
-            for permission in prepared.registration.permissions
-            if permission is not Permission.CREDENTIALS
-        ),
-    )
-
     with pytest.raises(ValueError, match="migration set requires database permission"):
         _validate_permissions(without_database)
-    with pytest.raises(ValueError, match="credentials require credentials permission"):
-        _validate_permissions(without_credentials)
 
 
 def test_unrelated_malformed_external_manifest_does_not_poison_selected_plugin(

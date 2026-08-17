@@ -20,7 +20,7 @@
           "id": "gcal-invalid",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "task",
             "entity_id": "gcal-invalid"
           },

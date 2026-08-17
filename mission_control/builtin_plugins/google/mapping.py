@@ -34,7 +34,7 @@ from mission_control.plugins import (
 )
 
 MAPPING_SCHEMA_VERSION = "mission-control.google-mapping/v1"
-PLUGIN_ID = PluginId("google")
+PLUGIN_ID = PluginId("google-calendar")
 ANNOTATE = EntityAffordance(
     EntityCapability(StandardEntityCapability.ENTITY_ANNOTATE.value), "add-note"
 )

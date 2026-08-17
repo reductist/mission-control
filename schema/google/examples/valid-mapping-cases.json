@@ -24,7 +24,7 @@
           "id": "gcal-96dfbcff9655b9f4dcadbd7f74e9c91ab52b9142604583a3ce0f57f7212c55d3",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "calendar-event",
             "entity_id": "gcal-96dfbcff9655b9f4dcadbd7f74e9c91ab52b9142604583a3ce0f57f7212c55d3"
           },
@@ -67,7 +67,7 @@
           "id": "gcal-6527e9678027c327829e549c07563a4d04c92999fdff6b6377e2ef0192628d6c",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "calendar-event",
             "entity_id": "gcal-6527e9678027c327829e549c07563a4d04c92999fdff6b6377e2ef0192628d6c"
           },
@@ -106,7 +106,7 @@
           "id": "gcal-705e7a1d6958976ad0e0a76c4915dc0dbdec645d4467745ec9e1a8be7cf15ba8",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "calendar-event",
             "entity_id": "gcal-705e7a1d6958976ad0e0a76c4915dc0dbdec645d4467745ec9e1a8be7cf15ba8"
           },
@@ -180,7 +180,7 @@
           "id": "gtask-250cfa8f41c08b691c764647911cfa9d466a39cf42a23678db2b44a227c7fe86",
           "kind": "action",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "task",
             "entity_id": "gtask-250cfa8f41c08b691c764647911cfa9d466a39cf42a23678db2b44a227c7fe86"
           },
@@ -214,7 +214,7 @@
           "id": "gtask-3b521a05122f23e6bc78236ab1d6d6de4a6b2d3c1675e7125d41e66c0a5619fe",
           "kind": "action",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "task",
             "entity_id": "gtask-3b521a05122f23e6bc78236ab1d6d6de4a6b2d3c1675e7125d41e66c0a5619fe"
           },

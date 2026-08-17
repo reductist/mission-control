@@ -1,4 +1,4 @@
-"""Neutral manifest-to-runtime lifecycle for selected agenda plugins."""
+"""Neutral manifest-to-runtime lifecycle for selected plugins."""
 
 from __future__ import annotations
 
@@ -31,7 +31,6 @@ from mission_control.plugins import (
     PluginCompatibilityError,
     PluginConfiguration,
     PluginConfigurationError,
-    PluginCredentialError,
     PluginId,
     PluginRegistration,
     PluginRegistrationError,
@@ -39,7 +38,6 @@ from mission_control.plugins import (
     ensure_plugin_api_compatible,
     parse_plugin_registration,
     validate_plugin_configuration,
-    validate_plugin_credentials,
 )
 
 
@@ -60,11 +58,19 @@ class PluginResourceSource:
     label: str
 
     def document(self, name: str) -> object:
-        return json.loads(self.root.joinpath(name).read_text(encoding="utf-8"))
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name) is None:
+            raise PluginLifecycleError(f"unsafe plugin resource name: {name!r}")
+        resource = self.root.joinpath(name)
+        if isinstance(self.root, Path):
+            root = self.root.resolve()
+            path = Path(resource)
+            if path.is_symlink() or path.resolve().parent != root:
+                raise PluginLifecycleError(f"unsafe plugin resource: {name}")
+        return json.loads(resource.read_text(encoding="utf-8"))
 
 
 @dataclass(frozen=True, slots=True)
-class PreparedAgendaPlugin:
+class PreparedPlugin:
     registration: PluginRegistration
     source: PluginResourceSource
     seed: AgendaContribution | None
@@ -81,7 +87,7 @@ class PluginActivationFailure:
 
 @dataclass(frozen=True, slots=True)
 class PluginActivation:
-    plugin: PreparedAgendaPlugin
+    plugin: PreparedPlugin
     provider: AgendaProvider | None
     failure: PluginActivationFailure | None
 
@@ -200,11 +206,6 @@ def _validate_permissions(registration: PluginRegistration) -> None:
     if runtime is not None and runtime.migration_set is not None:
         if Permission.DATABASE not in registration.permissions:
             raise ValueError("a declared migration set requires database permission")
-    if (
-        registration.credentials
-        and Permission.CREDENTIALS not in registration.permissions
-    ):
-        raise ValueError("declared credentials require credentials permission")
 
 
 def _document(source: PluginResourceSource | str, name: str) -> object:
@@ -274,7 +275,13 @@ def _selected_sources(
 
     indexed: dict[str, list[PluginResourceSource]] = {}
     for source in bundled_plugin_sources():
-        indexed.setdefault(source.root.name, []).append(source)
+        try:
+            registration = parse_plugin_registration(
+                source.document("registration.json")
+            )
+        except (OSError, json.JSONDecodeError, PluginRegistrationError) as error:
+            raise PluginLifecycleError(f"{source.label}: {error}") from error
+        indexed.setdefault(registration.plugin_id.value, []).append(source)
     selected_ids = set(selected)
     for source in filesystem_plugin_sources(roots):
         document: object | None = None
@@ -309,16 +316,16 @@ def _selected_sources(
     return tuple(result)
 
 
-def prepare_agenda_plugins(
+def prepare_plugins(
     plugin_ids: Iterable[str],
     *,
     roots: Iterable[str | Path] = (),
     configurations: Mapping[str, object] | None = None,
     credentials: Mapping[str, Mapping[str, str]] | None = None,
-) -> tuple[PreparedAgendaPlugin, ...]:
-    """Validate selected manifests and resources without importing plugin code."""
+) -> tuple[PreparedPlugin, ...]:
+    """Validate selected plugin bundles without importing implementation code."""
 
-    prepared: list[PreparedAgendaPlugin] = []
+    prepared: list[PreparedPlugin] = []
     for plugin_id, source in _selected_sources(plugin_ids, roots):
         try:
             registration = parse_plugin_registration(
@@ -326,32 +333,36 @@ def prepare_agenda_plugins(
             )
             if registration.plugin_id.value != plugin_id:
                 raise ValueError("selected and registration ids must match")
-            if Capability.AGENDA not in registration.capabilities:
-                raise ValueError("registration must declare the agenda capability")
-            if registration.runtime is None:
-                raise ValueError("registration must declare a runtime entrypoint")
             ensure_plugin_api_compatible(registration)
             _validate_permissions(registration)
 
             seed = None
-            if registration.runtime.agenda_seed is not None:
+            runtime = registration.runtime
+            if runtime is not None and runtime.agenda_seed is not None:
                 seed = parse_agenda_contribution(
-                    _document(source, registration.runtime.agenda_seed)
+                    _document(source, runtime.agenda_seed)
                 )
                 if registration.plugin_id != seed.provider.plugin_id:
                     raise ValueError("registration and agenda provider ids must match")
                 validate_agenda_capabilities(registration, seed)
-            configuration = validate_plugin_configuration(
-                registration, (configurations or {}).get(plugin_id, {})
-            )
-            named_credentials = validate_plugin_credentials(
+            validated_configuration = validate_plugin_configuration(
                 registration,
+                source.document,
+                (configurations or {}).get(plugin_id, {}),
                 (credentials or {}).get(plugin_id, {}),
-                configuration,
             )
+            if (
+                validated_configuration.credentials
+                and Permission.CREDENTIALS not in registration.permissions
+            ):
+                raise ValueError("configured credentials require credentials permission")
             prepared.append(
-                PreparedAgendaPlugin(
-                    registration, source, seed, configuration, named_credentials
+                PreparedPlugin(
+                    registration,
+                    source,
+                    seed,
+                    validated_configuration.settings,
+                    validated_configuration.credentials,
                 )
             )
         except (
@@ -359,13 +370,49 @@ def prepare_agenda_plugins(
             json.JSONDecodeError,
             PluginConfigurationError,
             PluginCompatibilityError,
-            PluginCredentialError,
             PluginRegistrationError,
             AgendaContributionError,
             ValueError,
         ) as error:
             raise PluginLifecycleError(f"{plugin_id}: {error}") from error
     return tuple(prepared)
+
+
+def prepare_agenda_plugins(
+    plugin_ids: Iterable[str],
+    *,
+    roots: Iterable[str | Path] = (),
+    configurations: Mapping[str, object] | None = None,
+    credentials: Mapping[str, Mapping[str, str]] | None = None,
+) -> tuple[PreparedPlugin, ...]:
+    """Prepare plugins for the current in-process Agenda runtime."""
+
+    prepared = prepare_plugins(
+        plugin_ids,
+        roots=roots,
+        configurations=configurations,
+        credentials=credentials,
+    )
+    return require_agenda_plugins(prepared)
+
+
+def require_agenda_plugins(
+    plugins: Iterable[PreparedPlugin],
+) -> tuple[PreparedPlugin, ...]:
+    """Require already-prepared plugins to fit the current Agenda adapter."""
+
+    prepared = tuple(plugins)
+    for plugin in prepared:
+        plugin_id = plugin.registration.plugin_id.value
+        if Capability.AGENDA not in plugin.registration.capabilities:
+            raise PluginLifecycleError(
+                f"{plugin_id}: registration must declare the agenda capability"
+            )
+        if plugin.registration.runtime is None:
+            raise PluginLifecycleError(
+                f"{plugin_id}: registration must declare a runtime entrypoint"
+            )
+    return prepared
 
 
 def load_agenda_contributions(
@@ -379,7 +426,7 @@ def load_agenda_contributions(
 
 
 def _apply_declared_migrations(
-    database: Database, plugin: PreparedAgendaPlugin
+    database: Database, plugin: PreparedPlugin
 ) -> None:
     runtime = plugin.registration.runtime
     assert runtime is not None
@@ -471,7 +518,7 @@ def _execute_migration_script(connection: sqlite3.Connection, script: str) -> No
         raise PluginLifecycleError("migration contains an incomplete SQL statement")
 
 
-def _activate_one(database: Database, plugin: PreparedAgendaPlugin) -> AgendaProvider:
+def _activate_one(database: Database, plugin: PreparedPlugin) -> AgendaProvider:
     runtime = plugin.registration.runtime
     assert runtime is not None
     _apply_declared_migrations(database, plugin)
@@ -516,7 +563,7 @@ def _activate_one(database: Database, plugin: PreparedAgendaPlugin) -> AgendaPro
 
 
 def activate_agenda_plugins(
-    database: Database, plugins: Iterable[PreparedAgendaPlugin]
+    database: Database, plugins: Iterable[PreparedPlugin]
 ) -> tuple[AgendaProvider, ...]:
     """Migrate then import each previously validated runtime entrypoint."""
 
@@ -539,7 +586,7 @@ def activate_agenda_plugins(
 
 
 def activate_agenda_plugins_isolated(
-    database: Database, plugins: Iterable[PreparedAgendaPlugin]
+    database: Database, plugins: Iterable[PreparedPlugin]
 ) -> tuple[PluginActivation, ...]:
     """Activate independently so one failed plugin cannot suppress unrelated work."""
 

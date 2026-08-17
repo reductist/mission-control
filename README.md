@@ -73,7 +73,7 @@ mcctl --database ./mission-control.db agenda list --format table
 mcctl --database ./mission-control.db render markdown
 mcctl config validate ./mission-control.toml
 mcctl config effective ./mission-control.toml
-mcctl config explain ./mission-control.toml /plugins/google/settings/mode
+mcctl config explain ./mission-control.toml /plugins/google-calendar/settings/mode
 mcctl plugin validate ./plugins/reference/registration.json
 mcctl plugin list --root ./plugins
 mcctl plugin list --root ./plugins --format table
@@ -98,10 +98,10 @@ demo = true
 [database]
 path = "mission-control-demo.db"
 
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
 
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "demo"
 demo_anchor_date = "2026-08-14"
 
@@ -153,7 +153,12 @@ List commands default to deterministic JSON so scripts and other programs receiv
 
 Rich is confined to the imperative CLI shell. Presentation functions construct tables from existing domain values but do not read files, access SQLite, mutate state, or print by themselves. The CLI owns stdout and stderr consoles and performs the final rendering effect.
 
-Rich may later provide trees for nested configuration and plugin argument definitions, terminal Markdown previews, and progress displays for long-running backup, restore, migration, installation, synchronization, health-check, and automation commands. It does not define public contracts, replace CUE or JSON Schema, serialize JSON, generate durable Markdown artifacts, implement lifecycle decisions, or render the web UI. Textual remains deferred until a concrete full-screen interactive workflow requires it.
+Rich may later provide trees for nested configuration, terminal Markdown previews,
+and progress displays for long-running backup, restore, migration, installation,
+synchronization, health-check, and automation commands. It does not define public
+contracts, replace CUE or JSON Schema, serialize JSON, generate durable Markdown
+artifacts, implement lifecycle decisions, or render the web UI. Textual remains
+deferred until a concrete full-screen interactive workflow requires it.
 
 ## Product layers
 

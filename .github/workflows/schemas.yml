@@ -6,6 +6,7 @@ on:
       - "schema/**"
       - "mission_control/schemas/**"
       - "mission_control/builtin_plugins/**/*.json"
+      - "plugins/reference/**"
       - "scripts/check-schemas.sh"
       - ".github/workflows/schemas.yml"
   push:
@@ -14,6 +15,7 @@ on:
       - "schema/**"
       - "mission_control/schemas/**"
       - "mission_control/builtin_plugins/**/*.json"
+      - "plugins/reference/**"
       - "scripts/check-schemas.sh"
       - ".github/workflows/schemas.yml"
 

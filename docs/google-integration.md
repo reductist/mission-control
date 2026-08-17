@@ -2,7 +2,7 @@
 
 ## Scope
 
-The bundled `google` provider is a read-only import and presentation adapter. Google remains authoritative; Mission Control keeps a plugin-owned SQLite cache so the wall view can survive transient API failures.
+The bundled `google-calendar` provider imports Google Calendar and Google Tasks read-only for presentation. The capability-oriented ID leaves room for separate integrations such as `google-photos`. Google remains authoritative; Mission Control keeps a plugin-owned SQLite cache so the wall view can survive transient API failures.
 
 | Google resource | Mission Control projection | Notes |
 | --- | --- | --- |
@@ -40,9 +40,9 @@ schema_version = "mission-control.config/v1"
 demo = true
 [database]
 path = "mission-control-demo.db"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "demo"
 demo_anchor_date = "2026-08-14"
 [plugins.landscape]
@@ -85,11 +85,11 @@ On POSIX systems, Mission Control rejects files accessible by group or other use
 schema_version = "mission-control.config/v1"
 [database]
 path = "mission-control.db"
-[plugins.google]
+[plugins.google-calendar]
 enabled = true
-[plugins.google.credentials.oauth]
+[plugins.google-calendar.credentials.oauth]
 file = "/run/secrets/mission-control-google-oauth.json"
-[plugins.google.settings]
+[plugins.google-calendar.settings]
 mode = "live"
 calendar_ids = []
 task_list_ids = []

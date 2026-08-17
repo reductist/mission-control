@@ -62,8 +62,9 @@ from mission_control.entity_details import (
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_runtime import PluginJobSupervisor
 from mission_control.plugin_lifecycle import (
-    PreparedAgendaPlugin,
+    PreparedPlugin,
     activate_agenda_plugins_isolated,
+    require_agenda_plugins,
 )
 from mission_control.plugins import (
     EntityCapability,
@@ -109,7 +110,7 @@ class MissionControlApplication:
         demo: bool = False,
         write_token: str | None = None,
         agenda_contributions: Iterable[AgendaContribution] = (),
-        builtin_plugins: Iterable[PreparedAgendaPlugin] = (),
+        builtin_plugins: Iterable[PreparedPlugin] = (),
         plugin_failures: Mapping[str, tuple[str, str]] | None = None,
     ) -> None:
         MigrationRunner(database).apply()
@@ -812,7 +813,9 @@ def main(argv: list[str] | None = None) -> int:
             fragment_dirs=args.config_dir,
             overrides=overrides,
         )
-        builtin_plugins = prepare_application_plugins(snapshot)
+        builtin_plugins = require_agenda_plugins(
+            prepare_application_plugins(snapshot)
+        )
     except ApplicationConfigError as error:
         parser.error(str(error))
     application = MissionControlApplication(

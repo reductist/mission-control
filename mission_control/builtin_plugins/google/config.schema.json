@@ -1,0 +1,221 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#CredentialReference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                }
+            },
+            "required": [
+                "file"
+            ]
+        },
+        "#Date": {
+            "type": "string",
+            "format": "date"
+        }
+    },
+    "anyOf": [
+        {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "credentials": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "oauth": {
+                            "$ref": "#/$defs/%23CredentialReference"
+                        }
+                    },
+                    "required": [
+                        "oauth"
+                    ]
+                },
+                "settings": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "calendar_ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "not": {
+                                    "pattern": "^\\s*$"
+                                }
+                            }
+                        },
+                        "lookahead_days": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 366,
+                                    "minimum": 1
+                                }
+                            ]
+                        },
+                        "lookback_days": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 366,
+                                    "minimum": 0
+                                }
+                            ]
+                        },
+                        "mode": {
+                            "const": "live"
+                        },
+                        "request_timeout_seconds": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 60,
+                                    "minimum": 3
+                                }
+                            ]
+                        },
+                        "sync_interval_seconds": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 86400,
+                                    "minimum": 60
+                                }
+                            ]
+                        },
+                        "task_list_ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "not": {
+                                    "pattern": "^\\s*$"
+                                }
+                            }
+                        }
+                    },
+                    "required": [
+                        "mode"
+                    ]
+                }
+            },
+            "required": [
+                "credentials",
+                "settings"
+            ]
+        },
+        {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "credentials": {
+                    "const": {}
+                },
+                "settings": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "calendar_ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "not": {
+                                    "pattern": "^\\s*$"
+                                }
+                            }
+                        },
+                        "demo_anchor_date": {
+                            "$ref": "#/$defs/%23Date"
+                        },
+                        "lookahead_days": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 366,
+                                    "minimum": 1
+                                }
+                            ]
+                        },
+                        "lookback_days": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 366,
+                                    "minimum": 0
+                                }
+                            ]
+                        },
+                        "mode": {
+                            "const": "demo"
+                        },
+                        "request_timeout_seconds": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 60,
+                                    "minimum": 3
+                                }
+                            ]
+                        },
+                        "sync_interval_seconds": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 86400,
+                                    "minimum": 60
+                                }
+                            ]
+                        },
+                        "task_list_ids": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "not": {
+                                    "pattern": "^\\s*$"
+                                }
+                            }
+                        }
+                    },
+                    "required": [
+                        "mode"
+                    ]
+                }
+            },
+            "required": [
+                "credentials",
+                "settings"
+            ]
+        }
+    ],
+    "$id": "mission-control.google-calendar.config/v1"
+}

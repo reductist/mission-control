@@ -20,18 +20,23 @@ Plugin manifests declare the core interface range they support. Compatibility is
 A manifest is readable without importing plugin runtime code and declares:
 
 - unique plugin identifier
-- display name and description
+- display name
 - plugin version
 - supported core interface range
 - required and optional capabilities
 - entity types and their maximum behavior capability envelopes
-- configuration schema identifier
+- configuration document identifier and generated schema/default/presentation resources
 - migration set identifier
-- registered event types
-- CLI, API, job, UI, permission, and health contributions
+- coarse capabilities and operational permissions
 - runtime entry point
 
 Unknown required capabilities or incompatible interface ranges cause validation to fail before startup.
+
+Integration plugin IDs use a flat `vendor-capability` convention, such as
+`google-calendar` and `google-photos`. Slashes and dots are not namespace
+separators: one stable ID must remain safe across configuration keys, command
+routing, URLs, package metadata, and normalized database prefixes. The manifest
+ID is authoritative; a package directory name is not an implicit identity.
 
 Entity capabilities are distinct from coarse plugin contributions. A plugin may
 declare `commands` because it owns command handlers while separately declaring
@@ -52,7 +57,13 @@ The application configuration contains core settings, enabled plugin identifiers
 
 Plugins may validate only their own configuration namespace. Cross-plugin configuration references require an explicit public capability contract.
 
-The current experimental runtime validates registered argument types, constraints, and defaults before importing a bundled provider. `mctrld` accepts non-secret settings documents separately from named credential file references. A provider receives only its detached validated values and its own credential-name mapping.
+Each plugin defines its complete namespaced configuration boundary once in CUE,
+including non-secret settings and named credential file references. The manifest
+points to generated JSON Schema, explicit defaults, and renderer-neutral
+presentation metadata. Mission Control validates and binds all three artifacts,
+materializes defaults once, and validates the effective document before opening
+the database or importing provider code. A provider receives only its detached,
+validated settings and its own credential-name mapping.
 
 ## Event interface
 

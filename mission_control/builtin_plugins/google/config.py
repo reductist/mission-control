@@ -28,21 +28,9 @@ class GoogleConfig:
         credentials: dict[str, str],
     ) -> GoogleConfig:
         values = configuration.to_dict()
-        unknown_credentials = sorted(set(credentials) - {"oauth"})
-        if unknown_credentials:
-            raise ValueError(
-                "Google received unknown credentials: "
-                + ", ".join(unknown_credentials)
-            )
-        mode = str(values.get("mode", "live"))
+        mode = str(values["mode"])
         credential = Path(credentials["oauth"]) if "oauth" in credentials else None
-        if mode == "live" and credential is None:
-            raise ValueError("Google live mode requires the named 'oauth' credential")
-        if mode == "demo" and credential is not None:
-            raise ValueError("Google demo mode does not accept an OAuth credential")
         anchor_value = values.get("demo_anchor_date")
-        if mode == "live" and anchor_value is not None:
-            raise ValueError("Google live mode does not accept a demo anchor date")
         return cls(
             mode=mode,
             demo_anchor_date=(
@@ -50,11 +38,11 @@ class GoogleConfig:
                 if anchor_value is not None
                 else None
             ),
-            calendar_ids=tuple(str(item) for item in values.get("calendar_ids", [])),
-            task_list_ids=tuple(str(item) for item in values.get("task_list_ids", [])),
-            lookback_days=int(values.get("lookback_days", 42)),
-            lookahead_days=int(values.get("lookahead_days", 42)),
-            sync_interval_seconds=int(values.get("sync_interval_seconds", 300)),
-            request_timeout_seconds=int(values.get("request_timeout_seconds", 15)),
+            calendar_ids=tuple(str(item) for item in values["calendar_ids"]),
+            task_list_ids=tuple(str(item) for item in values["task_list_ids"]),
+            lookback_days=int(values["lookback_days"]),
+            lookahead_days=int(values["lookahead_days"]),
+            sync_interval_seconds=int(values["sync_interval_seconds"]),
+            request_timeout_seconds=int(values["request_timeout_seconds"]),
             oauth_credential=credential,
         )

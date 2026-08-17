@@ -5,7 +5,7 @@
   "demo": false,
   "plugin_roots": [],
   "plugins": {
-    "google": {
+    "google-calendar": {
       "enabled": true,
       "settings": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
     },

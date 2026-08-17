@@ -6,9 +6,6 @@
   "plugin_api": ">=1.0.0 <2.0.0",
   "capabilities": ["jobs"],
   "arguments": {
-    "poll_interval_seconds": {
-      "type": "integer",
-      "minimim": 60
-    }
+    "repository": {"type": "string"}
   }
 }

@@ -124,7 +124,8 @@ in
       default = { };
       description = ''
         Non-secret JSON settings files keyed by enabled plugin ID. Files may
-        contain credential names or paths, but never OAuth secret values.
+        not contain credential paths or secret values; use pluginCredentials
+        for every credential reference.
       '';
     };
 

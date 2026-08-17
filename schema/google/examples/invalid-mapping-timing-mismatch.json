@@ -20,7 +20,7 @@
           "id": "gcal-appointment",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "calendar-event",
             "entity_id": "gcal-appointment"
           },

@@ -8,16 +8,18 @@ Mission Control is an integration shell. Its core value depends on plugins being
 configurable without allowing deployment adapters, the browser, or one plugin to
 invent alternate meanings for configuration and identity.
 
-The first Google calendar showcase proved the agenda, entity-detail, job, health,
-credential, cache, and mapping boundaries. It also exposed three missing pieces:
+The first Google Calendar showcase proved the agenda, entity-detail, job, health,
+credential, cache, and mapping boundaries. At the time, it exposed three missing
+pieces:
 
-- daemon flags and per-plugin JSON files are not yet one application configuration;
+- daemon flags and per-plugin JSON files were not yet one application configuration;
 - `plugin_id` was being used in presentation as if it identified a Google account,
   calendar, or person; and
 - closed CUE document shapes had no precise pre-1.0 evolution rule.
 
-These gaps must be resolved before adding browser setup, multiple Google accounts,
-owner/source filters, or more integration plugins.
+The first two delivery slices below established canonical configuration and one
+CUE-owned plugin configuration boundary. Attribution remains the next prerequisite
+for browser setup, multiple Google accounts, and owner/source filters.
 
 ## Decision
 
@@ -93,7 +95,10 @@ configuration.
 The identities have distinct meanings:
 
 - **Plugin ID** identifies one authoritative implementation and command owner,
-  such as `google` or `landscape`.
+  such as `google-calendar` or `landscape`. Integration IDs use a flat
+  `vendor-capability` convention (`google-calendar`, `google-photos`) rather
+  than path-like or dotted names; the same ID remains safe in configuration,
+  command routing, URLs, package metadata, and database namespaces.
 - **Connection ID** is a stable plugin-owned configuration key for one external
   account, workspace, controller, or endpoint.
 - **Source ID** identifies a collection within a connection, such as a calendar,
@@ -116,8 +121,8 @@ missing principal is an explicit configuration error. Color is a workspace
 presentation preference keyed to typed identity, not identity itself, and every
 view retains a textual owner/source indication.
 
-Google will initially own a map of connections beneath the single authoritative
-`google` plugin. Core-level plugin instances are deliberately deferred. They become
+Google Calendar will initially own a map of connections beneath the single authoritative
+`google-calendar` plugin. Core-level plugin instances are deliberately deferred. They become
 justified only when another plugin requires core-managed independent lifecycle,
 migrations, health, or command ownership for multiple instances. This promotion
 rule avoids forcing instance identity through every source-bearing contract before
@@ -149,20 +154,21 @@ into plugin domains, aggregation, or renderers.
 
 ### Optimize the public boundary for plugin authors
 
-The current lifecycle proves useful isolation, but two implementation details are
-not the intended long-term authoring surface:
+The lifecycle proved useful isolation, but its first implementation exposed two
+authoring problems:
 
 - manifest `arguments` duplicate Google's CUE configuration definition; and
 - Python plugins import core domain classes and return in-process objects.
 
-The next plugin contract version removes those requirements. A plugin defines its
+Plugin registration v2 has removed the argument DSL. A plugin defines its
 configuration once in CUE and packages generated validation, static-default, and
-presentation-metadata artifacts. Descriptions, defaults, enums, secret-reference
-markers, and setup-form hints are derived from that source rather than maintained
-as a second validation language in the manifest. Runtime and CUE parity fixtures
-must produce the same effective values and failures; a CUE feature is not allowed
-in a public plugin configuration until the packaged runtime evaluator preserves
-its semantics. JSON Schema validation alone does not apply CUE defaults.
+presentation-metadata artifacts. The manifest names and version-binds those
+resources. Runtime and CUE parity fixtures must produce the same effective values
+and failures; a CUE feature is not allowed in a public plugin configuration until
+the packaged runtime evaluator preserves its semantics. JSON Schema validation
+alone does not apply CUE defaults. Versioned JSON capability calls remain the next
+author-facing simplification because Python plugins still import core domain
+classes and return in-process objects.
 
 Capability calls exchange versioned JSON documents. Core owns validation and
 conversion into internal immutable values. A small public Python adapter may make
@@ -190,10 +196,10 @@ outbox or another proven atomic commit protocol.
 Each item is one independently reviewable pull request unless implementation
 evidence shows it should be split further.
 
-1. Record this decision and the cross-PR acceptance matrix.
-2. Implement canonical CUE configuration, TOML loading/merge provenance,
+1. **Complete:** record this decision and the cross-PR acceptance matrix.
+2. **Complete:** implement canonical CUE configuration, TOML loading/merge provenance,
    redaction, and `mcctl config validate|effective|explain` for issue #28.
-3. Introduce one CUE-owned plugin configuration schema and generated runtime
+3. **Complete:** introduce one CUE-owned plugin configuration schema and generated runtime
    validation/default/form artifacts. Remove the duplicate manifest argument DSL;
    validate enabled plugins before import or migrations.
 4. Introduce versioned JSON capability calls, a small public adapter, and a

@@ -1,7 +1,9 @@
 package google
 
 import agenda "mission-control.dev/schema/agenda"
+
 import "strings"
+
 import "time"
 
 // The source shapes below are the fields consumed by Mission Control's mapper,
@@ -46,9 +48,9 @@ import "time"
 	htmlLink?:          string
 	start?:             #MapperEventBoundary
 	end?:               #MapperEventBoundary
-	attendees?:         [...#MapperAttendee]
-	updated?:           string
-	etag?:              string
+	attendees?: [...#MapperAttendee]
+	updated?: string
+	etag?:    string
 	...
 }
 
@@ -70,7 +72,7 @@ import "time"
 	status:         "mapped"
 	entry: agenda.#Event & {
 		source: {
-			plugin_id:   "google"
+			plugin_id:   "google-calendar"
 			entity_type: "calendar-event"
 		}
 	}
@@ -81,7 +83,7 @@ import "time"
 	status:         "mapped"
 	entry: agenda.#Action & {
 		source: {
-			plugin_id:   "google"
+			plugin_id:   "google-calendar"
 			entity_type: "task"
 		}
 	}
@@ -130,9 +132,9 @@ import "time"
 
 #CalendarFreeBusySummaryCase: C=#CalendarMappingEnvelope & {
 	input: collection: {
-		accessRole:      "freeBusyReader"
+		accessRole:       "freeBusyReader"
 		summaryOverride?: null
-		summary: string & !=""
+		summary:          string & !=""
 	}
 	outcome: #MappedCalendarOutcome
 	outcome: entry: {
@@ -144,7 +146,7 @@ import "time"
 
 #CalendarFreeBusyFallbackCase: #CalendarMappingEnvelope & {
 	input: collection: {
-		accessRole:      "freeBusyReader"
+		accessRole:       "freeBusyReader"
 		summaryOverride?: null
 		summary?:         null
 	}
@@ -163,7 +165,7 @@ import "time"
 
 #CalendarVisibleTitleCase: C=#CalendarMappingEnvelope & {
 	input: collection: accessRole?: string & !="freeBusyReader"
-	input: resource: summary: string & !=""
+	input: resource: summary:       string & !=""
 	outcome: #MappedCalendarOutcome & {
 		entry: title: C.input.resource.summary
 	}
@@ -171,7 +173,7 @@ import "time"
 
 #CalendarVisibleFallbackTitleCase: #CalendarMappingEnvelope & {
 	input: collection: accessRole?: string & !="freeBusyReader"
-	input: resource: summary?: null
+	input: resource: summary?:      null
 	outcome: #MappedCalendarOutcome & {
 		entry: title: "Busy"
 	}
@@ -184,7 +186,7 @@ import "time"
 #CalendarAllDayMappedCase: C=#CalendarMappingEnvelope & {
 	input: resource: {
 		start: date: string
-		end:   date: string
+		end: date:   string
 	}
 	outcome: #MappedCalendarOutcome & {
 		entry: timing: {
