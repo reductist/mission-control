@@ -219,6 +219,7 @@ mcctl config validate|effective CONFIG.toml [--fragment-dir DIR]
 mcctl config explain CONFIG.toml /JSON/POINTER [--fragment-dir DIR]
 mcctl plugin validate
 mcctl plugin list [--format json|table]
+mcctl plugin conformance REGISTRATION [--settings SETTINGS.json]
 mctrld [--config PATH] [--config-dir DIR]
        [--database PATH] [--host HOST] [--port PORT] [--demo]
 ```

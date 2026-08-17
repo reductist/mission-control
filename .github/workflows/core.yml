@@ -91,10 +91,16 @@ jobs:
               "mission_control/schemas/closed-items-contribution.schema.json",
               "mission_control/schemas/command-envelope.schema.json",
               "mission_control/schemas/command-result.schema.json",
+              "mission_control/schemas/command-state.schema.json",
               "mission_control/schemas/entity-detail.schema.json",
+              "mission_control/schemas/plugin-call-result.schema.json",
+              "mission_control/schemas/plugin-call.schema.json",
               "mission_control/schemas/plugin-registration.schema.json",
               "mission_control/schemas/plugin-config-defaults.schema.json",
               "mission_control/schemas/plugin-config-presentation.schema.json",
+              "mission_control/schemas/plugin-health.schema.json",
+              "mission_control/schemas/plugin-jobs.schema.json",
+              "mission_control/schemas/plugin-runtime.schema.json",
               "mission_control/web/app.js",
               "mission_control/web/demo.json",
               "mission_control/web/index.html",
@@ -114,6 +120,7 @@ jobs:
           cd /tmp
           python - <<'PY'
           import json
+          import subprocess
           from pathlib import Path
 
           from mission_control.plugin_lifecycle import prepare_agenda_plugins
@@ -135,6 +142,26 @@ jobs:
               {},
           )
           assert configured.settings.to_dict() == {"message": "hello", "repeat": 1}
+
+          settings = Path("/tmp/reference-settings.json")
+          settings.write_text('{"message":"installed wheel"}', encoding="utf-8")
+          completed = subprocess.run(
+              [
+                  "mcctl",
+                  "plugin",
+                  "conformance",
+                  str(root / "registration.json"),
+                  "--settings",
+                  str(settings),
+              ],
+              check=True,
+              capture_output=True,
+              text=True,
+          )
+          assert json.loads(completed.stdout)["operations"] == [
+              "health.get",
+              "runtime.describe",
+          ]
           PY
 
   nix:

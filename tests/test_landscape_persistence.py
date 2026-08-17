@@ -56,7 +56,7 @@ def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
             "SELECT max(version) FROM schema_migrations"
         ).fetchone()[0]
         landscape_version = connection.execute(
-            "SELECT max(version) FROM landscape_schema_migrations"
+            "SELECT max(version) FROM plugin__9__landscape__schema_migrations"
         ).fetchone()[0]
     assert (core_version, landscape_version) == (4, 2)
 
@@ -135,7 +135,7 @@ def test_state_and_history_survive_restart_without_seed_overwrite(tmp_path) -> N
     database = Database(tmp_path / "mission-control.db")
     prepared = prepared_landscape()
     first = MissionControlApplication(database, builtin_plugins=prepared)
-    first_repository = first.agenda_providers[0].repository
+    first_repository = SQLiteLandscapeRepository(database)
     changed = first_repository.complete_action("measure-access-route")
     assert changed.version == 2
     assert (
@@ -146,7 +146,7 @@ def test_state_and_history_survive_restart_without_seed_overwrite(tmp_path) -> N
     )
 
     restarted = MissionControlApplication(database, builtin_plugins=prepared)
-    restarted_repository = restarted.agenda_providers[0].repository
+    restarted_repository = SQLiteLandscapeRepository(database)
     persisted = restarted_repository.get_action("measure-access-route")
     assert persisted.state is LandscapeActionState.DONE
     assert persisted.version == 2
@@ -249,7 +249,7 @@ def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> No
     )
     assert status == 200
     assert dismissed["status"] == "accepted"
-    enabled.agenda_providers[0].repository.complete_action("measure-access-route")
+    SQLiteLandscapeRepository(database).complete_action("measure-access-route")
 
     disabled = MissionControlApplication(database)
     assert all(
@@ -268,9 +268,7 @@ def test_disabling_landscape_hides_but_does_not_delete_its_state(tmp_path) -> No
 
     reenabled = MissionControlApplication(database, builtin_plugins=prepared)
     assert (
-        reenabled.agenda_providers[0]
-        .repository.get_action("measure-access-route")
-        .state
+        SQLiteLandscapeRepository(database).get_action("measure-access-route").state
         is LandscapeActionState.DONE
     )
     activity = reenabled.entity_detail("landscape", "action", "measure-access-route")[
@@ -291,7 +289,7 @@ def test_landscape_events_are_immutable_at_the_database_boundary(tmp_path) -> No
         pytest.raises(sqlite3.IntegrityError, match="immutable"),
     ):
         connection.execute(
-            "DELETE FROM landscape_events WHERE event_id = ?", (event.event_id,)
+            "DELETE FROM plugin__9__landscape__events WHERE event_id = ?", (event.event_id,)
         )
 
     assert json.loads(event.payload_json)["state"] == "ready"
@@ -305,7 +303,7 @@ def test_database_mirrors_critical_landscape_text_bounds(tmp_path) -> None:
         pytest.raises(sqlite3.IntegrityError, match="invalid Landscape action text"),
     ):
         connection.execute(
-            "UPDATE landscape_actions SET title = ? WHERE action_id = ?",
+            "UPDATE plugin__9__landscape__actions SET title = ? WHERE action_id = ?",
             ("x" * 257, "measure-access-route"),
         )
 
@@ -314,7 +312,7 @@ def test_corrupt_persisted_landscape_data_fails_explicitly(tmp_path) -> None:
     repository = initialized_repository(tmp_path)
     with Database(tmp_path / "mission-control.db").connect() as connection:
         connection.execute(
-            "UPDATE landscape_actions SET updated_at = ? WHERE action_id = ?",
+            "UPDATE plugin__9__landscape__actions SET updated_at = ? WHERE action_id = ?",
             ("2026-01-01T00:00:00", "measure-access-route"),
         )
 

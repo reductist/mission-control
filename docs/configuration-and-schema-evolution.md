@@ -184,12 +184,13 @@ transaction semantics rather than being assumed free. Built-ins receive no
 additional calls or context.
 
 Plugins retain the current core-owned, namespaced SQLite transaction boundary.
-The public adapter gives a plugin its own storage namespace and event writer in
-the same transaction; this preserves the invariant that a failed command cannot
-leave domain state without its event or vice versa. Plugins do not receive private
-core repositories, and cross-plugin foreign keys remain prohibited. Separate
-databases are deferred unless a concrete process-isolation design supplies an
-outbox or another proven atomic commit protocol.
+The public adapter gives a plugin its own storage namespace, so a plugin can
+atomically update its domain rows and its own namespaced event rows. Plugins do
+not receive private core repositories, and cross-plugin foreign keys remain
+prohibited. A core event-envelope writer is still planned; the adapter must not
+claim that service until its transaction contract exists. Separate databases are
+deferred unless a concrete process-isolation design supplies an outbox or
+another proven atomic commit protocol.
 
 ## Delivery sequence
 
@@ -202,7 +203,7 @@ evidence shows it should be split further.
 3. **Complete:** introduce one CUE-owned plugin configuration schema and generated runtime
    validation/default/form artifacts. Remove the duplicate manifest argument DSL;
    validate enabled plugins before import or migrations.
-4. Introduce versioned JSON capability calls, a small public adapter, and a
+4. **Complete:** introduce versioned JSON capability calls, a small public adapter, and a
    conformance command/reference plugin. Preserve the existing namespaced shared
    transaction boundary; built-ins use the same adapter.
 5. Introduce the next agenda version with scoped connection/source/principal

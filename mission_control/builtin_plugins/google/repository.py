@@ -58,7 +58,7 @@ class GoogleMigrationRunner:
                 {
                     row[0]
                     for row in connection.execute(
-                        "SELECT version FROM google_calendar_schema_migrations"
+                        "SELECT version FROM plugin__15__google_calendar__schema_migrations"
                     ).fetchall()
                 }
                 if self._has_migration_table(connection)
@@ -81,7 +81,7 @@ class GoogleMigrationRunner:
         return (
             connection.execute(
                 "SELECT 1 FROM sqlite_master "
-                "WHERE type = 'table' AND name = 'google_calendar_schema_migrations'"
+                "WHERE type = 'table' AND name = 'plugin__15__google_calendar__schema_migrations'"
             ).fetchone()
             is not None
         )
@@ -109,7 +109,7 @@ class SQLiteGoogleRepository:
             connection.execute("BEGIN IMMEDIATE")
             for item in snapshot:
                 connection.execute(
-                    "INSERT INTO google_calendar_collections("
+                    "INSERT INTO plugin__15__google_calendar__collections("
                     "collection_key, kind, external_id, label, access_role"
                     ") VALUES (?, ?, ?, ?, ?) "
                     "ON CONFLICT(collection_key) DO UPDATE SET "
@@ -126,13 +126,13 @@ class SQLiteGoogleRepository:
             if keys:
                 placeholders = ",".join("?" for _ in keys)
                 connection.execute(
-                    f"DELETE FROM google_calendar_collections WHERE kind = ? "
+                    f"DELETE FROM plugin__15__google_calendar__collections WHERE kind = ? "
                     f"AND collection_key NOT IN ({placeholders})",
                     (kind, *keys),
                 )
             else:
                 connection.execute(
-                    "DELETE FROM google_calendar_collections WHERE kind = ?", (kind,)
+                    "DELETE FROM plugin__15__google_calendar__collections WHERE kind = ?", (kind,)
                 )
 
     def prepare_source(self, mode: str, fingerprint: str) -> bool:
@@ -141,15 +141,15 @@ class SQLiteGoogleRepository:
         with self.database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT source_mode, source_fingerprint FROM google_calendar_sync_status "
+                "SELECT source_mode, source_fingerprint FROM plugin__15__google_calendar__sync_status "
                 "WHERE singleton = 1"
             ).fetchone()
             assert row is not None
             if row["source_mode"] == mode and row["source_fingerprint"] == fingerprint:
                 return False
-            connection.execute("DELETE FROM google_calendar_collections")
+            connection.execute("DELETE FROM plugin__15__google_calendar__collections")
             connection.execute(
-                "UPDATE google_calendar_sync_status SET last_attempt_at = NULL, "
+                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = NULL, "
                 "last_success_at = NULL, error_code = NULL, error_detail = NULL, "
                 "source_mode = ?, source_fingerprint = ? WHERE singleton = 1",
                 (mode, fingerprint),
@@ -167,12 +167,12 @@ class SQLiteGoogleRepository:
         with self.database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
-                "DELETE FROM google_calendar_entries WHERE collection_key = ?",
+                "DELETE FROM plugin__15__google_calendar__entries WHERE collection_key = ?",
                 (collection.collection_key,),
             )
             for item in snapshot:
                 connection.execute(
-                    "INSERT INTO google_calendar_entries("
+                    "INSERT INTO plugin__15__google_calendar__entries("
                     "entity_id, collection_key, remote_id, entity_type, title, context, "
                     "detail, timing_kind, occurs_on, ends_before, starts_at, ends_at, "
                     "due_on, status, location, source_url, revision, updated_at"
@@ -199,7 +199,7 @@ class SQLiteGoogleRepository:
                     ),
                 )
             connection.execute(
-                "UPDATE google_calendar_collections SET last_attempt_at = ?, last_success_at = ?, "
+                "UPDATE plugin__15__google_calendar__collections SET last_attempt_at = ?, last_success_at = ?, "
                 "error_code = NULL, error_detail = NULL WHERE collection_key = ?",
                 (
                     synced_at.isoformat(),
@@ -218,7 +218,7 @@ class SQLiteGoogleRepository:
     ) -> None:
         with self.database.connect() as connection:
             connection.execute(
-                "UPDATE google_calendar_collections SET last_attempt_at = ?, error_code = ?, "
+                "UPDATE plugin__15__google_calendar__collections SET last_attempt_at = ?, error_code = ?, "
                 "error_detail = ? WHERE collection_key = ?",
                 (attempted_at.isoformat(), code, detail, collection.collection_key),
             )
@@ -226,14 +226,14 @@ class SQLiteGoogleRepository:
     def record_attempt(self, attempted_at: datetime) -> None:
         with self.database.connect() as connection:
             connection.execute(
-                "UPDATE google_calendar_sync_status SET last_attempt_at = ? WHERE singleton = 1",
+                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = ? WHERE singleton = 1",
                 (attempted_at.isoformat(),),
             )
 
     def record_success(self, synced_at: datetime) -> None:
         with self.database.connect() as connection:
             connection.execute(
-                "UPDATE google_calendar_sync_status SET last_attempt_at = ?, last_success_at = ?, "
+                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = ?, last_success_at = ?, "
                 "error_code = NULL, error_detail = NULL WHERE singleton = 1",
                 (synced_at.isoformat(), synced_at.isoformat()),
             )
@@ -243,7 +243,7 @@ class SQLiteGoogleRepository:
     ) -> None:
         with self.database.connect() as connection:
             connection.execute(
-                "UPDATE google_calendar_sync_status SET last_attempt_at = ?, error_code = ?, "
+                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = ?, error_code = ?, "
                 "error_detail = ? WHERE singleton = 1",
                 (attempted_at.isoformat(), code, detail),
             )
@@ -252,14 +252,14 @@ class SQLiteGoogleRepository:
         """Erase imported private data after terminal authorization failure."""
 
         with self.database.connect() as connection:
-            connection.execute("DELETE FROM google_calendar_collections")
+            connection.execute("DELETE FROM plugin__15__google_calendar__collections")
 
     def status(self) -> GoogleSyncStatus:
         with self.database.connect() as connection:
             row = connection.execute(
                 "SELECT last_attempt_at, last_success_at, error_code, error_detail, "
                 "source_mode, source_fingerprint "
-                "FROM google_calendar_sync_status WHERE singleton = 1"
+                "FROM plugin__15__google_calendar__sync_status WHERE singleton = 1"
             ).fetchone()
         assert row is not None
         return GoogleSyncStatus(
@@ -274,14 +274,14 @@ class SQLiteGoogleRepository:
     def list_entries(self) -> tuple[GoogleEntry, ...]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM google_calendar_entries ORDER BY entity_type, entity_id"
+                "SELECT * FROM plugin__15__google_calendar__entries ORDER BY entity_type, entity_id"
             ).fetchall()
         return tuple(self._entry(row) for row in rows)
 
     def get_entry(self, entity_id: str) -> GoogleEntry:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM google_calendar_entries WHERE entity_id = ?", (entity_id,)
+                "SELECT * FROM plugin__15__google_calendar__entries WHERE entity_id = ?", (entity_id,)
             ).fetchone()
         if row is None:
             raise KeyError(entity_id)

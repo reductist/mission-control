@@ -7,7 +7,7 @@
   "capabilities": ["agenda", "closed-items", "commands", "entity-details"],
   "runtime": {
     "entrypoint": "mission_control.builtin_plugins.landscape:activate",
-    "migration_set": "landscape",
+    "migration_set": "landscape_v2",
     "agenda_seed": "agenda.json"
   },
   "permissions": ["database"],

@@ -11,6 +11,7 @@ from collections.abc import Iterable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from importlib import util as importlib_util
 from importlib import import_module
 from importlib.resources import files
 from importlib.resources.abc import Traversable
@@ -20,12 +21,22 @@ from typing import Iterator, Protocol
 from mission_control.agenda import (
     AgendaContribution,
     AgendaContributionError,
+    contribution_to_dict,
     parse_agenda_contribution,
     validate_agenda_capabilities,
 )
 from mission_control.commands import CommandOwner
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
+from mission_control.plugin_adapter import (
+    DocumentPluginProvider,
+    validate_runtime_capability_adapters,
+)
+from mission_control.plugin_api import (
+    PluginCallContractError,
+    PluginCallRejected,
+    PluginContext,
+)
 from mission_control.plugins import (
     Capability,
     PluginCompatibilityError,
@@ -45,7 +56,7 @@ class PluginLifecycleError(ValueError):
     """A selected plugin cannot safely complete its declared lifecycle."""
 
 
-class AgendaProvider(Protocol):
+class PluginProvider(Protocol):
     plugin_id: PluginId
     command_owner: CommandOwner | None
 
@@ -88,7 +99,7 @@ class PluginActivationFailure:
 @dataclass(frozen=True, slots=True)
 class PluginActivation:
     plugin: PreparedPlugin
-    provider: AgendaProvider | None
+    provider: PluginProvider | None
     failure: PluginActivationFailure | None
 
 
@@ -129,9 +140,17 @@ class PluginDatabase:
         self, database: Database, plugin_id: PluginId, *, enabled: bool
     ) -> None:
         self._database = database
-        self.path = database.path
-        self._prefix = plugin_id.value.replace("-", "_") + "_"
+        self._prefix = plugin_sql_prefix(plugin_id)
         self._enabled = enabled
+
+    @property
+    def namespace(self) -> str:
+        return self._prefix
+
+    def table_name(self, local_name: str) -> str:
+        if re.fullmatch(r"[a-z][a-z0-9_]*", local_name) is None:
+            raise ValueError("plugin-local table name is not a safe SQL identifier")
+        return f"{self._prefix}{local_name}"
 
     def _authorize(
         self,
@@ -244,7 +263,10 @@ def filesystem_plugin_sources(
             candidates = tuple(
                 child
                 for child in sorted(root.iterdir(), key=lambda item: item.name)
-                if child.is_dir() and (child / "registration.json").is_file()
+                if child.is_dir()
+                and not child.is_symlink()
+                and child.resolve().parent == root
+                and (child / "registration.json").is_file()
             )
         for candidate in candidates:
             discovered[str(candidate)] = candidate
@@ -281,7 +303,15 @@ def _selected_sources(
             )
         except (OSError, json.JSONDecodeError, PluginRegistrationError) as error:
             raise PluginLifecycleError(f"{source.label}: {error}") from error
-        indexed.setdefault(registration.plugin_id.value, []).append(source)
+        existing = indexed.setdefault(registration.plugin_id.value, [])
+        duplicate_path = any(
+            isinstance(item.root, Path)
+            and isinstance(source.root, Path)
+            and item.root.resolve() == source.root.resolve()
+            for item in existing
+        )
+        if not duplicate_path:
+            existing.append(source)
     selected_ids = set(selected)
     for source in filesystem_plugin_sources(roots):
         document: object | None = None
@@ -297,7 +327,15 @@ def _selected_sources(
             if candidate_id in selected_ids:
                 raise PluginLifecycleError(f"{source.label}: {error}") from error
             continue
-        indexed.setdefault(registration.plugin_id.value, []).append(source)
+        existing = indexed.setdefault(registration.plugin_id.value, [])
+        duplicate_path = any(
+            isinstance(item.root, Path)
+            and isinstance(source.root, Path)
+            and item.root.resolve() == source.root.resolve()
+            for item in existing
+        )
+        if not duplicate_path:
+            existing.append(source)
 
     result: list[tuple[str, PluginResourceSource]] = []
     for plugin_id in selected:
@@ -335,6 +373,7 @@ def prepare_plugins(
                 raise ValueError("selected and registration ids must match")
             ensure_plugin_api_compatible(registration)
             _validate_permissions(registration)
+            validate_runtime_capability_adapters(registration)
 
             seed = None
             runtime = registration.runtime
@@ -369,6 +408,7 @@ def prepare_plugins(
             OSError,
             json.JSONDecodeError,
             PluginConfigurationError,
+            PluginCallContractError,
             PluginCompatibilityError,
             PluginRegistrationError,
             AgendaContributionError,
@@ -435,6 +475,13 @@ def _apply_declared_migrations(
     if re.fullmatch(r"[a-z][a-z0-9_]*", runtime.migration_set) is None:
         raise PluginLifecycleError("migration set is not a safe SQL identifier")
     migration_root = plugin.source.root.joinpath("migrations")
+    if isinstance(plugin.source.root, Path):
+        plugin_root = plugin.source.root.resolve()
+        migration_path = Path(migration_root)
+        if migration_path.is_symlink() or not migration_path.resolve().is_relative_to(
+            plugin_root
+        ):
+            raise PluginLifecycleError("unsafe plugin migration directory")
     if not migration_root.is_dir():
         raise PluginLifecycleError(
             f"declared migration set {runtime.migration_set!r} is unavailable"
@@ -444,6 +491,13 @@ def _apply_declared_migrations(
         for migration in sorted(migration_root.iterdir(), key=lambda item: item.name):
             if not migration.is_file() or not migration.name.endswith(".sql"):
                 continue
+            if isinstance(migration, Path) and (
+                migration.is_symlink()
+                or migration.resolve().parent != Path(migration_root).resolve()
+            ):
+                raise PluginLifecycleError(
+                    f"unsafe plugin migration resource: {migration.name}"
+                )
             try:
                 version = int(migration.name.split("_", 1)[0])
             except ValueError as error:
@@ -458,7 +512,10 @@ def _apply_declared_migrations(
                 (plugin_id, runtime.migration_set, version),
             ).fetchone()
             if existing is None:
-                legacy_table = f"{runtime.migration_set}_schema_migrations"
+                legacy_table = (
+                    f"{plugin_sql_prefix(plugin.registration.plugin_id)}"
+                    "schema_migrations"
+                )
                 legacy_exists = connection.execute(
                     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
                     (legacy_table,),
@@ -518,61 +575,106 @@ def _execute_migration_script(connection: sqlite3.Connection, script: str) -> No
         raise PluginLifecycleError("migration contains an incomplete SQL statement")
 
 
-def _activate_one(database: Database, plugin: PreparedPlugin) -> AgendaProvider:
+def plugin_sql_prefix(plugin_id: PluginId) -> str:
+    """Return the injective, core-reserved SQLite namespace for a plugin."""
+
+    return (
+        f"plugin__{len(plugin_id.value)}__"
+        f"{plugin_id.value.replace('-', '_')}__"
+    )
+
+
+def _activate_one(database: Database, plugin: PreparedPlugin) -> PluginProvider:
     runtime = plugin.registration.runtime
     assert runtime is not None
     _apply_declared_migrations(database, plugin)
     module_name, callable_name = runtime.entrypoint.split(":", 1)
-    implementation = import_module(module_name)
-    activate = getattr(implementation, callable_name)
-    provider = activate(
-        PluginDatabase(
-            database,
-            plugin.registration.plugin_id,
-            enabled=Permission.DATABASE in plugin.registration.permissions,
-        ),
-        plugin.seed,
-        plugin.configuration,
-        dict(plugin.credentials),
-    )
+    try:
+        implementation = _import_plugin_module(plugin, module_name)
+        activate = getattr(implementation, callable_name)
+        handler = activate(
+            PluginContext.create(
+                plugin_id=plugin.registration.plugin_id.value,
+                storage=PluginDatabase(
+                    database,
+                    plugin.registration.plugin_id,
+                    enabled=Permission.DATABASE in plugin.registration.permissions,
+                ),
+                configuration=plugin.configuration.to_dict(),
+                credentials=dict(plugin.credentials),
+                agenda_seed=(
+                    contribution_to_dict(plugin.seed)
+                    if plugin.seed is not None
+                    else None
+                ),
+            )
+        )
+    except Exception as error:
+        raise PluginLifecycleError(
+            f"{plugin.registration.plugin_id.value}: plugin activation failed "
+            f"({type(error).__name__})"
+        ) from error
+    try:
+        call = getattr(handler, "call", None)
+    except Exception as error:
+        raise PluginLifecycleError(
+            f"{plugin.registration.plugin_id.value}: plugin activation failed "
+            f"({type(error).__name__})"
+        ) from error
+    if not callable(call):
+        raise TypeError("plugin entrypoint must return a JSON capability handler")
+    try:
+        provider = DocumentPluginProvider(plugin.registration, handler)
+    except PluginCallRejected as error:
+        raise PluginLifecycleError(
+            f"{plugin.registration.plugin_id.value}: runtime description was rejected"
+        ) from error
+    except PluginCallContractError as error:
+        raise PluginLifecycleError(
+            f"{plugin.registration.plugin_id.value}: {error}"
+        ) from error
     if provider.plugin_id != plugin.registration.plugin_id:
         raise ValueError("registration and activated provider ids must match")
-    declares_commands = Capability.COMMANDS in plugin.registration.capabilities
-    if (provider.command_owner is not None) is not declares_commands:
-        raise ValueError("registration and activated command capability must match")
-    if declares_commands and not callable(
-        getattr(provider.command_owner, "command_state", None)
-    ):
-        raise ValueError(
-            "registered command owner must expose current entity affordances"
-        )
-    checks = (
-        (Capability.CLOSED_ITEMS, "closed_items", "closed-items"),
-        (Capability.ENTITY_DETAILS, "entity_detail", "entity-details"),
-        (Capability.JOBS, "jobs", "jobs"),
-        (Capability.HEALTH, "health", "health"),
-    )
-    for capability, attribute, label in checks:
-        if callable(getattr(provider, attribute, None)) is not (
-            capability in plugin.registration.capabilities
-        ):
-            raise ValueError(
-                f"registration and activated {label} capability must match"
-            )
     return provider
 
 
-def activate_agenda_plugins(
+def _import_plugin_module(plugin: PreparedPlugin, module_name: str):
+    """Load a simple local development module or an installed Python package."""
+
+    if isinstance(plugin.source.root, Path):
+        root = plugin.source.root.resolve()
+        candidate = root.joinpath(*module_name.split(".")).with_suffix(".py")
+        resolved = candidate.resolve()
+        if candidate.is_file() or candidate.is_symlink():
+            if not candidate.is_file() or not resolved.is_relative_to(root):
+                raise PluginLifecycleError(
+                    f"unsafe plugin runtime module: {module_name!r}"
+                )
+            qualified = (
+                f"_mission_control_plugin_{plugin.registration.plugin_id.value.replace('-', '_')}"
+            )
+            spec = importlib_util.spec_from_file_location(qualified, resolved)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"cannot load plugin runtime module {module_name!r}")
+            implementation = importlib_util.module_from_spec(spec)
+            spec.loader.exec_module(implementation)
+            return implementation
+    return import_module(module_name)
+
+
+def activate_plugins(
     database: Database, plugins: Iterable[PreparedPlugin]
-) -> tuple[AgendaProvider, ...]:
+) -> tuple[PluginProvider, ...]:
     """Migrate then import each previously validated runtime entrypoint."""
 
     MigrationRunner(database).apply()
-    providers: list[AgendaProvider] = []
+    providers: list[PluginProvider] = []
     for plugin in plugins:
         plugin_id = plugin.registration.plugin_id.value
         try:
             providers.append(_activate_one(database, plugin))
+        except PluginLifecycleError:
+            raise
         except (
             AttributeError,
             ImportError,
@@ -583,6 +685,15 @@ def activate_agenda_plugins(
         ) as error:
             raise PluginLifecycleError(f"{plugin_id}: {error}") from error
     return tuple(providers)
+
+
+def activate_agenda_plugins(
+    database: Database, plugins: Iterable[PreparedPlugin]
+) -> tuple[PluginProvider, ...]:
+    """Activate already-prepared plugins supported by the current Agenda shell."""
+
+    prepared = require_agenda_plugins(plugins)
+    return activate_plugins(database, prepared)
 
 
 def activate_agenda_plugins_isolated(

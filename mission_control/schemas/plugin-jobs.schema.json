@@ -1,0 +1,56 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "jobs": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "interval_seconds": {
+                        "allOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "integer",
+                                "maximum": 86400,
+                                "minimum": 1
+                            }
+                        ]
+                    },
+                    "job_id": {
+                        "$ref": "#/$defs/%23Identifier"
+                    }
+                },
+                "required": [
+                    "interval_seconds",
+                    "job_id"
+                ]
+            }
+        },
+        "plugin_id": {
+            "$ref": "#/$defs/%23PluginID"
+        },
+        "schema_version": {
+            "const": "mission-control.plugin-jobs/v1"
+        }
+    },
+    "required": [
+        "jobs",
+        "plugin_id",
+        "schema_version"
+    ]
+}

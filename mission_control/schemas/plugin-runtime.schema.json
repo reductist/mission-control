@@ -1,0 +1,45 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#PluginOperation": {
+            "enum": [
+                "agenda.snapshot",
+                "closed-items.snapshot",
+                "commands.execute",
+                "commands.state",
+                "entity-details.get",
+                "health.get",
+                "jobs.failure",
+                "jobs.list",
+                "jobs.run",
+                "runtime.describe",
+                "runtime.stop"
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "operations": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/%23PluginOperation"
+            }
+        },
+        "plugin_id": {
+            "$ref": "#/$defs/%23PluginID"
+        },
+        "schema_version": {
+            "const": "mission-control.plugin-runtime/v1"
+        }
+    },
+    "required": [
+        "operations",
+        "plugin_id",
+        "schema_version"
+    ]
+}

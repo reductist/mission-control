@@ -27,6 +27,7 @@ from mission_control.commands import (
     Unauthorized,
     outcome_to_dict,
     parse_command,
+    parse_command_result,
 )
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
@@ -116,6 +117,20 @@ def test_core_task_command_accepts_current_revision_and_rejects_stale_view(tmp_p
     assert isinstance(stale, Stale)
     assert stale.current_revision == accepted.revision
     assert outcome_to_dict(stale)["status"] == "stale"
+
+
+def test_command_result_round_trips_through_the_json_contract():
+    command = parse_command(command_document())
+    outcome = Accepted(
+        command.command_id,
+        command.target,
+        "revision-2",
+        JsonObject((("changed", True),)),
+    )
+
+    parsed = parse_command_result(outcome_to_dict(outcome))
+
+    assert parsed == outcome
 
 
 def test_owner_argument_errors_are_structured_rejections(tmp_path):

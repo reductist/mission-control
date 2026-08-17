@@ -77,7 +77,12 @@ Core owns the event envelope. It includes:
 - correlation and causation identifiers where available
 - payload validated against the registered event schema
 
-Plugin event types are namespaced by plugin identifier. Plugins append events through the public event writer and may not write directly to core event tables.
+Plugin event types are namespaced by plugin identifier. The public core event
+writer is planned, not yet exposed by the current adapter. Today a plugin may
+atomically maintain its own namespaced event rows through its scoped storage
+connection, but it may not write core event tables. Introducing the shared
+writer requires an executable transaction contract and conformance tests before
+this section becomes a runtime guarantee.
 
 ## Storage and migration interface
 
@@ -94,13 +99,35 @@ A plugin migration declares:
 
 Core validates the migration plan before execution. A plugin may not modify core tables or another plugin's private tables.
 
-The current runtime gives every built-in or explicitly discovered Python plugin the same namespaced SQLite adapter. The adapter authorizes only tables and schema objects prefixed by that plugin's identifier, while core owns migration ordering, checksums, transactions, and the shared ledger. Landscape exercises that boundary through its domain-specific repository, `landscape_*` tables, and append-only events; its packaged agenda document is an import seed, not a runtime source of truth. In-process plugins remain trusted code rather than an operating-system security sandbox, but accidental or direct SQL access to core and unrelated plugin tables is rejected at the connection boundary. A process-isolated storage service remains a later hard-security boundary.
+The current runtime gives every built-in or explicitly discovered Python plugin the same namespaced SQLite adapter. The adapter authorizes only tables and schema objects in the injective, length-prefixed, core-reserved `plugin__<id-length>__<normalized-id>__*` namespace. The length and doubled separators keep prefix-related IDs distinct, and no plugin ID can collide with a core table. Plugin code obtains names through `context.storage.table_name("local_name")`; the database path is not part of the public context. Core owns migration ordering, checksums, transactions, and the shared ledger. Landscape exercises that boundary through its domain-specific repository, `plugin__9__landscape__*` tables, and append-only events; its packaged agenda document is an import seed, not a runtime source of truth. In-process plugins remain trusted code rather than an operating-system security sandbox, but accidental SQL access to core and unrelated plugin tables is rejected at the supplied connection boundary. A process-isolated storage service remains a later hard-security boundary.
 
 ## Command and query interface
 
 Plugins expose domain operations through registered command and query handlers. Handlers receive only documented context objects, including authorized identity, transaction scope, configuration, logging, and approved core services.
 
 Plugins may not reach into private core modules or mutate projections outside their registered operation boundaries.
+
+The current in-process adapter exchanges `mission-control.plugin-call/v1` and
+`mission-control.plugin-call-result/v1` JSON documents. Calls use closed,
+operation-specific inputs for Agenda snapshots, closed items, entity details,
+command state and execution, jobs, health, and shutdown. Outputs are validated
+again against their existing versioned capability schemas before core converts
+them to internal immutable values. The plugin-facing Python surface is limited
+to `PluginContext`, `CapabilityRouter`, and structured call rejection; plugins
+do not construct core provider objects.
+
+`runtime.describe` returns a versioned list of implemented operations. Core
+requires every operation implied by the manifest, rejects undeclared extras,
+and does this during activation before the provider enters aggregation or
+routing. `mcctl plugin conformance` exercises the same boundary in a temporary
+workspace. This JSON boundary is transport-neutral: a future subprocess or TUI
+does not need the built-ins' Python domain classes, though process isolation
+still requires an explicit storage/transaction transport.
+
+CLI, HTTP, event, and declarative UI capability names remain reserved in the
+manifest vocabulary, but an executable runtime cannot claim them until their
+call contracts and adapters are implemented. They are not silent escape
+hatches around `runtime.describe`.
 
 Registration defines the maximum capability envelope for each plugin-owned
 entity type. A current entity projection exposes zero or more affordances from

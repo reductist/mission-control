@@ -14,6 +14,9 @@ from mission_control.builtin_plugins import (
     prepare_builtin_agenda_plugins,
 )
 from mission_control.builtin_plugins.landscape.domain import LandscapeEntityKind
+from mission_control.builtin_plugins.landscape.repository import (
+    SQLiteLandscapeRepository,
+)
 from mission_control.database import Database
 from mission_control.server import MissionControlApplication, build_server
 
@@ -200,6 +203,118 @@ def test_failed_plugin_activation_is_isolated_from_other_plugins(
         entry["source"]["plugin_id"] == "landscape"
         for entry in dashboard["agenda"]
     )
+
+
+def test_failed_plugin_job_discovery_does_not_abort_startup_or_leak_details(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = Database(tmp_path / "mission-control.db")
+    prepared = prepare_builtin_agenda_plugins(
+        ("google-calendar", "landscape"),
+        configurations={
+            "google-calendar": {
+                "mode": "demo",
+                "demo_anchor_date": "2026-08-14",
+            }
+        },
+    )
+    activations = plugin_lifecycle.activate_agenda_plugins_isolated(
+        database, prepared
+    )
+
+    class BrokenJobs:
+        def __init__(self, provider):
+            self._provider = provider
+
+        def __getattr__(self, name):
+            return getattr(self._provider, name)
+
+        def jobs(self):
+            raise RuntimeError("private job discovery secret")
+
+    isolated = tuple(
+        plugin_lifecycle.PluginActivation(
+            activation.plugin,
+            BrokenJobs(activation.provider)
+            if activation.plugin.registration.plugin_id.value == "google-calendar"
+            else activation.provider,
+            activation.failure,
+        )
+        for activation in activations
+    )
+    monkeypatch.setattr(
+        "mission_control.server.activate_agenda_plugins_isolated",
+        lambda _database, _plugins: isolated,
+    )
+
+    application = MissionControlApplication(database, builtin_plugins=prepared)
+    dashboard = application.dashboard()
+    providers = {item["id"]: item for item in dashboard["providers"]}
+
+    assert providers["google-calendar"]["health"]["code"] == "jobs-read-failed"
+    assert "private job discovery secret" not in json.dumps(providers)
+    assert any(
+        entry["source"]["plugin_id"] == "landscape"
+        for entry in dashboard["agenda"]
+    )
+
+
+def test_capability_scoped_failure_is_not_cleared_by_successful_agenda_read(
+    tmp_path,
+) -> None:
+    application = MissionControlApplication(Database(tmp_path / "mission-control.db"))
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+
+    class MixedProvider:
+        def contribution(self, *, generated_at):
+            return prepared.seed
+
+        def closed_items(self, *, generated_at):
+            raise RuntimeError("private history failure")
+
+    provider = MixedProvider()
+    application.builtin_plugins = (prepared,)
+    application.agenda_providers = (provider,)
+    application.active_plugins = ((prepared, provider),)
+    application.registrations = {"landscape": prepared.registration}
+
+    dashboard = application.dashboard()
+
+    health = dashboard["providers"][0]["health"]
+    assert health["code"] == "closed-items-read-failed"
+    assert "private history failure" not in health["detail"]
+
+
+def test_entity_detail_plugin_failure_returns_sanitized_service_error(
+    tmp_path, caplog: pytest.LogCaptureFixture
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    application = MissionControlApplication(
+        Database(tmp_path / "mission-control.db"), builtin_plugins=(prepared,)
+    )
+
+    class BrokenDetail:
+        def entity_detail(self, _target):
+            raise RuntimeError("private entity detail secret")
+
+    application.entity_detail_providers["landscape"] = BrokenDetail()
+
+    with running_server(application) as base_url:
+        with pytest.raises(HTTPError) as unavailable:
+            request_json(
+                f"{base_url}/api/entities/landscape/action/measure-access-route"
+            )
+
+        assert unavailable.value.code == 503
+        error = json.load(unavailable.value)
+        assert error == {
+            "error": {
+                "code": "entity-detail-read-failed",
+                "detail": "entity detail is temporarily unavailable",
+            }
+        }
+
+    assert "private entity detail secret" not in caplog.text
 
 
 def test_landscape_upgrade_preserves_legacy_demo_tasks_for_manual_cleanup(tmp_path):
@@ -430,7 +545,7 @@ def test_landscape_commands_complete_survive_restart_and_reopen(tmp_path):
         write_token="known-token",
         builtin_plugins=prepared,
     )
-    repository = restarted.agenda_providers[0].repository
+    repository = SQLiteLandscapeRepository(database)
     assert repository.get_action("measure-access-route").state.value == "done"
     assert (
         len(repository.history(LandscapeEntityKind.ACTION, "measure-access-route")) == 2

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,10 +23,14 @@ from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_lifecycle import (
     PluginLifecycleError,
+    activate_plugins,
     activate_agenda_plugins,
+    prepare_plugins,
     require_agenda_plugins,
 )
+from mission_control.plugin_api import PluginCallContractError, PluginCallRejected
 from mission_control.plugins import (
+    Capability,
     PluginDiscoveryError,
     PluginRegistrationError,
     catalog_to_list,
@@ -199,6 +204,21 @@ def build_parser() -> argparse.ArgumentParser:
         default="json",
         help="output format (default: %(default)s)",
     )
+    conformance = plugin_commands.add_parser(
+        "conformance",
+        help="activate a plugin in a temporary workspace and verify its JSON calls",
+    )
+    conformance.add_argument("registration", type=Path)
+    conformance.add_argument(
+        "--settings", type=Path, help="JSON object containing plugin settings"
+    )
+    conformance.add_argument(
+        "--credential",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        help="named credential file reference; may be repeated",
+    )
     return parser
 
 
@@ -231,6 +251,73 @@ def main(argv: list[str] | None = None) -> int:
             stdout.print(plugin_catalog_table(catalog))
         else:
             print(json.dumps(catalog_to_list(catalog), sort_keys=True))
+        return 0
+
+    if args.command == "plugin" and args.plugin_command == "conformance":
+        try:
+            registration = load_registration(args.registration)
+            settings: object = {}
+            if args.settings is not None:
+                settings = json.loads(args.settings.read_text(encoding="utf-8"))
+            if not isinstance(settings, dict):
+                raise ValueError("settings must be a JSON object")
+            credentials: dict[str, str] = {}
+            for item in args.credential:
+                name, separator, path = item.partition("=")
+                if not separator or not name or not path:
+                    raise ValueError("credential must use NAME=PATH")
+                if name in credentials:
+                    raise ValueError(f"credential {name!r} was supplied more than once")
+                credentials[name] = path
+            (prepared,) = prepare_plugins(
+                (registration.plugin_id.value,),
+                roots=(args.registration.parent,),
+                configurations={registration.plugin_id.value: settings},
+                credentials={registration.plugin_id.value: credentials},
+            )
+            if prepared.registration.runtime is None:
+                raise ValueError("plugin does not declare a runtime entrypoint")
+            with tempfile.TemporaryDirectory(prefix="mission-control-conformance-") as root:
+                (provider,) = activate_plugins(
+                    Database(Path(root) / "mission-control.db"), (prepared,)
+                )
+                try:
+                    probes: list[str] = []
+                    if Capability.HEALTH in registration.capabilities:
+                        provider.health()
+                        probes.append("health.get")
+                    if Capability.JOBS in registration.capabilities:
+                        provider.jobs()
+                        probes.append("jobs.list")
+                    print(
+                        json.dumps(
+                            {
+                                "plugin_id": registration.plugin_id.value,
+                                "valid": True,
+                                "operations": list(provider.operations),
+                                "probed": probes,
+                            },
+                            sort_keys=True,
+                        )
+                    )
+                finally:
+                    provider.stop()
+        except PluginCallRejected as error:
+            stderr.print(
+                f"error: plugin rejected conformance probe ({error.code})",
+                markup=False,
+            )
+            return 2
+        except (
+            OSError,
+            json.JSONDecodeError,
+            PluginCallContractError,
+            PluginLifecycleError,
+            PluginRegistrationError,
+            ValueError,
+        ) as error:
+            stderr.print(f"error: {error}", markup=False)
+            return 2
         return 0
 
     if args.command == "config":
@@ -300,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
     repository = TaskRepository(database)
 
     if args.command == "agenda" and args.agenda_command == "list":
+        providers = ()
         try:
             providers = activate_agenda_plugins(
                 database, require_agenda_plugins(prepared_plugins)
@@ -307,21 +395,36 @@ def main(argv: list[str] | None = None) -> int:
         except PluginLifecycleError as error:
             stderr.print(f"error: {error}", markup=False)
             return 2
-        generated_at = datetime.now(UTC)
-        contribution = project_core_tasks(repository.list(), generated_at=generated_at)
-        agenda_snapshot = aggregate_agenda(
-            (
-                contribution,
-                *(
-                    provider.contribution(generated_at=generated_at)
-                    for provider in providers
-                ),
+        try:
+            generated_at = datetime.now(UTC)
+            contribution = project_core_tasks(
+                repository.list(), generated_at=generated_at
             )
-        )
-        if args.format == "table":
-            stdout.print(agenda_table(agenda_snapshot))
-        else:
-            print(json.dumps(agenda_to_list(agenda_snapshot), sort_keys=True))
+            agenda_snapshot = aggregate_agenda(
+                (
+                    contribution,
+                    *(
+                        provider.contribution(generated_at=generated_at)
+                        for provider in providers
+                    ),
+                )
+            )
+            if args.format == "table":
+                stdout.print(agenda_table(agenda_snapshot))
+            else:
+                print(json.dumps(agenda_to_list(agenda_snapshot), sort_keys=True))
+        except Exception as error:
+            stderr.print(
+                f"error: plugin agenda read failed ({type(error).__name__})",
+                markup=False,
+            )
+            return 2
+        finally:
+            for provider in reversed(providers):
+                try:
+                    provider.stop()
+                except Exception:
+                    continue
         return 0
 
     if args.command == "task":

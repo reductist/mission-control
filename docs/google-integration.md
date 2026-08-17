@@ -4,6 +4,16 @@
 
 The bundled `google-calendar` provider imports Google Calendar and Google Tasks read-only for presentation. The capability-oriented ID leaves room for separate integrations such as `google-photos`. Google remains authoritative; Mission Control keeps a plugin-owned SQLite cache so the wall view can survive transient API failures.
 
+> **Pre-release storage reset (August 2026):** the JSON capability adapter moved
+> plugin tables into a prefix-safe namespace. An older development database may
+> still contain unreachable `google_calendar_*` cache tables. They are not
+> covered by the new provider's reconnect/revocation erasure path. Before using
+> that database with a live account again, stop Mission Control and either
+> archive and replace the development database, or back it up and explicitly
+> remove those legacy Google cache tables. The single-service cutover checklist
+> treats this cleanup as a required, operator-approved step; it must never happen
+> silently during startup.
+
 | Google resource | Mission Control projection | Notes |
 | --- | --- | --- |
 | Calendar event or appointment | Schedule event | Recurring series are expanded by Google inside the configured window. |

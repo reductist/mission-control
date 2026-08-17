@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from io import StringIO
 
+import pytest
 from rich.console import Console
 
 from mission_control.agenda import aggregate_agenda, parse_agenda_contribution
 from mission_control.cli import main
+from mission_control.plugin_api import PluginCallRejected
 from mission_control.presentation import agenda_table
 
 
@@ -209,3 +211,30 @@ enabled = true
 
     assert "unknown agenda plugin 'unavailable'" in capsys.readouterr().err
     assert not database.exists()
+
+
+def test_agenda_cli_sanitizes_provider_failure_and_stops_runtime(
+    tmp_path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stopped = False
+
+    class RejectingProvider:
+        def contribution(self, *, generated_at):
+            raise PluginCallRejected("not-ready", "private agenda secret")
+
+        def stop(self):
+            nonlocal stopped
+            stopped = True
+
+    monkeypatch.setattr(
+        "mission_control.cli.activate_agenda_plugins",
+        lambda _database, _prepared: (RejectingProvider(),),
+    )
+
+    assert main(
+        ["--database", str(tmp_path / "mission-control.db"), "agenda", "list"]
+    ) == 2
+    captured = capsys.readouterr()
+    assert "plugin agenda read failed (PluginCallRejected)" in captured.err
+    assert "private agenda secret" not in captured.err
+    assert stopped is True

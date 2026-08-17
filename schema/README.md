@@ -86,12 +86,18 @@ The check:
 
 1. generates all runtime JSON Schemas from their canonical CUE definitions
 2. fails when any packaged runtime artifact has drifted
-3. validates the reference plugin and public examples directly against CUE
+3. validates the reference plugin, capability calls, and public examples directly against CUE
 4. validates the same documents against generated JSON Schema
 5. proves misspelled keys, invalid discriminators, impossible timing shapes, invalid defaults, and invalid value types are rejected through both schema paths
 6. exercises planned agenda providers for landscape, maintenance, financial planning, home search, and Ansible automation
 
 Python tests separately exercise the packaged artifacts through runtime parsers and CLI boundaries.
+
+`schema/plugin/runtime.cue` defines the shared call/result envelopes and the
+runtime-description, command-state, health, and job documents. Capability
+payloads such as Agenda, closed items, entity details, and command results keep
+their own focused schemas; the adapter composes them rather than creating one
+giant union that every plugin author must understand.
 
 Bundled plugins own their CUE configuration definitions and package generated
 JSON Schema, explicit-default, and renderer-neutral presentation artifacts.

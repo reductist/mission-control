@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-
-from mission_control.plugins import PluginConfiguration
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,13 +23,12 @@ class GoogleConfig:
     @classmethod
     def from_runtime(
         cls,
-        configuration: PluginConfiguration,
-        credentials: dict[str, str],
+        configuration: Mapping[str, object],
+        credentials: Mapping[str, str],
     ) -> GoogleConfig:
-        values = configuration.to_dict()
-        mode = str(values["mode"])
+        mode = str(configuration["mode"])
         credential = Path(credentials["oauth"]) if "oauth" in credentials else None
-        anchor_value = values.get("demo_anchor_date")
+        anchor_value = configuration.get("demo_anchor_date")
         return cls(
             mode=mode,
             demo_anchor_date=(
@@ -38,11 +36,11 @@ class GoogleConfig:
                 if anchor_value is not None
                 else None
             ),
-            calendar_ids=tuple(str(item) for item in values["calendar_ids"]),
-            task_list_ids=tuple(str(item) for item in values["task_list_ids"]),
-            lookback_days=int(values["lookback_days"]),
-            lookahead_days=int(values["lookahead_days"]),
-            sync_interval_seconds=int(values["sync_interval_seconds"]),
-            request_timeout_seconds=int(values["request_timeout_seconds"]),
+            calendar_ids=tuple(str(item) for item in configuration["calendar_ids"]),
+            task_list_ids=tuple(str(item) for item in configuration["task_list_ids"]),
+            lookback_days=int(configuration["lookback_days"]),
+            lookahead_days=int(configuration["lookahead_days"]),
+            sync_interval_seconds=int(configuration["sync_interval_seconds"]),
+            request_timeout_seconds=int(configuration["request_timeout_seconds"]),
             oauth_credential=credential,
         )

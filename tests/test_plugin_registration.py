@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from mission_control.cli import main
+from mission_control.plugin_api import PluginCallRejected
 from mission_control.plugins import (
     Capability,
     EntityCapability,
@@ -39,11 +40,7 @@ def test_reference_plugin_parses_into_immutable_domain_values():
     registration = load_registration(REFERENCE_REGISTRATION)
 
     assert registration.plugin_id.value == "reference"
-    assert registration.capabilities == (
-        Capability.CLI,
-        Capability.EVENTS,
-        Capability.HEALTH,
-    )
+    assert registration.capabilities == (Capability.HEALTH,)
     assert registration.configuration.document_version == (
         "mission-control.reference.config/v1"
     )
@@ -223,3 +220,102 @@ def test_cli_reports_invalid_registration(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "configuration.schema_resource" in captured.err
     assert captured.out == ""
+
+
+def test_cli_conformance_runs_external_reference_through_json_adapter(
+    tmp_path, capsys
+):
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"message": "Reference runtime ready"}), encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "plugin",
+                "conformance",
+                str(REFERENCE_REGISTRATION),
+                "--settings",
+                str(settings),
+            ]
+        )
+        == 0
+    )
+
+    assert json.loads(capsys.readouterr().out) == {
+        "plugin_id": "reference",
+        "valid": True,
+        "operations": ["health.get", "runtime.describe"],
+        "probed": ["health.get"],
+    }
+
+
+def test_cli_conformance_runs_bundled_plugins_through_the_same_adapter(
+    tmp_path, capsys
+) -> None:
+    root = Path(__file__).parents[1] / "mission_control" / "builtin_plugins"
+    google_settings = tmp_path / "google-settings.json"
+    google_settings.write_text(
+        json.dumps({"mode": "demo", "demo_anchor_date": "2026-08-14"}),
+        encoding="utf-8",
+    )
+
+    assert main(
+        [
+            "plugin",
+            "conformance",
+            str(root / "google" / "registration.json"),
+            "--settings",
+            str(google_settings),
+        ]
+    ) == 0
+    google = json.loads(capsys.readouterr().out)
+    assert google["plugin_id"] == "google-calendar"
+    assert google["probed"] == ["health.get", "jobs.list"]
+
+    assert main(
+        [
+            "plugin",
+            "conformance",
+            str(root / "landscape" / "registration.json"),
+        ]
+    ) == 0
+    landscape = json.loads(capsys.readouterr().out)
+    assert landscape["plugin_id"] == "landscape"
+    assert landscape["probed"] == []
+
+
+def test_cli_conformance_sanitizes_rejection_and_still_stops_provider(
+    tmp_path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"message": "hello"}), encoding="utf-8")
+    stopped = False
+
+    class RejectingProvider:
+        operations = ("health.get", "runtime.describe", "runtime.stop")
+
+        def health(self):
+            raise PluginCallRejected("not-ready", "private rejection secret")
+
+        def stop(self):
+            nonlocal stopped
+            stopped = True
+
+    monkeypatch.setattr(
+        "mission_control.cli.activate_plugins",
+        lambda _database, _prepared: (RejectingProvider(),),
+    )
+
+    assert main(
+        [
+            "plugin",
+            "conformance",
+            str(REFERENCE_REGISTRATION),
+            "--settings",
+            str(settings),
+        ]
+    ) == 2
+    captured = capsys.readouterr()
+    assert "not-ready" in captured.err
+    assert "private rejection secret" not in captured.err
+    assert stopped is True

@@ -1,0 +1,279 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#CommandEnvelope": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "arguments": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "command": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "command_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "expected_revision": {
+                    "type": "string",
+                    "not": {
+                        "const": ""
+                    }
+                },
+                "schema_version": {
+                    "const": "mission-control.command/v1"
+                },
+                "target": {
+                    "$ref": "#/$defs/%23SourceRef"
+                }
+            },
+            "required": [
+                "arguments",
+                "command",
+                "command_id",
+                "expected_revision",
+                "schema_version",
+                "target"
+            ]
+        },
+        "#CommandExecuteCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "actor": {
+                            "type": "string",
+                            "not": {
+                                "const": ""
+                            }
+                        },
+                        "command": {
+                            "$ref": "#/$defs/CommandEnvelope"
+                        }
+                    },
+                    "required": [
+                        "actor",
+                        "command"
+                    ]
+                },
+                "operation": {
+                    "const": "commands.execute"
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v1"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
+        "#CommandStateCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "target": {
+                            "$ref": "#/$defs/%23SourceRef"
+                        }
+                    },
+                    "required": [
+                        "target"
+                    ]
+                },
+                "operation": {
+                    "const": "commands.state"
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v1"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
+        "#EmptyCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "const": {}
+                },
+                "operation": {
+                    "enum": [
+                        "health.get",
+                        "jobs.list",
+                        "runtime.describe",
+                        "runtime.stop"
+                    ]
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v1"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
+        "#EntityDetailCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "target": {
+                            "$ref": "#/$defs/%23SourceRef"
+                        }
+                    },
+                    "required": [
+                        "target"
+                    ]
+                },
+                "operation": {
+                    "const": "entity-details.get"
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v1"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#JobCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "job_id": {
+                            "$ref": "#/$defs/%23Identifier"
+                        }
+                    },
+                    "required": [
+                        "job_id"
+                    ]
+                },
+                "operation": {
+                    "enum": [
+                        "jobs.run",
+                        "jobs.failure"
+                    ]
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v1"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#SnapshotCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "generated_at": {
+                            "$ref": "#/$defs/%23Timestamp"
+                        }
+                    },
+                    "required": [
+                        "generated_at"
+                    ]
+                },
+                "operation": {
+                    "enum": [
+                        "agenda.snapshot",
+                        "closed-items.snapshot"
+                    ]
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v1"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
+        "#SourceRef": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "entity_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "entity_type": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                }
+            },
+            "required": [
+                "entity_id",
+                "entity_type",
+                "plugin_id"
+            ]
+        },
+        "#Timestamp": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
+        },
+        "CommandEnvelope": {
+            "$ref": "#/$defs/%23CommandEnvelope"
+        }
+    },
+    "anyOf": [
+        {
+            "$ref": "#/$defs/%23SnapshotCall"
+        },
+        {
+            "$ref": "#/$defs/%23EntityDetailCall"
+        },
+        {
+            "$ref": "#/$defs/%23CommandStateCall"
+        },
+        {
+            "$ref": "#/$defs/%23CommandExecuteCall"
+        },
+        {
+            "$ref": "#/$defs/%23EmptyCall"
+        },
+        {
+            "$ref": "#/$defs/%23JobCall"
+        }
+    ]
+}

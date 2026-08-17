@@ -67,6 +67,7 @@ from mission_control.plugin_lifecycle import (
     require_agenda_plugins,
 )
 from mission_control.plugins import (
+    Capability,
     EntityCapability,
     PluginId,
     StandardEntityCapability,
@@ -141,8 +142,8 @@ class MissionControlApplication:
         }
         self.entity_detail_providers = {
             provider.plugin_id.value: provider
-            for provider in self.agenda_providers
-            if callable(getattr(provider, "entity_detail", None))
+            for plugin, provider in self.active_plugins
+            if Capability.ENTITY_DETAILS in plugin.registration.capabilities
         }
         command_owners = {
             "core": EntityTypeCommandOwner(
@@ -174,16 +175,26 @@ class MissionControlApplication:
                 )
             },
         )
-        self.job_supervisor = PluginJobSupervisor(
-            job
-            for provider in self.agenda_providers
-            for job in (
-                provider.jobs() if callable(getattr(provider, "jobs", None)) else ()
-            )
-        )
         self._last_agenda_contributions: dict[str, AgendaContribution] = {}
         self._last_closed_contributions: dict[str, ClosedItemsContribution] = {}
-        self._provider_runtime_failures: dict[str, tuple[str, str]] = {}
+        self._provider_runtime_failures: dict[
+            str, dict[str, tuple[str, str]]
+        ] = {}
+        jobs = []
+        for plugin, provider in self.active_plugins:
+            if Capability.JOBS not in plugin.registration.capabilities:
+                continue
+            plugin_id = plugin.registration.plugin_id.value
+            try:
+                jobs.extend(provider.jobs())
+            except Exception:
+                self._set_provider_failure(
+                    plugin_id,
+                    "jobs",
+                    "jobs-read-failed",
+                    "Provider jobs could not be initialized safely.",
+                )
+        self.job_supervisor = PluginJobSupervisor(jobs)
         self._demo_fixture = _load_demo_fixture() if demo else None
         if demo:
             _seed_demo_tasks(self.repository)
@@ -225,6 +236,8 @@ class MissionControlApplication:
             project_core_closed_items(tasks, generated_at=generated_at)
         ]
         for plugin, provider in self.active_plugins:
+            if Capability.CLOSED_ITEMS not in plugin.registration.capabilities:
+                continue
             project_closed = getattr(provider, "closed_items", None)
             if not callable(project_closed):
                 continue
@@ -233,7 +246,9 @@ class MissionControlApplication:
                 contribution = project_closed(generated_at=generated_at)
                 validate_closed_items_capabilities(plugin.registration, contribution)
             except Exception:
-                self._provider_runtime_failures[plugin_id] = (
+                self._set_provider_failure(
+                    plugin_id,
+                    "closed-items",
                     "closed-items-read-failed",
                     "Provider history failed; the last available view was retained.",
                 )
@@ -242,6 +257,7 @@ class MissionControlApplication:
                         self._last_closed_contributions[plugin_id]
                     )
             else:
+                self._clear_provider_failure(plugin_id, "closed-items")
                 self._last_closed_contributions[plugin_id] = contribution
                 closed_contributions.append(contribution)
         closed_items = aggregate_closed_items(closed_contributions)
@@ -280,7 +296,9 @@ class MissionControlApplication:
                 contribution = provider.contribution(generated_at=generated_at)
                 validate_agenda_capabilities(plugin.registration, contribution)
             except Exception:
-                self._provider_runtime_failures[plugin_id] = (
+                self._set_provider_failure(
+                    plugin_id,
+                    "agenda",
                     "agenda-read-failed",
                     "Provider agenda failed; the last available view was retained.",
                 )
@@ -288,9 +306,25 @@ class MissionControlApplication:
                     contributions.append(self._last_agenda_contributions[plugin_id])
             else:
                 self._last_agenda_contributions[plugin_id] = contribution
-                self._provider_runtime_failures.pop(plugin_id, None)
+                self._clear_provider_failure(plugin_id, "agenda")
                 contributions.append(contribution)
         return tuple(contributions)
+
+    def _set_provider_failure(
+        self, plugin_id: str, surface: str, code: str, detail: str
+    ) -> None:
+        self._provider_runtime_failures.setdefault(plugin_id, {})[surface] = (
+            code,
+            detail,
+        )
+
+    def _clear_provider_failure(self, plugin_id: str, surface: str) -> None:
+        failures = self._provider_runtime_failures.get(plugin_id)
+        if failures is None:
+            return
+        failures.pop(surface, None)
+        if not failures:
+            self._provider_runtime_failures.pop(plugin_id, None)
 
     def _plugin_health(self) -> list[dict[str, object]]:
         documents: list[dict[str, object]] = [
@@ -309,14 +343,15 @@ class MissionControlApplication:
         for plugin, provider in self.active_plugins:
             plugin_id = plugin.registration.plugin_id.value
             if plugin_id in self._provider_runtime_failures:
-                code, detail = self._provider_runtime_failures[plugin_id]
+                code, detail = next(
+                    iter(self._provider_runtime_failures[plugin_id].values())
+                )
                 documents.append(self._failed_plugin_health(plugin_id, code, detail))
                 continue
-            health = getattr(provider, "health", None)
-            if not callable(health):
+            if Capability.HEALTH not in plugin.registration.capabilities:
                 continue
             try:
-                document = health().to_dict()
+                document = provider.health().to_dict()
                 if document.get("plugin_id") != plugin_id:
                     raise ValueError(
                         "provider health identity does not match registration"
@@ -456,16 +491,31 @@ class MissionControlApplication:
                 "entity detail is not available",
             )
         project = getattr(provider, "entity_detail")
-        detail = project(target)
+        try:
+            detail = project(target)
+            if detail is not None:
+                validate_entity_detail_capabilities(
+                    registration, detail, expected_source=target
+                )
+        except Exception:
+            self._set_provider_failure(
+                plugin_id,
+                "entity-details",
+                "entity-detail-read-failed",
+                "Provider entity detail could not be read safely.",
+            )
+            raise ApiError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "entity-detail-read-failed",
+                "entity detail is temporarily unavailable",
+            ) from None
+        self._clear_provider_failure(plugin_id, "entity-details")
         if detail is None:
             raise ApiError(
                 HTTPStatus.NOT_FOUND,
                 "entity-not-found",
                 "entity detail is not available",
             )
-        validate_entity_detail_capabilities(
-            registration, detail, expected_source=target
-        )
         declared = entity_type_registration(registration, entity_type)
         assert declared is not None
         can_read_activity = any(

@@ -5,7 +5,7 @@ migrations, and activation are core lifecycle concerns.
 """
 
 from mission_control.plugin_lifecycle import (
-    AgendaProvider as BuiltinAgendaProvider,
+    PluginProvider as BuiltinPluginProvider,
     PluginLifecycleError as BuiltinPluginError,
     PreparedPlugin as PreparedBuiltinPlugin,
     activate_agenda_plugins as activate_builtin_agenda_plugins,
@@ -15,7 +15,7 @@ from mission_control.plugin_lifecycle import (
 )
 
 __all__ = [
-    "BuiltinAgendaProvider",
+    "BuiltinPluginProvider",
     "BuiltinPluginError",
     "PreparedBuiltinPlugin",
     "activate_builtin_agenda_plugins",

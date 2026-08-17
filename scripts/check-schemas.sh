@@ -11,6 +11,18 @@ PLUGIN_DEFAULTS_GENERATED="$GENERATED_DIR/plugin-config-defaults.runtime-check.s
 PLUGIN_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-config-defaults.schema.json"
 PLUGIN_PRESENTATION_GENERATED="$GENERATED_DIR/plugin-config-presentation.runtime-check.schema.json"
 PLUGIN_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-config-presentation.schema.json"
+PLUGIN_CALL_GENERATED="$GENERATED_DIR/plugin-call.runtime-check.schema.json"
+PLUGIN_CALL_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-call.schema.json"
+PLUGIN_CALL_RESULT_GENERATED="$GENERATED_DIR/plugin-call-result.runtime-check.schema.json"
+PLUGIN_CALL_RESULT_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-call-result.schema.json"
+COMMAND_STATE_GENERATED="$GENERATED_DIR/command-state.runtime-check.schema.json"
+COMMAND_STATE_RUNTIME="$ROOT_DIR/mission_control/schemas/command-state.schema.json"
+PLUGIN_HEALTH_GENERATED="$GENERATED_DIR/plugin-health.runtime-check.schema.json"
+PLUGIN_HEALTH_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-health.schema.json"
+PLUGIN_JOBS_GENERATED="$GENERATED_DIR/plugin-jobs.runtime-check.schema.json"
+PLUGIN_JOBS_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-jobs.schema.json"
+PLUGIN_RUNTIME_GENERATED="$GENERATED_DIR/plugin-runtime.runtime-check.schema.json"
+PLUGIN_RUNTIME_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-runtime.schema.json"
 AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
 AGENDA_QUERY_GENERATED="$GENERATED_DIR/agenda-query.runtime-check.schema.json"
@@ -76,6 +88,18 @@ python ./scripts/merge-json.py "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$PLUGIN_GENERATE
   cue def --force --out jsonschema -e '#ConfigurationPresentation' \
     -o "$PLUGIN_PRESENTATION_GENERATED" \
     ./plugin
+  cue def --force --out jsonschema -e '#PluginCall' \
+    -o "$PLUGIN_CALL_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginCallResult' \
+    -o "$PLUGIN_CALL_RESULT_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#CommandStateDocument' \
+    -o "$COMMAND_STATE_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginHealthDocument' \
+    -o "$PLUGIN_HEALTH_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginJobsDocument' \
+    -o "$PLUGIN_JOBS_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginRuntimeDocument' \
+    -o "$PLUGIN_RUNTIME_GENERATED" ./plugin
 )
 cue def --force --out jsonschema -e '#AgendaContribution' \
   -o "$AGENDA_GENERATED" \
@@ -192,6 +216,12 @@ PY
 compare_schema "$PLUGIN_GENERATED" "$PLUGIN_RUNTIME" "plugin registration"
 compare_schema "$PLUGIN_DEFAULTS_GENERATED" "$PLUGIN_DEFAULTS_RUNTIME" "plugin configuration defaults"
 compare_schema "$PLUGIN_PRESENTATION_GENERATED" "$PLUGIN_PRESENTATION_RUNTIME" "plugin configuration presentation"
+compare_schema "$PLUGIN_CALL_GENERATED" "$PLUGIN_CALL_RUNTIME" "plugin call"
+compare_schema "$PLUGIN_CALL_RESULT_GENERATED" "$PLUGIN_CALL_RESULT_RUNTIME" "plugin call result"
+compare_schema "$COMMAND_STATE_GENERATED" "$COMMAND_STATE_RUNTIME" "command state"
+compare_schema "$PLUGIN_HEALTH_GENERATED" "$PLUGIN_HEALTH_RUNTIME" "plugin health"
+compare_schema "$PLUGIN_JOBS_GENERATED" "$PLUGIN_JOBS_RUNTIME" "plugin jobs"
+compare_schema "$PLUGIN_RUNTIME_GENERATED" "$PLUGIN_RUNTIME_RUNTIME" "plugin runtime"
 compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
 compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
@@ -252,6 +282,10 @@ validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
   ./mission_control/builtin_plugins/google/registration.json
 validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
   ./mission_control/builtin_plugins/landscape/registration.json
+validate_success '#PluginCall' ./schema/plugin "$PLUGIN_CALL_GENERATED" \
+  ./schema/examples/valid-plugin-call.json
+validate_success '#PluginCallResult' ./schema/plugin "$PLUGIN_CALL_RESULT_GENERATED" \
+  ./schema/examples/valid-plugin-call-result.json
 
 for fixture in \
   ./schema/examples/valid-landscape-agenda.json \
@@ -347,6 +381,8 @@ done
 
 expect_failure '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
   ./schema/examples/invalid-command-key.json
+expect_failure '#PluginCall' ./schema/plugin "$PLUGIN_CALL_GENERATED" \
+  ./schema/examples/invalid-plugin-call.json
 expect_failure '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
   ./schema/examples/invalid-command-result.json
 expect_failure '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_GENERATED" \

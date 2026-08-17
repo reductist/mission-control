@@ -17,7 +17,7 @@ import (
 	capabilities: ["agenda", "entity-details", "jobs", "health"]
 	runtime: {
 		entrypoint:    "mission_control.builtin_plugins.google:activate"
-		migration_set: "google_calendar"
+		migration_set: "google_calendar_v2"
 	}
 	permissions: ["database", "network", "credentials"]
 	configuration: {

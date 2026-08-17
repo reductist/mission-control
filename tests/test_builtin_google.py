@@ -110,12 +110,12 @@ def test_demo_sync_projects_events_tasks_details_and_independent_migration(tmp_p
         assert [
             row[0]
             for row in connection.execute(
-                "SELECT version FROM google_calendar_schema_migrations"
+                "SELECT version FROM plugin__15__google_calendar__schema_migrations"
             ).fetchall()
         ] == [1, 2]
         assert (
             connection.execute(
-                "SELECT count(*) FROM google_calendar_entries"
+                "SELECT count(*) FROM plugin__15__google_calendar__entries"
             ).fetchone()[0]
             == 8
         )
@@ -152,7 +152,7 @@ def test_google_cache_is_quarantined_when_source_changes(tmp_path):
     repository = SQLiteGoogleRepository(database)
     repository.prepare_source("demo", "fixture-one")
     (prepared,) = google_plugins()
-    config = GoogleConfig.from_runtime(prepared.configuration, {})
+    config = GoogleConfig.from_runtime(prepared.configuration.to_dict(), {})
     GoogleSynchronizer(
         repository,
         FixtureGoogleClient.load(config.demo_anchor_date),
@@ -261,7 +261,7 @@ def test_partial_refresh_retains_last_good_collection_and_reports_degraded(tmp_p
     GoogleMigrationRunner(database).apply()
     repository = SQLiteGoogleRepository(database)
     (prepared,) = google_plugins()
-    config = GoogleConfig.from_runtime(prepared.configuration, {})
+    config = GoogleConfig.from_runtime(prepared.configuration.to_dict(), {})
     fixture = FixtureGoogleClient.load()
     GoogleSynchronizer(repository, fixture, config).sync_once()
     before = {item.title for item in repository.list_entries()}
@@ -301,7 +301,7 @@ def test_reconnect_required_is_actionable_and_erases_private_cache(tmp_path):
     GoogleMigrationRunner(database).apply()
     repository = SQLiteGoogleRepository(database)
     (prepared,) = google_plugins()
-    config = GoogleConfig.from_runtime(prepared.configuration, {})
+    config = GoogleConfig.from_runtime(prepared.configuration.to_dict(), {})
     GoogleSynchronizer(repository, FixtureGoogleClient.load(), config).sync_once()
     assert repository.list_entries()
 

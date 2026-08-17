@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
-from typing import ClassVar
+from typing import cast
 
-from mission_control.agenda import AgendaContribution, SourceRef
+from mission_control.agenda import SourceRef, contribution_to_dict
 from mission_control.builtin_plugins.google.client import (
     AuthorizedUserCredentials,
     GoogleHttpClient,
@@ -19,58 +18,18 @@ from mission_control.builtin_plugins.google.repository import (
     SQLiteGoogleRepository,
     plugin_health,
 )
-from mission_control.database import Database
-from mission_control.entity_details import EntityDetail
-from mission_control.plugin_runtime import PluginHealth, PluginJob
-from mission_control.plugins import PluginConfiguration, PluginId
+from mission_control.entity_details import entity_detail_to_dict
+from mission_control.plugin_api import CapabilityRouter, PluginContext
+from mission_control.plugins import PluginId
 
 
-@dataclass(frozen=True, slots=True)
-class GoogleAgendaProvider:
-    repository: SQLiteGoogleRepository
-    synchronizer: GoogleSynchronizer
-    interval_seconds: int
-    source_mode: str
-    plugin_id: ClassVar[PluginId] = PLUGIN_ID
-    command_owner: ClassVar[None] = None
+def activate(context: PluginContext) -> CapabilityRouter:
+    """Prepare Google-owned state and expose only JSON capability operations."""
 
-    def contribution(self, *, generated_at: datetime) -> AgendaContribution:
-        return self.repository.contribution(generated_at=generated_at)
-
-    def entity_detail(self, target: SourceRef) -> EntityDetail | None:
-        return self.repository.entity_detail(target)
-
-    def jobs(self) -> tuple[PluginJob, ...]:
-        return (
-            PluginJob(
-                self.plugin_id,
-                "refresh",
-                self.interval_seconds,
-                self.synchronizer.sync_once,
-                self.synchronizer.record_unexpected_failure,
-            ),
-        )
-
-    def health(self) -> PluginHealth:
-        return plugin_health(
-            self.repository,
-            source_mode=self.source_mode,
-            runtime_failure_at=self.synchronizer.runtime_failure_at,
-        )
-
-
-def activate(
-    database: Database,
-    seed: AgendaContribution | None,
-    configuration: PluginConfiguration,
-    credentials: dict[str, str],
-) -> GoogleAgendaProvider:
-    """Migrate the cache and prepare sync without persisting OAuth secrets."""
-
-    if seed is not None:
+    if context.agenda_seed is not None:
         raise ValueError("Google does not declare an agenda seed resource")
-    config = GoogleConfig.from_runtime(configuration, credentials)
-    repository = SQLiteGoogleRepository(database)
+    config = GoogleConfig.from_runtime(context.configuration, context.credentials)
+    repository = SQLiteGoogleRepository(context.storage)
     if config.mode == "demo":
         client = FixtureGoogleClient.load(config.demo_anchor_date)
         source_fingerprint = "packaged-fixture-v1"
@@ -83,9 +42,68 @@ def activate(
         )
     repository.prepare_source(config.mode, source_fingerprint)
     synchronizer = GoogleSynchronizer(repository, client, config)
-    provider = GoogleAgendaProvider(
-        repository, synchronizer, config.sync_interval_seconds, config.mode
-    )
     if config.mode == "demo":
         synchronizer.sync_once()
-    return provider
+
+    def agenda_snapshot(inputs):
+        generated_at = datetime.fromisoformat(cast(str, inputs["generated_at"]))
+        return contribution_to_dict(
+            repository.contribution(generated_at=generated_at)
+        )
+
+    def entity_details(inputs):
+        target = _source(cast(dict[str, str], inputs["target"]))
+        detail = repository.entity_detail(target)
+        return entity_detail_to_dict(detail) if detail is not None else None
+
+    def jobs_list(_inputs):
+        return {
+            "schema_version": "mission-control.plugin-jobs/v1",
+            "plugin_id": PLUGIN_ID.value,
+            "jobs": [
+                {
+                    "job_id": "refresh",
+                    "interval_seconds": config.sync_interval_seconds,
+                }
+            ],
+        }
+
+    def jobs_run(inputs):
+        if inputs["job_id"] != "refresh":
+            raise ValueError("unknown Google job")
+        synchronizer.sync_once()
+        return {}
+
+    def jobs_failure(inputs):
+        if inputs["job_id"] != "refresh":
+            raise ValueError("unknown Google job")
+        synchronizer.record_unexpected_failure()
+        return {}
+
+    def health(_inputs):
+        document = plugin_health(
+            repository,
+            source_mode=config.mode,
+            runtime_failure_at=synchronizer.runtime_failure_at,
+        ).to_dict()
+        return {"schema_version": "mission-control.plugin-health/v1", **document}
+
+    return CapabilityRouter(
+        context.plugin_id,
+        {
+            "agenda.snapshot": agenda_snapshot,
+            "entity-details.get": entity_details,
+            "health.get": health,
+            "jobs.failure": jobs_failure,
+            "jobs.list": jobs_list,
+            "jobs.run": jobs_run,
+        },
+    )
+
+
+def _source(document: dict[str, str]) -> SourceRef:
+    return SourceRef(
+        PluginId(document["plugin_id"]),
+        document["entity_type"],
+        document["entity_id"],
+    )

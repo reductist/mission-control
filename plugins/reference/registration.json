@@ -4,7 +4,10 @@
   "name": "Reference Plugin",
   "version": "0.1.0",
   "plugin_api": ">=1.0.0 <2.0.0",
-  "capabilities": ["cli", "events", "health"],
+  "capabilities": ["health"],
+  "runtime": {
+    "entrypoint": "runtime:activate"
+  },
   "configuration": {
     "document_version": "mission-control.reference.config/v1",
     "schema_resource": "config.schema.json",
