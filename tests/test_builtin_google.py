@@ -204,6 +204,15 @@ def test_two_connections_with_overlapping_remote_ids_remain_distinct(tmp_path) -
         item["attribution"]["integration"]["connection"]["id"] for item in trips
     } == {"pat", "elizabeth"}
     assert {
+        item["attribution"]["integration"]["connection"]["id"]: item[
+            "attribution"
+        ]["integration"]["connection"]["label"]
+        for item in trips
+    } == {
+        "pat": "Pat's Google",
+        "elizabeth": "Elizabeth's Google",
+    }
+    assert {
         item["attribution"]["integration"]["collection"]["id"] for item in trips
     } == {"calendar:primary@example.invalid"}
     assert {tuple(item["attribution"]["principal_ids"]) for item in trips} == {
