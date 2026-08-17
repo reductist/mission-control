@@ -20,18 +20,24 @@ Plugin manifests declare the core interface range they support. Compatibility is
 A manifest is readable without importing plugin runtime code and declares:
 
 - unique plugin identifier
-- display name and description
+- display name
 - plugin version
 - supported core interface range
 - required and optional capabilities
 - entity types and their maximum behavior capability envelopes
-- configuration schema identifier
+- configuration document identifier and generated schema/default/presentation resources
 - migration set identifier
-- registered event types
-- CLI, API, job, UI, permission, and health contributions
+- coarse capabilities and operational permissions
 - runtime entry point
+- optional out-of-band setup entry point
 
 Unknown required capabilities or incompatible interface ranges cause validation to fail before startup.
+
+Integration plugin IDs use a flat `vendor-capability` convention, such as
+`google-calendar` and `google-photos`. Slashes and dots are not namespace
+separators: one stable ID must remain safe across configuration keys, command
+routing, URLs, package metadata, and normalized database prefixes. The manifest
+ID is authoritative; a package directory name is not an implicit identity.
 
 Entity capabilities are distinct from coarse plugin contributions. A plugin may
 declare `commands` because it owns command handlers while separately declaring
@@ -52,7 +58,42 @@ The application configuration contains core settings, enabled plugin identifiers
 
 Plugins may validate only their own configuration namespace. Cross-plugin configuration references require an explicit public capability contract.
 
-The current experimental runtime validates registered argument types, constraints, and defaults before importing a bundled provider. `mctrld` accepts non-secret settings documents separately from named credential file references. A provider receives only its detached validated values and its own credential-name mapping.
+Each plugin defines its complete namespaced configuration boundary once in CUE,
+including non-secret settings and named credential file references. The manifest
+points to generated JSON Schema, explicit defaults, and renderer-neutral
+presentation metadata. Mission Control validates and binds all three artifacts,
+materializes defaults once, and validates the effective document before opening
+the database or importing provider code. A provider receives only its detached,
+validated settings and its own credential-name mapping.
+
+## Guided setup interface
+
+Plugin registration v3 may declare a `setup.entrypoint` independently of its
+normal runtime. Core validates the manifest and generated configuration bundle,
+then imports that entry point only for an explicit setup session. Setup receives
+no database, migrations, plugin storage, or normal runtime context.
+
+The shared `mission-control.setup-state/v1` document describes one current step:
+renderer-neutral fields, options, notices, actions, an opaque revision, and a
+draft containing non-secret settings plus core-issued credential handles.
+`setup.describe` produces the first step and `setup.action` advances it. Core
+checks revisions, rejects undeclared actions and fields, and validates a
+completed draft with the exact configuration validator used at daemon startup.
+The plugin owns provider-specific discovery and remediation; it returns data,
+never HTML, JavaScript, CSS, filesystem paths, or credential values.
+
+The first Google Calendar implementation proves connection identity, OAuth-file
+validation, collection discovery and selection, optional principal assignment,
+and review without opening the application database. The web wizard remains the
+reference renderer, while `mcctl` and a future TUI may drive the same documents.
+Credential upload, managed storage, atomic config commit, and browser-session
+security belong to the separate loopback setup host, not to plugin code.
+The host accepts only `127.0.0.1`, requires exact Host and Origin headers, claims
+a URL-fragment invitation once, uses an expiring bearer session, sends no-store
+and restrictive content-security headers, bounds request sizes, and logs no HTTP
+request details. Managed mode writes only a predeclared `.toml` file inside a
+configured fragment directory. Export mode does not copy newly uploaded secrets
+or claim that the service was changed.
 
 ## Event interface
 
@@ -66,7 +107,12 @@ Core owns the event envelope. It includes:
 - correlation and causation identifiers where available
 - payload validated against the registered event schema
 
-Plugin event types are namespaced by plugin identifier. Plugins append events through the public event writer and may not write directly to core event tables.
+Plugin event types are namespaced by plugin identifier. The public core event
+writer is planned, not yet exposed by the current adapter. Today a plugin may
+atomically maintain its own namespaced event rows through its scoped storage
+connection, but it may not write core event tables. Introducing the shared
+writer requires an executable transaction contract and conformance tests before
+this section becomes a runtime guarantee.
 
 ## Storage and migration interface
 
@@ -83,13 +129,35 @@ A plugin migration declares:
 
 Core validates the migration plan before execution. A plugin may not modify core tables or another plugin's private tables.
 
-The current runtime gives every built-in or explicitly discovered Python plugin the same namespaced SQLite adapter. The adapter authorizes only tables and schema objects prefixed by that plugin's identifier, while core owns migration ordering, checksums, transactions, and the shared ledger. Landscape exercises that boundary through its domain-specific repository, `landscape_*` tables, and append-only events; its packaged agenda document is an import seed, not a runtime source of truth. In-process plugins remain trusted code rather than an operating-system security sandbox, but accidental or direct SQL access to core and unrelated plugin tables is rejected at the connection boundary. A process-isolated storage service remains a later hard-security boundary.
+The current runtime gives every built-in or explicitly discovered Python plugin the same namespaced SQLite adapter. The adapter authorizes only tables and schema objects in the injective, length-prefixed, core-reserved `plugin__<id-length>__<normalized-id>__*` namespace. The length and doubled separators keep prefix-related IDs distinct, and no plugin ID can collide with a core table. Plugin code obtains names through `context.storage.table_name("local_name")`; the database path is not part of the public context. Core owns migration ordering, checksums, transactions, and the shared ledger. Landscape exercises that boundary through its domain-specific repository, `plugin__9__landscape__*` tables, and append-only events; its packaged agenda document is an import seed, not a runtime source of truth. In-process plugins remain trusted code rather than an operating-system security sandbox, but accidental SQL access to core and unrelated plugin tables is rejected at the supplied connection boundary. A process-isolated storage service remains a later hard-security boundary.
 
 ## Command and query interface
 
 Plugins expose domain operations through registered command and query handlers. Handlers receive only documented context objects, including authorized identity, transaction scope, configuration, logging, and approved core services.
 
 Plugins may not reach into private core modules or mutate projections outside their registered operation boundaries.
+
+The current in-process adapter exchanges `mission-control.plugin-call/v2` and
+`mission-control.plugin-call-result/v1` JSON documents. Calls use closed,
+operation-specific inputs for Agenda snapshots, closed items, entity details,
+command state and execution, jobs, health, and shutdown. Outputs are validated
+again against their existing versioned capability schemas before core converts
+them to internal immutable values. The plugin-facing Python surface is limited
+to `PluginContext`, `CapabilityRouter`, and structured call rejection; plugins
+do not construct core provider objects.
+
+`runtime.describe` returns a versioned list of implemented operations. Core
+requires every operation implied by the manifest, rejects undeclared extras,
+and does this during activation before the provider enters aggregation or
+routing. `mcctl plugin conformance` exercises the same boundary in a temporary
+workspace. This JSON boundary is transport-neutral: a future subprocess or TUI
+does not need the built-ins' Python domain classes, though process isolation
+still requires an explicit storage/transaction transport.
+
+CLI, HTTP, event, and declarative UI capability names remain reserved in the
+manifest vocabulary, but an executable runtime cannot claim them until their
+call contracts and adapters are implemented. They are not silent escape
+hatches around `runtime.describe`.
 
 Registration defines the maximum capability envelope for each plugin-owned
 entity type. A current entity projection exposes zero or more affordances from
@@ -129,6 +197,36 @@ interface and route to exactly one authoritative owner.
 Affordances describe currently available behavior; renderers must not infer
 operations from an entry kind or state string. An empty affordance list is
 valid. Every non-empty affordance list carries the owner's opaque revision.
+
+Agenda v2 also carries renderer-neutral attribution. This metadata is not command
+ownership: `source` remains the sole authoritative routing reference. Each entry
+has zero or more principal references into the core-owned workspace catalog and
+may identify one plugin-scoped connection and a collection within it. Collection
+identity is the tuple `(plugin_id, connection_id, collection_id)`; renderers must
+not compare a bare collection ID across integrations.
+
+Plugins provide human-readable connection and collection labels, never presentation
+colors or CSS values. Core-owned accent preferences target typed principal, plugin,
+connection, or collection identities with a closed semantic token palette. Textual
+people/source provenance remains visible even when a renderer uses those accents.
+The catalog and agenda documents contain no browser-specific concepts. The web UI
+and `mcctl` table renderer currently consume both; the legacy `mcctl agenda list`
+JSON output remains an entry list without an embedded catalog. A future TUI will
+consume the versioned workspace snapshot rather than infer people from that list.
+Until the versioned workspace snapshot lands, `/api/dashboard` carries the catalog
+as a transitional envelope field; that ad-hoc dashboard response is not the public
+TUI contract.
+
+Plugin configuration schemas may mark a string field with the generated JSON
+Schema extension `x-mission-control-reference`. Core currently defines
+`credential` and `workspace-principal` reference kinds. Credential references
+resolve against names configured for that plugin and require its `credentials`
+permission; workspace-principal references resolve against the core workspace
+catalog. Unknown kinds, non-string annotations, and missing references fail
+before database creation, migrations, or plugin import. The extension belongs in
+the plugin's CUE-owned schema overlay. `mcctl plugin conformance --workspace
+WORKSPACE.json` supplies the principal catalog to plugin-author tests without
+exposing Mission Control's internal models to the plugin.
 
 ## Closed-item contribution interface
 
@@ -174,6 +272,13 @@ UI contributions are declarative manifests that reference approved extension poi
 
 UI manifests declare required API capabilities and permissions. An unavailable or failed plugin must not prevent unrelated application UI from loading.
 
+The web application is the primary and reference renderer, but UI contribution
+documents are renderer-neutral. They describe data, semantic presentation roles,
+affordances, form controls, validation, and navigation intent—not HTML, CSS
+selectors, DOM events, or executable browser code. A terminal UI may render the
+same contribution differently while preserving capability, validation, and
+command semantics.
+
 ## Authorization interface
 
 Every contribution declares its required permissions. Core evaluates authorization before dispatching to plugin code. Plugins may perform narrower checks but may not bypass or weaken core authorization.
@@ -198,12 +303,21 @@ Health reports include a stable code, safe operator-facing detail, and optional 
 
 ## Compatibility policy
 
-Before the interfaces become stable, changes may be made directly but must update the contract tests and reference plugin. After stabilization:
+Closed CUE document shapes are immutable once published. Field additions—including
+optional fields—removals, renames, type or constraint changes, discriminator
+changes, and meaning changes require a new `schema_version`. The runtime/plugin API
+version is a separate compatibility dimension and does not negotiate document
+shape.
 
-- additive optional fields are compatible
-- required-field additions require a new interface version
-- meaning changes require a new interface version
-- removals require deprecation and a declared support window
-- migrations never run until compatibility checks succeed
+Before 1.0, Mission Control supports only the current document version and rejects
+unsupported versions explicitly. Breaking transitions update every built-in and
+reference plugin together and migrate persisted data when required; the project
+does not retain speculative dual readers for external consumers that do not exist.
+
+After external plugins or clients require a compatibility window, version adapters
+will be isolated at validation/parsing/serialization boundaries, target one current
+internal model, and have a declared removal release. Migrations never run until
+both runtime and document compatibility checks succeed. See
+[`docs/configuration-and-schema-evolution.md`](docs/configuration-and-schema-evolution.md).
 
 Generated schemas and documentation must be reproducible. CI will eventually fail when checked-in generated artifacts drift from their source schema.

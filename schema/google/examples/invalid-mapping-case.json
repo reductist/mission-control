@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.google-mapping-cases/v1",
+  "schema_version": "mission-control.google-mapping-cases/v3",
   "cases": [
     {
       "name": "calendar mappings cannot claim a task source type",
@@ -14,13 +14,14 @@
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v3",
         "status": "mapped",
         "entry": {
+          "attribution": {"principal_ids": []},
           "id": "gcal-invalid",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "task",
             "entity_id": "gcal-invalid"
           },

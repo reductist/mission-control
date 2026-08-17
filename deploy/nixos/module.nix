@@ -5,21 +5,37 @@ let
   stateDirectory = "/var/lib/mission-control";
   credentialDirectory = "/run/credentials/mission-control.service";
   runtimeDirectory = "/run/mission-control";
-  pluginRootArgs = lib.concatMap (
-    root: [ "--plugin-root" (toString root) ]
-  ) cfg.pluginRoots;
-  pluginSettingsArgs = lib.concatMap (
-    plugin: [ "--plugin-settings" "${plugin}=${cfg.pluginSettings.${plugin}}" ]
-  ) (lib.attrNames cfg.pluginSettings);
-  pluginCredentialArgs = lib.concatMap (
+  toml = pkgs.formats.toml { };
+  pluginConfiguration = lib.genAttrs cfg.plugins (
     plugin:
-    lib.concatMap (
-      name: [
-        "--plugin-credential"
-        "${plugin}.${name}=${runtimeDirectory}/${plugin}-${name}"
-      ]
-    ) (lib.attrNames cfg.pluginCredentials.${plugin})
-  ) (lib.attrNames cfg.pluginCredentials);
+    {
+      enabled = true;
+    }
+    // lib.optionalAttrs (lib.hasAttr plugin cfg.pluginSettings) {
+      settings = builtins.fromJSON (
+        builtins.readFile cfg.pluginSettings.${plugin}
+      );
+    }
+    // lib.optionalAttrs (lib.hasAttr plugin cfg.pluginCredentials) {
+      credentials = lib.mapAttrs (
+        name: _source: {
+          file = "${runtimeDirectory}/${plugin}-${name}";
+        }
+      ) cfg.pluginCredentials.${plugin};
+    }
+  );
+  applicationConfig = toml.generate "mission-control.toml" {
+    schema_version = "mission-control.config/v2";
+    database.path = cfg.databasePath;
+    http = {
+      host = cfg.host;
+      port = cfg.port;
+    };
+    demo = cfg.demo;
+    plugin_roots = map toString cfg.pluginRoots;
+    workspace = cfg.workspace;
+    plugins = pluginConfiguration;
+  };
   loadedCredentials = lib.concatMap (
     plugin:
     map (
@@ -39,18 +55,9 @@ let
   command = lib.escapeShellArgs (
     [
       "${cfg.package}/bin/mctrld"
-      "--database"
-      cfg.databasePath
-      "--host"
-      cfg.host
-      "--port"
-      (toString cfg.port)
+      "--config"
+      applicationConfig
     ]
-    ++ lib.optional cfg.demo "--demo"
-    ++ pluginRootArgs
-    ++ lib.concatMap (plugin: [ "--plugin" plugin ]) cfg.plugins
-    ++ pluginSettingsArgs
-    ++ pluginCredentialArgs
   );
 in
 {
@@ -96,6 +103,16 @@ in
       '';
     };
 
+    workspace = lib.mkOption {
+      type = lib.types.attrs;
+      default = { };
+      description = ''
+        Renderer-neutral workspace configuration passed through to the canonical
+        application document. Mission Control, not this NixOS adapter, validates
+        principal and accent semantics.
+      '';
+    };
+
     plugins = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -118,7 +135,8 @@ in
       default = { };
       description = ''
         Non-secret JSON settings files keyed by enabled plugin ID. Files may
-        contain credential names or paths, but never OAuth secret values.
+        not contain credential paths or secret values; use pluginCredentials
+        for every credential reference.
       '';
     };
 
@@ -136,6 +154,10 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = lib.length cfg.plugins == lib.length (lib.unique cfg.plugins);
+        message = "services.mission-control.plugins must not contain duplicates";
+      }
       {
         assertion =
           cfg.databasePath == stateDirectory

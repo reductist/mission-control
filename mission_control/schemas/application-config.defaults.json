@@ -1,0 +1,17 @@
+{
+    "schema_version": "mission-control.config/v2",
+    "database": {
+        "path": "mission-control.db"
+    },
+    "http": {
+        "host": "127.0.0.1",
+        "port": 8000
+    },
+    "demo": false,
+    "plugin_roots": [],
+    "workspace": {
+        "principals": {},
+        "accents": []
+    },
+    "plugins": {}
+}

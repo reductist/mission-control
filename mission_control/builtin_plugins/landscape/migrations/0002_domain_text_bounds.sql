@@ -1,5 +1,5 @@
-CREATE TRIGGER landscape_initiatives_validate_insert
-BEFORE INSERT ON landscape_initiatives
+CREATE TRIGGER plugin__9__landscape__initiatives_validate_insert
+BEFORE INSERT ON plugin__9__landscape__initiatives
 WHEN NOT (
   length(NEW.initiative_id) BETWEEN 1 AND 128
   AND NEW.initiative_id GLOB '[A-Za-z0-9]*'
@@ -19,8 +19,8 @@ BEGIN
   SELECT RAISE(ABORT, 'invalid Landscape initiative text');
 END;
 
-CREATE TRIGGER landscape_initiatives_validate_update
-BEFORE UPDATE ON landscape_initiatives
+CREATE TRIGGER plugin__9__landscape__initiatives_validate_update
+BEFORE UPDATE ON plugin__9__landscape__initiatives
 WHEN NOT (
   length(NEW.initiative_id) BETWEEN 1 AND 128
   AND NEW.initiative_id GLOB '[A-Za-z0-9]*'
@@ -40,8 +40,8 @@ BEGIN
   SELECT RAISE(ABORT, 'invalid Landscape initiative text');
 END;
 
-CREATE TRIGGER landscape_actions_validate_insert
-BEFORE INSERT ON landscape_actions
+CREATE TRIGGER plugin__9__landscape__actions_validate_insert
+BEFORE INSERT ON plugin__9__landscape__actions
 WHEN NOT (
   length(NEW.action_id) BETWEEN 1 AND 128
   AND NEW.action_id GLOB '[A-Za-z0-9]*'
@@ -61,8 +61,8 @@ BEGIN
   SELECT RAISE(ABORT, 'invalid Landscape action text');
 END;
 
-CREATE TRIGGER landscape_actions_validate_update
-BEFORE UPDATE ON landscape_actions
+CREATE TRIGGER plugin__9__landscape__actions_validate_update
+BEFORE UPDATE ON plugin__9__landscape__actions
 WHEN NOT (
   length(NEW.action_id) BETWEEN 1 AND 128
   AND NEW.action_id GLOB '[A-Za-z0-9]*'
@@ -84,7 +84,7 @@ END;
 
 -- Force the new validation triggers across data created by older versions. These
 -- assignments preserve values while making migration failure atomic and explicit.
-UPDATE landscape_initiatives SET initiative_id = initiative_id;
-UPDATE landscape_actions SET action_id = action_id;
+UPDATE plugin__9__landscape__initiatives SET initiative_id = initiative_id;
+UPDATE plugin__9__landscape__actions SET action_id = action_id;
 
-INSERT INTO landscape_schema_migrations(version) VALUES (2);
+INSERT INTO plugin__9__landscape__schema_migrations(version) VALUES (2);

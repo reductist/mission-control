@@ -1,0 +1,13 @@
+{
+    "schema_version": "mission-control.plugin-config-presentation/v1",
+    "configuration_schema": "mission-control.reference.config/v1",
+    "fields": [
+        {
+            "path": "/settings/message",
+            "label": "Message",
+            "description": "Message returned by the reference capability",
+            "order": 10,
+            "widget": "text"
+        }
+    ]
+}

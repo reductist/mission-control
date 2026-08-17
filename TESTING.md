@@ -51,6 +51,15 @@ Every plugin, including built-in plugins, runs the same reusable contract tests.
 - no plugin writes to private core or another plugin's tables
 - no plugin imports private core implementation modules
 - no built-in plugin receives capabilities unavailable to the reference plugin
+- the reference plugin imports only the public adapter and its own implementation
+- configuration has one CUE-derived validator rather than a manifest/runtime duplicate
+- capability inputs and outputs validate as JSON before core converts them internally
+- plugin persistence and event append use only its assigned namespaced transaction adapter
+- view, setup, and form contributions contain no browser-only implementation fields
+- setup providers open no application database or plugin storage, keep credential
+  paths and values behind opaque handles, and return drafts that pass the normal
+  startup validator before commit
+- the reference plugin's contribution fixtures are consumable by a non-web renderer harness
 
 A minimal reference plugin should exist solely to exercise the complete extension surface.
 
@@ -107,3 +116,8 @@ and open-input/closed-output mapping conformance cases. Negative fixtures prove
 that unknown settings and invalid cross-interface projections fail.
 
 No test may rely on privileged interfaces available only to built-in plugins. A built-in plugin that cannot pass the public contract suite represents an architecture defect, not a test exception.
+
+Web tests remain the primary interaction acceptance suite. Contract tests must
+separately prove that behavior-bearing semantics live in shared documents rather
+than the browser renderer, preserving a later TUI without requiring duplicate
+plugin-specific logic.

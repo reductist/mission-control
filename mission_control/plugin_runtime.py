@@ -19,6 +19,28 @@ class PluginHealthState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class PluginHealthComponent:
+    component_id: str
+    label: str
+    state: PluginHealthState
+    code: str
+    detail: str
+    last_success_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {
+            "id": self.component_id,
+            "label": self.label,
+            "state": self.state.value,
+            "code": self.code,
+            "detail": self.detail,
+        }
+        if self.last_success_at is not None:
+            result["last_success_at"] = self.last_success_at.isoformat()
+        return result
+
+
+@dataclass(frozen=True, slots=True)
 class PluginHealth:
     plugin_id: PluginId
     state: PluginHealthState
@@ -26,6 +48,7 @@ class PluginHealth:
     detail: str
     checked_at: datetime
     last_success_at: datetime | None = None
+    components: tuple[PluginHealthComponent, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -34,6 +57,7 @@ class PluginHealth:
             "code": self.code,
             "detail": self.detail,
             "checked_at": self.checked_at.isoformat(),
+            "components": [component.to_dict() for component in self.components],
         }
         if self.last_success_at is not None:
             result["last_success_at"] = self.last_success_at.isoformat()

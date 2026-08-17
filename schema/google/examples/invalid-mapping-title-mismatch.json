@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.google-mapping-cases/v1",
+  "schema_version": "mission-control.google-mapping-cases/v3",
   "cases": [
     {
       "name": "mapped calendar title must come from the upstream resource",
@@ -17,13 +17,14 @@
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v3",
         "status": "mapped",
         "entry": {
+          "attribution": {"principal_ids": []},
           "id": "gcal-705e7a1d6958976ad0e0a76c4915dc0dbdec645d4467745ec9e1a8be7cf15ba8",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "calendar-event",
             "entity_id": "gcal-705e7a1d6958976ad0e0a76c4915dc0dbdec645d4467745ec9e1a8be7cf15ba8"
           },

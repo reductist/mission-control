@@ -1,7 +1,9 @@
 package google
 
 import (
+	common "mission-control.dev/schema/common"
 	plugin "mission-control.dev/schema/plugin"
+	"list"
 	"time"
 )
 
@@ -11,85 +13,147 @@ import (
 // GoogleRegistration locks the bundled adapter to the same public manifest
 // boundary used by every other plugin while also proving its exact envelope.
 #GoogleRegistration: plugin.#PluginRegistration & {
-	id:   "google"
-	name: "Google"
+	id:   "google-calendar"
+	name: "Google Calendar & Tasks"
 	capabilities: ["agenda", "entity-details", "jobs", "health"]
 	runtime: {
 		entrypoint:    "mission_control.builtin_plugins.google:activate"
-		migration_set: "google"
+		migration_set: "google_calendar_v2"
 	}
+	setup: entrypoint: "mission_control.builtin_plugins.google.setup:activate"
 	permissions: ["database", "network", "credentials"]
-	credentials: close({
-		oauth: {required_when: {argument: "mode", equals: "live"}}
-	})
+	configuration: {
+		document_version:      "mission-control.google-calendar.config/v2"
+		schema_resource:       "config.schema.json"
+		defaults_resource:     "config.defaults.json"
+		presentation_resource: "config.presentation.json"
+	}
 	entity_types: close({
 		"calendar-event": {capabilities: ["entity.annotate", "activity.read"]}
 		task: {capabilities: ["entity.annotate", "activity.read"]}
 	})
-	arguments: close({
-		calendar_ids: {
-			type: "array"
-			items: {type: "string", min_length: 1}
-			default: []
-		}
-		demo_anchor_date: {
-			type:    "string"
-			pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-		}
-		lookahead_days: {
-			type:    "integer"
-			default: 42
-			minimum: 1
-			maximum: 366
-		}
-		lookback_days: {
-			type:    "integer"
-			default: 42
-			minimum: 0
-			maximum: 366
-		}
-		mode: {
-			type:    "string"
-			default: "live"
-			enum: ["live", "demo"]
-		}
-		request_timeout_seconds: {
-			type:    "integer"
-			default: 15
-			minimum: 3
-			maximum: 60
-		}
-		sync_interval_seconds: {
-			type:    "integer"
-			default: 300
-			minimum: 60
-			maximum: 86400
-		}
-		task_list_ids: {
-			type: "array"
-			items: {type: "string", min_length: 1}
-			default: []
-		}
+}
+
+#ConnectionID: string & =~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+
+#DisabledSelection: close({mode!: "disabled"})
+#DefaultSelection: close({mode!: "defaults"})
+#AllSelection: close({mode!: "all"})
+#SelectedSelection: close({
+	mode!: "selected"
+	ids!: [string & !~"^\\s*$", ...string & !~"^\\s*$"] & list.UniqueItems()
+})
+#CalendarSelection: #DisabledSelection | #DefaultSelection | #AllSelection | #SelectedSelection
+#TaskSelection: #DisabledSelection | #AllSelection | #SelectedSelection
+
+#CollectionAttribution: close({
+	principal_ids!: [...common.#PrincipalID] & list.UniqueItems()
+})
+
+let connectionCommon = {
+	label!:     string & !~"^\\s*$"
+	calendars!: #CalendarSelection
+	tasks!:     #TaskSelection
+	attribution?: close({
+		calendars?: [string]: #CollectionAttribution
+		task_lists?: [string]: #CollectionAttribution
 	})
 }
 
-// GoogleConfiguration mirrors the registration arguments at the plugin's
-// language-neutral boundary. Credential material is deliberately separate.
+#LiveConnection: close(connectionCommon & {
+	mode!:       "live"
+	credential!: common.#CredentialName
+})
+
+#DemoConnection: close(connectionCommon & {
+	mode!:             "demo"
+	demo_anchor_date?: #Date
+})
+
+#GoogleConnection: #LiveConnection | #DemoConnection
+
+#GoogleSettings: close({
+	connections!: {
+		[string]:                   #GoogleConnection
+		[!~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"]: _|_("invalid connection ID")
+	}
+	lookahead_days!:          int & >=1 & <=366
+	lookback_days!:           int & >=0 & <=366
+	request_timeout_seconds!: int & >=3 & <=60
+	sync_interval_seconds!:   int & >=60 & <=86400
+})
+
+// GoogleConfiguration is the only public configuration definition. Credential
+// and workspace-principal references are annotated in the generated schema and
+// resolved generically by core before migrations or plugin imports.
 #GoogleConfiguration: close({
-	calendar_ids?: [...string & !~"^\\s*$"]
-	lookahead_days?:          int & >=1 & <=366
-	lookback_days?:           int & >=0 & <=366
-	mode:                     *"live" | "demo"
-	request_timeout_seconds?: int & >=3 & <=60
-	sync_interval_seconds?:   int & >=60 & <=86400
-	task_list_ids?: [...string & !~"^\\s*$"]
-	if mode == "demo" {
-		demo_anchor_date?: #Date
+	settings!: #GoogleSettings
+	credentials!: {
+		[string]:                          common.#CredentialReference
+		[!~common.#CredentialNamePattern]: _|_("invalid credential name")
 	}
 })
 
+#GoogleConfigurationJSONSchemaOverlay: {
+	"$id":     "mission-control.google-calendar.config/v2"
+	"$schema": "https://json-schema.org/draft/2020-12/schema"
+	"$defs": {
+		"#SelectedSelection": properties: ids: {
+			minItems:    1
+			uniqueItems: true
+		}
+		"#GoogleSettings": properties: connections: propertyNames: {
+			type:    "string"
+			pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+		}
+		"#LiveConnection": properties: credential: {
+			"x-mission-control-reference": "credential"
+		}
+		"#CollectionAttribution": properties: principal_ids: {
+			uniqueItems: true
+			items: {
+				"x-mission-control-reference": "workspace-principal"
+			}
+		}
+	}
+	properties: credentials: propertyNames: {
+		type:    "string"
+		pattern: common.#CredentialNamePattern
+	}
+}
+
 #GoogleDemoConfiguration: #GoogleConfiguration & {
-	mode: "demo"
+	settings: connections: demo: {
+		label: "Google demo"
+		mode:  "demo"
+		calendars: mode: "defaults"
+		tasks: mode: "all"
+	}
+}
+
+#GoogleConfigurationDefaults: plugin.#ConfigurationDefaults & {
+	schema_version:       "mission-control.plugin-config-defaults/v1"
+	configuration_schema: "mission-control.google-calendar.config/v2"
+	defaults: {
+		settings: {
+			connections: {}
+			lookahead_days:          42
+			lookback_days:           42
+			request_timeout_seconds: 15
+			sync_interval_seconds:   300
+		}
+		credentials: {}
+	}
+}
+
+#GoogleConfigurationPresentation: plugin.#ConfigurationPresentation & {
+	schema_version:       "mission-control.plugin-config-presentation/v1"
+	configuration_schema: "mission-control.google-calendar.config/v2"
+	fields: [
+		{path: "/settings/connections", label: "Google connections", order: 10},
+		{path: "/settings/lookback_days", label: "Past calendar window", order: 20, widget: "number"},
+		{path: "/settings/lookahead_days", label: "Future calendar window", order: 30, widget: "number"},
+	]
 }
 
 #CalendarCollection: close({

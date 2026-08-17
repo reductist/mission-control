@@ -11,6 +11,7 @@ The current contracts cover:
 - the entity-focused detail and immutable activity projection composed at read time
 - the command envelope a client sends to exactly one authoritative owner
 - the structured outcome returned for accepted, rejected, stale, unauthorized, or failed commands
+- the renderer-neutral state exchanged during an explicit plugin setup session
 
 CUE definitions are closed by default, so misspelled or undeclared keys fail validation rather than silently expanding a public object.
 
@@ -58,55 +59,25 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Contract | CUE definition | Packaged runtime schema |
 | --- | --- | --- |
 | Plugin registration | `schema/plugin/registration.cue` | `mission_control/schemas/plugin-registration.schema.json` |
+| Plugin configuration defaults | `schema/plugin/configuration.cue` | `mission_control/schemas/plugin-config-defaults.schema.json` |
+| Plugin configuration presentation | `schema/plugin/configuration.cue` | `mission_control/schemas/plugin-config-presentation.schema.json` |
+| Plugin setup state | `schema/setup/contract.cue` | `mission_control/schemas/setup-state.schema.json` |
+| Plugin setup transition | `schema/setup/contract.cue` | `mission_control/schemas/setup-transition.schema.json` |
+| Plugin setup commit result | `schema/setup/contract.cue` | `mission_control/schemas/setup-commit.schema.json` |
+| Application configuration | `schema/config/application.cue` | `mission_control/schemas/application-config.schema.json` |
 | Agenda contribution | `schema/agenda/contribution.cue` | `mission_control/schemas/agenda-contribution.schema.json` |
+| Attribution catalog | `schema/attribution/contract.cue` | `mission_control/schemas/attribution-catalog.schema.json` |
 | Agenda query | `schema/agenda/query.cue` | `mission_control/schemas/agenda-query.schema.json` |
 | Closed-item contribution | `schema/closed-items/contribution.cue` | `mission_control/schemas/closed-items-contribution.schema.json` |
 | Entity detail and activity | `schema/entity-detail/contract.cue` | `mission_control/schemas/entity-detail.schema.json` |
 | Command envelope | `schema/command/contract.cue` | `mission_control/schemas/command-envelope.schema.json` |
 | Command result | `schema/command/contract.cue` | `mission_control/schemas/command-result.schema.json` |
 
-The generated artifacts are packaged with the Python application and consumed at untrusted runtime boundaries. They must not be edited by hand.
-
-To regenerate them deliberately from `mission-control/`:
-
-```sh
-cue def --force --out jsonschema \
-  -e '#PluginRegistration' \
-  -o mission_control/schemas/plugin-registration.schema.json \
-  ./schema/plugin
-
-cue def --force --out jsonschema \
-  -e '#AgendaContribution' \
-  -o mission_control/schemas/agenda-contribution.schema.json \
-  ./schema/agenda
-
-cue def --force --out jsonschema \
-  -e '#CommandEnvelope' \
-  -o mission_control/schemas/command-envelope.schema.json \
-  ./schema/command
-
-cue def --force --out jsonschema \
-  -e '#CommandResult' \
-  -o mission_control/schemas/command-result.schema.json \
-  ./schema/command
-
-cue def --force --out jsonschema \
-  -e '#AgendaQuery' \
-  -o mission_control/schemas/agenda-query.schema.json \
-  ./schema/agenda
-
-cue def --force --out jsonschema \
-  -e '#ClosedItemsContribution' \
-  -o mission_control/schemas/closed-items-contribution.schema.json \
-  ./schema/closed-items
-
-cue def --force --out jsonschema \
-  -e '#EntityDetail' \
-  -o mission_control/schemas/entity-detail.schema.json \
-  ./schema/entity-detail
-```
-
-Formatting is not part of the contract; CI compares generated and packaged schemas as decoded JSON values.
+The generated artifacts are packaged with the Python application and consumed
+at untrusted runtime boundaries. They must not be edited by hand. Run
+`scripts/check-schemas.sh` to regenerate them into temporary files, apply the
+CUE-owned exporter overlays, and compare decoded JSON with the packaged copies.
+The same check validates direct CUE fixtures and generated-schema fixtures.
 
 ## Run locally
 
@@ -120,20 +91,53 @@ The check:
 
 1. generates all runtime JSON Schemas from their canonical CUE definitions
 2. fails when any packaged runtime artifact has drifted
-3. validates the reference plugin and public examples directly against CUE
+3. validates the reference plugin, capability calls, and public examples directly against CUE
 4. validates the same documents against generated JSON Schema
 5. proves misspelled keys, invalid discriminators, impossible timing shapes, invalid defaults, and invalid value types are rejected through both schema paths
 6. exercises planned agenda providers for landscape, maintenance, financial planning, home search, and Ansible automation
 
 Python tests separately exercise the packaged artifacts through runtime parsers and CLI boundaries.
 
-Bundled plugins may add CUE refinements for their own trusted package data
-without changing the public core contracts. Google defines and continuously
-validates its exact registration/capability envelope, explicit configuration,
+`schema/plugin/runtime.cue` defines the shared call/result envelopes and the
+runtime-description, command-state, health, and job documents. Capability
+payloads such as Agenda, closed items, entity details, and command results keep
+their own focused schemas; the adapter composes them rather than creating one
+giant union that every plugin author must understand.
+
+Setup uses the same validated call envelope but a separate manifest entry point
+and `mission-control.setup-state/v1` output. Its draft contains only non-secret
+settings and opaque credential handles. Core owns session revision checks and
+final configuration validation; plugin setup code owns provider-specific test,
+discovery, selection, and remediation. The document contains no renderer or
+deployment-platform implementation fields.
+
+Bundled plugins own their CUE configuration definitions and package generated
+JSON Schema, explicit-default, and renderer-neutral presentation artifacts.
+The manifest contains resource references rather than a second argument DSL.
+Google Calendar defines and continuously validates its exact
+registration/capability envelope, explicit configuration,
 evergreen Google-shaped Calendar/Tasks fixture, and one-way mapping conformance
 cases under `schema/google/`. Live Google inputs remain recursively open because
 the upstream APIs may add fields independently; mapped, filtered, and rejected
 outcomes are closed and the production mapper must match their golden fixtures.
+
+### Semantic configuration references
+
+A plugin may annotate a string field in its generated configuration-schema
+overlay with `x-mission-control-reference`. The supported values are
+`credential` and `workspace-principal`. Core resolves credential names against
+that plugin's configured credential references and principal IDs against the
+workspace catalog before any implementation import or migration. A credential
+annotation requires the registration's `credentials` permission. An annotation
+on a non-string schema, an unknown reference kind, or a missing catalog entry is
+a configuration error. Union annotations apply only to branches that validate
+the configured value.
+
+Plugin conformance accepts `--workspace WORKSPACE.json` when settings contain
+workspace-principal references. The file contains the ordinary workspace object
+with `principals` and `accents`; it is test input, not another application
+configuration format. Plugins continue to receive only their already-validated
+settings and credential paths.
 
 ## Boundaries
 

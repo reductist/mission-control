@@ -1,4 +1,21 @@
 {
-  "mode": "live",
-  "demo_anchor_date": "2026-08-14"
+  "settings": {
+    "connections": {
+      "personal": {
+        "label": "Personal Google",
+        "mode": "live",
+        "credential": "oauth",
+        "demo_anchor_date": "2026-08-14",
+        "calendars": {"mode": "defaults"},
+        "tasks": {"mode": "disabled"}
+      }
+    },
+    "lookahead_days": 42,
+    "lookback_days": 42,
+    "request_timeout_seconds": 15,
+    "sync_interval_seconds": 300
+  },
+  "credentials": {
+    "oauth": {"file": "/run/credentials/google-oauth"}
+  }
 }

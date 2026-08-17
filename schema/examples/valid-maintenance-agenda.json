@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.agenda/v1",
+  "schema_version": "mission-control.agenda/v2",
   "provider": {"plugin_id": "home-maintenance"},
   "revision": "maintenance-9",
   "generated_at": "2026-07-29T13:00:00-04:00",
@@ -12,6 +12,7 @@
         "entity_id": "hvac-filter-2026-09-01"
       },
       "title": "Replace HVAC filter",
+      "attribution": {"principal_ids": []},
       "context": "Heating and cooling",
       "kind": "action",
       "state": "ready",
@@ -25,6 +26,7 @@
         "entity_id": "annual-boiler-service-2026"
       },
       "title": "Annual boiler service",
+      "attribution": {"principal_ids": []},
       "kind": "event",
       "timing": {
         "kind": "timed",

@@ -1,0 +1,75 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#SourceRef": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "entity_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "entity_type": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                }
+            },
+            "required": [
+                "entity_id",
+                "entity_type",
+                "plugin_id"
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "affordances": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "capability": {
+                        "type": "string",
+                        "pattern": "^[a-z][A-Za-z0-9._:-]*$"
+                    },
+                    "command": {
+                        "$ref": "#/$defs/%23Identifier"
+                    }
+                },
+                "required": [
+                    "capability",
+                    "command"
+                ]
+            }
+        },
+        "revision": {
+            "type": "string",
+            "not": {
+                "const": ""
+            }
+        },
+        "schema_version": {
+            "const": "mission-control.command-state/v1"
+        },
+        "target": {
+            "$ref": "#/$defs/%23SourceRef"
+        }
+    },
+    "required": [
+        "affordances",
+        "revision",
+        "schema_version",
+        "target"
+    ]
+}

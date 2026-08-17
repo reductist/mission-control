@@ -1,0 +1,11 @@
+{
+  "schema_version": "mission-control.plugin-call/v2",
+  "operation": "entity-details.get",
+  "input": {
+    "source": {
+      "plugin_id": "landscape",
+      "entity_type": "action",
+      "entity_id": "measure-access-route"
+    }
+  }
+}

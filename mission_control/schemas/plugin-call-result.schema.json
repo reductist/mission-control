@@ -1,0 +1,88 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#PluginCallError": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "code": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "detail": {
+                    "type": "string",
+                    "not": {
+                        "const": ""
+                    }
+                }
+            },
+            "required": [
+                "code",
+                "detail"
+            ]
+        },
+        "#PluginCallFailure": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "error": {
+                    "$ref": "#/$defs/%23PluginCallError"
+                },
+                "operation": {
+                    "type": "string",
+                    "not": {
+                        "const": ""
+                    }
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call-result/v1"
+                },
+                "status": {
+                    "const": "error"
+                }
+            },
+            "required": [
+                "error",
+                "operation",
+                "schema_version",
+                "status"
+            ]
+        },
+        "#PluginCallSuccess": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "not": {
+                        "const": ""
+                    }
+                },
+                "output": true,
+                "schema_version": {
+                    "const": "mission-control.plugin-call-result/v1"
+                },
+                "status": {
+                    "const": "ok"
+                }
+            },
+            "required": [
+                "operation",
+                "output",
+                "schema_version",
+                "status"
+            ]
+        }
+    },
+    "anyOf": [
+        {
+            "$ref": "#/$defs/%23PluginCallSuccess"
+        },
+        {
+            "$ref": "#/$defs/%23PluginCallFailure"
+        }
+    ]
+}

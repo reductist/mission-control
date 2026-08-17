@@ -1,3 +1,10 @@
 {
-  "mode": "demo"
+  "connections": {
+    "demo": {
+      "label": "Google demo",
+      "mode": "demo",
+      "calendars": {"mode": "defaults"},
+      "tasks": {"mode": "all"}
+    }
+  }
 }

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from types import SimpleNamespace
+from dataclasses import replace
 
 import pytest
 
 import mission_control.plugin_lifecycle as builtin_plugins
+from mission_control.agenda import SourceRef
 from mission_control.builtin_plugins import (
     BuiltinPluginError,
     activate_builtin_agenda_plugins,
@@ -13,7 +14,8 @@ from mission_control.builtin_plugins import (
     prepare_builtin_agenda_plugins,
 )
 from mission_control.database import Database
-from mission_control.plugins import Capability, StandardEntityCapability
+from mission_control.plugin_api import CapabilityRouter, PluginCallContractError
+from mission_control.plugins import Capability, PluginId, StandardEntityCapability
 
 
 def test_landscape_provider_validates_real_equipment_access_work(
@@ -97,96 +99,144 @@ def test_landscape_declares_its_public_command_capability() -> None:
     }
 
 
-def test_activation_rejects_command_capability_drift(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+def test_executable_runtime_cannot_claim_a_capability_without_a_call_adapter(
+    tmp_path,
 ) -> None:
     (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
-    read_only_provider = SimpleNamespace(
-        plugin_id=prepared.registration.plugin_id,
-        command_owner=None,
-    )
-    implementation = SimpleNamespace(
-        activate=lambda _database, _seed, _configuration, _credentials: read_only_provider
-    )
-    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
-
-    with pytest.raises(
-        BuiltinPluginError,
-        match="registration and activated command capability must match",
-    ):
-        activate_builtin_agenda_plugins(
-            Database(tmp_path / "mission-control.db"), (prepared,)
-        )
-
-
-def test_activation_requires_state_dependent_affordances(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
-    owner_without_affordances = SimpleNamespace(handle=lambda _command, _context: None)
-    provider = SimpleNamespace(
-        plugin_id=prepared.registration.plugin_id,
-        command_owner=owner_without_affordances,
-    )
-    implementation = SimpleNamespace(
-        activate=lambda _database, _seed, _configuration, _credentials: provider
-    )
-    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
-
-    with pytest.raises(
-        BuiltinPluginError,
-        match="must expose current entity affordances",
-    ):
-        activate_builtin_agenda_plugins(
-            Database(tmp_path / "mission-control.db"), (prepared,)
-        )
-
-
-def test_activation_requires_declared_closed_item_projection(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
-    provider = SimpleNamespace(
-        plugin_id=prepared.registration.plugin_id,
-        command_owner=SimpleNamespace(
-            command_state=lambda _target: None,
-            handle=lambda _command, _context: None,
+    unsupported = replace(
+        prepared,
+        registration=replace(
+            prepared.registration,
+            capabilities=(*prepared.registration.capabilities, Capability.UI),
         ),
     )
-    implementation = SimpleNamespace(
-        activate=lambda _database, _seed, _configuration, _credentials: provider
+
+    with pytest.raises(BuiltinPluginError, match="without a public call adapter"):
+        activate_builtin_agenda_plugins(
+            Database(tmp_path / "mission-control.db"), (unsupported,)
+        )
+
+
+def test_activation_rejects_missing_declared_runtime_operations(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    operations = {
+        "agenda.snapshot": lambda _inputs: {},
+        "closed-items.snapshot": lambda _inputs: {},
+        "entity-details.get": lambda _inputs: None,
+    }
+    implementation = type(
+        "Implementation",
+        (),
+        {"activate": staticmethod(lambda _context: CapabilityRouter("landscape", operations))},
     )
     monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
 
     with pytest.raises(
         BuiltinPluginError,
-        match="activated closed-items capability must match",
+        match="missing operations required by its manifest",
     ):
         activate_builtin_agenda_plugins(
             Database(tmp_path / "mission-control.db"), (prepared,)
         )
 
 
-def test_activation_requires_declared_entity_detail_projection(
+def test_activation_rejects_operations_outside_manifest_capabilities(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
-    provider = SimpleNamespace(
-        plugin_id=prepared.registration.plugin_id,
-        command_owner=SimpleNamespace(
-            command_state=lambda _target: None,
-            handle=lambda _command, _context: None,
-        ),
-        closed_items=lambda **_kwargs: None,
-    )
-    implementation = SimpleNamespace(
-        activate=lambda _database, _seed, _configuration, _credentials: provider
+    operations = {
+        "agenda.snapshot": lambda _inputs: {},
+        "closed-items.snapshot": lambda _inputs: {},
+        "commands.execute": lambda _inputs: {},
+        "commands.state": lambda _inputs: None,
+        "entity-details.get": lambda _inputs: None,
+        "health.get": lambda _inputs: {},
+    }
+    implementation = type(
+        "Implementation",
+        (),
+        {"activate": staticmethod(lambda _context: CapabilityRouter("landscape", operations))},
     )
     monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
 
     with pytest.raises(
         BuiltinPluginError,
-        match="activated entity-details capability must match",
+        match="operations outside its manifest capabilities",
+    ):
+        activate_builtin_agenda_plugins(
+            Database(tmp_path / "mission-control.db"), (prepared,)
+        )
+
+
+def test_activation_sanitizes_a_hostile_handler_shape(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+
+    class HostileHandler:
+        def __getattribute__(self, name):
+            if name == "call":
+                raise RuntimeError("private handler inspection secret")
+            return super().__getattribute__(name)
+
+    implementation = type(
+        "Implementation",
+        (),
+        {"activate": staticmethod(lambda _context: HostileHandler())},
+    )
+    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
+
+    with pytest.raises(BuiltinPluginError) as caught:
+        activate_builtin_agenda_plugins(
+            Database(tmp_path / "mission-control.db"), (prepared,)
+        )
+
+    assert "plugin activation failed (RuntimeError)" in str(caught.value)
+    assert "private handler inspection secret" not in str(caught.value)
+
+
+def test_adapter_rejects_malformed_state_dependent_affordances(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    operations = {
+        "agenda.snapshot": lambda _inputs: {},
+        "closed-items.snapshot": lambda _inputs: {},
+        "commands.execute": lambda _inputs: {},
+        "commands.state": lambda _inputs: {"revision": "missing-contract-fields"},
+        "entity-details.get": lambda _inputs: None,
+    }
+    implementation = type(
+        "Implementation",
+        (),
+        {"activate": staticmethod(lambda _context: CapabilityRouter("landscape", operations))},
+    )
+    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
+
+    (provider,) = activate_builtin_agenda_plugins(
+        Database(tmp_path / "mission-control.db"), (prepared,)
+    )
+
+    with pytest.raises(PluginCallContractError, match="command target state"):
+        provider.command_state(SourceRef(PluginId("landscape"), "action", "unknown"))
+
+
+def test_activation_requires_a_json_capability_handler(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (prepared,) = prepare_builtin_agenda_plugins(("landscape",))
+    implementation = type(
+        "Implementation",
+        (),
+        {"activate": staticmethod(lambda _context: object())},
+    )
+    monkeypatch.setattr(builtin_plugins, "import_module", lambda _name: implementation)
+
+    with pytest.raises(
+        BuiltinPluginError,
+        match="must return a JSON capability handler",
     ):
         activate_builtin_agenda_plugins(
             Database(tmp_path / "mission-control.db"), (prepared,)

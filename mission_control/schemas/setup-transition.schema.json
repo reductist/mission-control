@@ -1,0 +1,354 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#Action": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "intent": {
+                    "enum": [
+                        "continue",
+                        "validate",
+                        "authorize",
+                        "discover",
+                        "test",
+                        "review",
+                        "commit",
+                        "back"
+                    ]
+                },
+                "label": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "style": {
+                    "enum": [
+                        "primary",
+                        "secondary"
+                    ]
+                }
+            },
+            "required": [
+                "id",
+                "intent",
+                "label",
+                "style"
+            ]
+        },
+        "#CheckboxField": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "value": {
+                    "type": "boolean"
+                },
+                "widget": {
+                    "const": "checkbox"
+                }
+            },
+            "$ref": "#/$defs/%23FieldCommon",
+            "required": [
+                "widget"
+            ]
+        },
+        "#CredentialHandle": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "handle": {
+                    "$ref": "#/$defs/%23Identifier"
+                }
+            },
+            "required": [
+                "handle"
+            ]
+        },
+        "#Draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "credentials": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23CredentialHandle"
+                    }
+                },
+                "settings": {
+                    "$ref": "#/$defs/%23JSONObject"
+                }
+            },
+            "required": [
+                "credentials",
+                "settings"
+            ]
+        },
+        "#Field": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/%23TextField"
+                },
+                {
+                    "$ref": "#/$defs/%23SelectField"
+                },
+                {
+                    "$ref": "#/$defs/%23MultiSelectField"
+                },
+                {
+                    "$ref": "#/$defs/%23CheckboxField"
+                }
+            ]
+        },
+        "#FieldCommon": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "label": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "required": {
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "id",
+                "label",
+                "required"
+            ]
+        },
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#JSONObject": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/$defs/%23JSONValue"
+            }
+        },
+        "#JSONValue": {
+            "anyOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "boolean"
+                },
+                {
+                    "type": "number"
+                },
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                }
+            ]
+        },
+        "#MultiSelectField": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Option"
+                    }
+                },
+                "value": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "widget": {
+                    "const": "multi-select"
+                }
+            },
+            "$ref": "#/$defs/%23FieldCommon",
+            "required": [
+                "options",
+                "widget"
+            ]
+        },
+        "#Option": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "label": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                }
+            },
+            "required": [
+                "id",
+                "label"
+            ]
+        },
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#SelectField": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Option"
+                    }
+                },
+                "value": {
+                    "type": "string"
+                },
+                "widget": {
+                    "const": "select"
+                }
+            },
+            "$ref": "#/$defs/%23FieldCommon",
+            "required": [
+                "options",
+                "widget"
+            ]
+        },
+        "#Step": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Action"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Field"
+                    }
+                },
+                "id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "title": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                }
+            },
+            "required": [
+                "actions",
+                "fields",
+                "id",
+                "title"
+            ]
+        },
+        "#TextField": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "value": {
+                    "type": "string"
+                },
+                "widget": {
+                    "enum": [
+                        "text",
+                        "credential-file"
+                    ]
+                }
+            },
+            "$ref": "#/$defs/%23FieldCommon",
+            "required": [
+                "widget"
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "complete": {
+            "type": "boolean"
+        },
+        "draft": {
+            "$ref": "#/$defs/%23Draft"
+        },
+        "notice": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "detail": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "kind": {
+                    "enum": [
+                        "info",
+                        "success",
+                        "warning",
+                        "error"
+                    ]
+                }
+            },
+            "required": [
+                "detail",
+                "kind"
+            ]
+        },
+        "plugin_id": {
+            "$ref": "#/$defs/%23PluginID"
+        },
+        "schema_version": {
+            "const": "mission-control.setup-transition/v1"
+        },
+        "step": {
+            "$ref": "#/$defs/%23Step"
+        }
+    },
+    "required": [
+        "complete",
+        "draft",
+        "plugin_id",
+        "schema_version",
+        "step"
+    ]
+}

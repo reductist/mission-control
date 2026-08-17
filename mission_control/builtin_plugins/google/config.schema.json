@@ -1,0 +1,327 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#AllSelection": {
+            "const": {
+                "mode": "all"
+            }
+        },
+        "#CalendarSelection": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/%23DisabledSelection"
+                },
+                {
+                    "$ref": "#/$defs/%23DefaultSelection"
+                },
+                {
+                    "$ref": "#/$defs/%23AllSelection"
+                },
+                {
+                    "$ref": "#/$defs/%23SelectedSelection"
+                }
+            ]
+        },
+        "#CollectionAttribution": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "principal_ids": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23PrincipalID",
+                        "x-mission-control-reference": "workspace-principal"
+                    },
+                    "uniqueItems": true
+                }
+            },
+            "required": [
+                "principal_ids"
+            ]
+        },
+        "#CredentialName": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "#CredentialReference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                }
+            },
+            "required": [
+                "file"
+            ]
+        },
+        "#Date": {
+            "type": "string",
+            "format": "date"
+        },
+        "#DefaultSelection": {
+            "const": {
+                "mode": "defaults"
+            }
+        },
+        "#DemoConnection": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "attribution": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "calendars": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/$defs/%23CollectionAttribution"
+                            }
+                        },
+                        "task_lists": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/$defs/%23CollectionAttribution"
+                            }
+                        }
+                    }
+                },
+                "calendars": {
+                    "$ref": "#/$defs/%23CalendarSelection"
+                },
+                "demo_anchor_date": {
+                    "$ref": "#/$defs/%23Date"
+                },
+                "label": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "mode": {
+                    "const": "demo"
+                },
+                "tasks": {
+                    "$ref": "#/$defs/%23TaskSelection"
+                }
+            },
+            "required": [
+                "calendars",
+                "label",
+                "mode",
+                "tasks"
+            ]
+        },
+        "#DisabledSelection": {
+            "const": {
+                "mode": "disabled"
+            }
+        },
+        "#GoogleConnection": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/%23LiveConnection"
+                },
+                {
+                    "$ref": "#/$defs/%23DemoConnection"
+                }
+            ]
+        },
+        "#GoogleSettings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "connections": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23GoogleConnection"
+                    },
+                    "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    }
+                },
+                "lookahead_days": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 366,
+                            "minimum": 1
+                        }
+                    ]
+                },
+                "lookback_days": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 366,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "request_timeout_seconds": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 60,
+                            "minimum": 3
+                        }
+                    ]
+                },
+                "sync_interval_seconds": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 86400,
+                            "minimum": 60
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "connections",
+                "lookahead_days",
+                "lookback_days",
+                "request_timeout_seconds",
+                "sync_interval_seconds"
+            ]
+        },
+        "#LiveConnection": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "attribution": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "calendars": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/$defs/%23CollectionAttribution"
+                            }
+                        },
+                        "task_lists": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/$defs/%23CollectionAttribution"
+                            }
+                        }
+                    }
+                },
+                "calendars": {
+                    "$ref": "#/$defs/%23CalendarSelection"
+                },
+                "credential": {
+                    "$ref": "#/$defs/%23CredentialName",
+                    "x-mission-control-reference": "credential"
+                },
+                "label": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "mode": {
+                    "const": "live"
+                },
+                "tasks": {
+                    "$ref": "#/$defs/%23TaskSelection"
+                }
+            },
+            "required": [
+                "calendars",
+                "credential",
+                "label",
+                "mode",
+                "tasks"
+            ]
+        },
+        "#PrincipalID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#SelectedSelection": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "not": {
+                            "pattern": "^\\s*$"
+                        }
+                    },
+                    "prefixItems": [
+                        {
+                            "type": "string",
+                            "not": {
+                                "pattern": "^\\s*$"
+                            }
+                        }
+                    ],
+                    "minLength": 1,
+                    "minItems": 1,
+                    "uniqueItems": true
+                },
+                "mode": {
+                    "const": "selected"
+                }
+            },
+            "required": [
+                "ids",
+                "mode"
+            ]
+        },
+        "#TaskSelection": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/%23DisabledSelection"
+                },
+                {
+                    "$ref": "#/$defs/%23AllSelection"
+                },
+                {
+                    "$ref": "#/$defs/%23SelectedSelection"
+                }
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "credentials": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/$defs/%23CredentialReference"
+            },
+            "propertyNames": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            }
+        },
+        "settings": {
+            "$ref": "#/$defs/%23GoogleSettings"
+        }
+    },
+    "required": [
+        "credentials",
+        "settings"
+    ],
+    "$id": "mission-control.google-calendar.config/v2"
+}

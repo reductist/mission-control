@@ -35,12 +35,18 @@ def document() -> dict[str, object]:
 def registration():
     return parse_plugin_registration(
         {
-            "schema_version": "mission-control.plugin/v1",
+            "schema_version": "mission-control.plugin/v3",
             "id": "landscape",
             "name": "Yard",
             "version": "1",
             "plugin_api": ">=1 <2",
             "capabilities": ["agenda", "closed-items", "commands"],
+            "configuration": {
+                "document_version": "mission-control.landscape.config/v1",
+                "schema_resource": "config.schema.json",
+                "defaults_resource": "config.defaults.json",
+                "presentation_resource": "config.presentation.json",
+            },
             "entity_types": {
                 "action": {
                     "capabilities": [

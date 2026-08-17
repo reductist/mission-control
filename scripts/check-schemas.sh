@@ -2,11 +2,37 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GENERATED_DIR="./schema/generated"
+GENERATED_DIR="$ROOT_DIR/schema/generated"
 PLUGIN_GENERATED="$GENERATED_DIR/plugin-registration.runtime-check.schema.json"
-PLUGIN_RUNTIME="./mission_control/schemas/plugin-registration.schema.json"
+PLUGIN_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-registration.schema.json"
+PLUGIN_RAW="$GENERATED_DIR/plugin-registration.raw.schema.json"
+PLUGIN_OVERLAY="$GENERATED_DIR/plugin-registration.schema-overlay.json"
+PLUGIN_DEFAULTS_GENERATED="$GENERATED_DIR/plugin-config-defaults.runtime-check.schema.json"
+PLUGIN_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-config-defaults.schema.json"
+PLUGIN_PRESENTATION_GENERATED="$GENERATED_DIR/plugin-config-presentation.runtime-check.schema.json"
+PLUGIN_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-config-presentation.schema.json"
+PLUGIN_CALL_GENERATED="$GENERATED_DIR/plugin-call.runtime-check.schema.json"
+PLUGIN_CALL_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-call.schema.json"
+PLUGIN_CALL_RESULT_GENERATED="$GENERATED_DIR/plugin-call-result.runtime-check.schema.json"
+PLUGIN_CALL_RESULT_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-call-result.schema.json"
+COMMAND_STATE_GENERATED="$GENERATED_DIR/command-state.runtime-check.schema.json"
+COMMAND_STATE_RUNTIME="$ROOT_DIR/mission_control/schemas/command-state.schema.json"
+PLUGIN_HEALTH_GENERATED="$GENERATED_DIR/plugin-health.runtime-check.schema.json"
+PLUGIN_HEALTH_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-health.schema.json"
+PLUGIN_JOBS_GENERATED="$GENERATED_DIR/plugin-jobs.runtime-check.schema.json"
+PLUGIN_JOBS_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-jobs.schema.json"
+PLUGIN_RUNTIME_GENERATED="$GENERATED_DIR/plugin-runtime.runtime-check.schema.json"
+PLUGIN_RUNTIME_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-runtime.schema.json"
+SETUP_STATE_GENERATED="$GENERATED_DIR/setup-state.runtime-check.schema.json"
+SETUP_STATE_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-state.schema.json"
+SETUP_TRANSITION_GENERATED="$GENERATED_DIR/setup-transition.runtime-check.schema.json"
+SETUP_TRANSITION_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-transition.schema.json"
+SETUP_COMMIT_GENERATED="$GENERATED_DIR/setup-commit.runtime-check.schema.json"
+SETUP_COMMIT_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-commit.schema.json"
 AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
+ATTRIBUTION_GENERATED="$GENERATED_DIR/attribution-catalog.runtime-check.schema.json"
+ATTRIBUTION_RUNTIME="./mission_control/schemas/attribution-catalog.schema.json"
 AGENDA_QUERY_GENERATED="$GENERATED_DIR/agenda-query.runtime-check.schema.json"
 AGENDA_QUERY_RUNTIME="./mission_control/schemas/agenda-query.schema.json"
 COMMAND_GENERATED="$GENERATED_DIR/command-envelope.runtime-check.schema.json"
@@ -17,20 +43,87 @@ CLOSED_ITEMS_GENERATED="$GENERATED_DIR/closed-items-contribution.runtime-check.s
 CLOSED_ITEMS_RUNTIME="./mission_control/schemas/closed-items-contribution.schema.json"
 ENTITY_DETAIL_GENERATED="$GENERATED_DIR/entity-detail.runtime-check.schema.json"
 ENTITY_DETAIL_RUNTIME="./mission_control/schemas/entity-detail.schema.json"
+APPLICATION_CONFIG_GENERATED="$GENERATED_DIR/application-config.runtime-check.schema.json"
+APPLICATION_CONFIG_RUNTIME="$ROOT_DIR/mission_control/schemas/application-config.schema.json"
+APPLICATION_CONFIG_RAW="$GENERATED_DIR/application-config.raw.schema.json"
+APPLICATION_CONFIG_OVERLAY="$GENERATED_DIR/application-config.schema-overlay.json"
+APPLICATION_DEFAULTS_GENERATED="$GENERATED_DIR/application-config.defaults.runtime-check.json"
+APPLICATION_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/schemas/application-config.defaults.json"
+GOOGLE_CONFIG_GENERATED="$GENERATED_DIR/google-config.runtime-check.schema.json"
+GOOGLE_CONFIG_RAW="$GENERATED_DIR/google-config.raw.schema.json"
+GOOGLE_CONFIG_OVERLAY="$GENERATED_DIR/google-config.schema-overlay.json"
+GOOGLE_DEFAULTS_GENERATED="$GENERATED_DIR/google-config.defaults.runtime-check.json"
+GOOGLE_PRESENTATION_GENERATED="$GENERATED_DIR/google-config.presentation.runtime-check.json"
+GOOGLE_CONFIG_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/google/config.schema.json"
+GOOGLE_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/google/config.defaults.json"
+GOOGLE_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/google/config.presentation.json"
+LANDSCAPE_CONFIG_GENERATED="$GENERATED_DIR/landscape-config.runtime-check.schema.json"
+LANDSCAPE_CONFIG_RAW="$GENERATED_DIR/landscape-config.raw.schema.json"
+LANDSCAPE_CONFIG_OVERLAY="$GENERATED_DIR/landscape-config.schema-overlay.json"
+LANDSCAPE_DEFAULTS_GENERATED="$GENERATED_DIR/landscape-config.defaults.runtime-check.json"
+LANDSCAPE_PRESENTATION_GENERATED="$GENERATED_DIR/landscape-config.presentation.runtime-check.json"
+LANDSCAPE_CONFIG_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.schema.json"
+LANDSCAPE_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.defaults.json"
+LANDSCAPE_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.presentation.json"
+REFERENCE_CONFIG_GENERATED="$GENERATED_DIR/reference-config.runtime-check.schema.json"
+REFERENCE_CONFIG_RAW="$GENERATED_DIR/reference-config.raw.schema.json"
+REFERENCE_CONFIG_OVERLAY="$GENERATED_DIR/reference-config.schema-overlay.json"
+REFERENCE_DEFAULTS_GENERATED="$GENERATED_DIR/reference-config.defaults.runtime-check.json"
+REFERENCE_PRESENTATION_GENERATED="$GENERATED_DIR/reference-config.presentation.runtime-check.json"
+REFERENCE_CONFIG_RUNTIME="$ROOT_DIR/plugins/reference/config.schema.json"
+REFERENCE_DEFAULTS_RUNTIME="$ROOT_DIR/plugins/reference/config.defaults.json"
+REFERENCE_PRESENTATION_RUNTIME="$ROOT_DIR/plugins/reference/config.presentation.json"
 
 cd "$ROOT_DIR"
 mkdir -p "$GENERATED_DIR"
-trap 'rm -f "$PLUGIN_GENERATED" "$AGENDA_GENERATED" "$AGENDA_QUERY_GENERATED" "$COMMAND_GENERATED" "$COMMAND_RESULT_GENERATED" "$CLOSED_ITEMS_GENERATED" "$ENTITY_DETAIL_GENERATED"' EXIT
+trap 'rm -f "$GENERATED_DIR"/*.runtime-check.* "$GENERATED_DIR"/*.raw.schema.json "$GENERATED_DIR"/*.schema-overlay.json' EXIT
 
-cue def --force --out jsonschema -e '#PluginRegistration' \
-  -o "$PLUGIN_GENERATED" \
-  ./schema/plugin
-cue def --force --out jsonschema -e '#AgendaContribution' \
-  -o "$AGENDA_GENERATED" \
-  ./schema/agenda
-cue def --force --out jsonschema -e '#AgendaQuery' \
-  -o "$AGENDA_QUERY_GENERATED" \
-  ./schema/agenda
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#PluginRegistration' \
+    -o "$PLUGIN_RAW" \
+    ./plugin
+  cue export -e '#PluginRegistrationJSONSchemaOverlay' \
+    -o "$PLUGIN_OVERLAY" \
+    ./plugin
+)
+python ./scripts/merge-json.py "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$PLUGIN_GENERATED"
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#ConfigurationDefaults' \
+    -o "$PLUGIN_DEFAULTS_GENERATED" \
+    ./plugin
+  cue def --force --out jsonschema -e '#ConfigurationPresentation' \
+    -o "$PLUGIN_PRESENTATION_GENERATED" \
+    ./plugin
+  cue def --force --out jsonschema -e '#PluginCall' \
+    -o "$PLUGIN_CALL_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginCallResult' \
+    -o "$PLUGIN_CALL_RESULT_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#CommandStateDocument' \
+    -o "$COMMAND_STATE_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginHealthDocument' \
+    -o "$PLUGIN_HEALTH_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginJobsDocument' \
+    -o "$PLUGIN_JOBS_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#PluginRuntimeDocument' \
+    -o "$PLUGIN_RUNTIME_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#State' \
+    -o "$SETUP_STATE_GENERATED" ./setup
+  cue def --force --out jsonschema -e '#Transition' \
+    -o "$SETUP_TRANSITION_GENERATED" ./setup
+  cue def --force --out jsonschema -e '#CommitResult' \
+    -o "$SETUP_COMMIT_GENERATED" ./setup
+)
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#AgendaContribution' \
+    -o "$AGENDA_GENERATED" ./agenda
+  cue def --force --out jsonschema -e '#AttributionCatalog' \
+    -o "$ATTRIBUTION_GENERATED" ./attribution
+  cue def --force --out jsonschema -e '#AgendaQuery' \
+    -o "$AGENDA_QUERY_GENERATED" ./agenda
+)
 cue def --force --out jsonschema -e '#CommandEnvelope' \
   -o "$COMMAND_GENERATED" \
   ./schema/command
@@ -43,6 +136,71 @@ cue def --force --out jsonschema -e '#ClosedItemsContribution' \
 cue def --force --out jsonschema -e '#EntityDetail' \
   -o "$ENTITY_DETAIL_GENERATED" \
   ./schema/entity-detail
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#ApplicationConfig' \
+    -o "$APPLICATION_CONFIG_RAW" \
+    ./config
+  cue export -e '#ApplicationJSONSchemaOverlay' \
+    -o "$APPLICATION_CONFIG_OVERLAY" \
+    ./config
+)
+
+generate_plugin_bundle() {
+  local cue_path="$1"
+  local config_definition="$2"
+  local overlay_definition="$3"
+  local defaults_definition="$4"
+  local presentation_definition="$5"
+  local raw="$6"
+  local overlay="$7"
+  local schema_output="$8"
+  local defaults_output="$9"
+  local presentation_output="${10}"
+
+  if [[ "$cue_path" == ./schema/* ]]; then
+    (
+      cd ./schema
+      cue def --force --out jsonschema -e "$config_definition" -o "$raw" \
+        "./${cue_path#./schema/}"
+      cue export -e "$overlay_definition" -o "$overlay" \
+        "./${cue_path#./schema/}"
+      cue export -e "$defaults_definition" -o "$defaults_output" \
+        "./${cue_path#./schema/}"
+      cue export -e "$presentation_definition" -o "$presentation_output" \
+        "./${cue_path#./schema/}"
+    )
+  else
+    cue def --force --out jsonschema -e "$config_definition" -o "$raw" "$cue_path"
+    cue export -e "$overlay_definition" -o "$overlay" "$cue_path"
+    cue export -e "$defaults_definition" -o "$defaults_output" "$cue_path"
+    cue export -e "$presentation_definition" -o "$presentation_output" "$cue_path"
+  fi
+  python ./scripts/merge-json.py "$raw" "$overlay" "$schema_output"
+}
+
+generate_plugin_bundle ./schema/google '#GoogleConfiguration' \
+  '#GoogleConfigurationJSONSchemaOverlay' '#GoogleConfigurationDefaults' \
+  '#GoogleConfigurationPresentation' "$GOOGLE_CONFIG_RAW" "$GOOGLE_CONFIG_OVERLAY" \
+  "$GOOGLE_CONFIG_GENERATED" "$GOOGLE_DEFAULTS_GENERATED" "$GOOGLE_PRESENTATION_GENERATED"
+generate_plugin_bundle ./schema/landscape '#LandscapeConfiguration' \
+  '#LandscapeConfigurationJSONSchemaOverlay' '#LandscapeConfigurationDefaults' \
+  '#LandscapeConfigurationPresentation' "$LANDSCAPE_CONFIG_RAW" "$LANDSCAPE_CONFIG_OVERLAY" \
+  "$LANDSCAPE_CONFIG_GENERATED" "$LANDSCAPE_DEFAULTS_GENERATED" "$LANDSCAPE_PRESENTATION_GENERATED"
+generate_plugin_bundle ./plugins/reference '#ReferenceConfiguration' \
+  '#ReferenceConfigurationJSONSchemaOverlay' '#ReferenceConfigurationDefaults' \
+  '#ReferenceConfigurationPresentation' "$REFERENCE_CONFIG_RAW" "$REFERENCE_CONFIG_OVERLAY" \
+  "$REFERENCE_CONFIG_GENERATED" "$REFERENCE_DEFAULTS_GENERATED" "$REFERENCE_PRESENTATION_GENERATED"
+python ./scripts/merge-json.py \
+  "$APPLICATION_CONFIG_RAW" \
+  "$APPLICATION_CONFIG_OVERLAY" \
+  "$APPLICATION_CONFIG_GENERATED"
+(
+  cd ./schema
+  cue export -e '#ApplicationDefaults' \
+    -o "$APPLICATION_DEFAULTS_GENERATED" \
+    ./config
+)
 
 compare_schema() {
   local generated="$1"
@@ -73,12 +231,35 @@ PY
 }
 
 compare_schema "$PLUGIN_GENERATED" "$PLUGIN_RUNTIME" "plugin registration"
+compare_schema "$PLUGIN_DEFAULTS_GENERATED" "$PLUGIN_DEFAULTS_RUNTIME" "plugin configuration defaults"
+compare_schema "$PLUGIN_PRESENTATION_GENERATED" "$PLUGIN_PRESENTATION_RUNTIME" "plugin configuration presentation"
+compare_schema "$PLUGIN_CALL_GENERATED" "$PLUGIN_CALL_RUNTIME" "plugin call"
+compare_schema "$PLUGIN_CALL_RESULT_GENERATED" "$PLUGIN_CALL_RESULT_RUNTIME" "plugin call result"
+compare_schema "$COMMAND_STATE_GENERATED" "$COMMAND_STATE_RUNTIME" "command state"
+compare_schema "$PLUGIN_HEALTH_GENERATED" "$PLUGIN_HEALTH_RUNTIME" "plugin health"
+compare_schema "$PLUGIN_JOBS_GENERATED" "$PLUGIN_JOBS_RUNTIME" "plugin jobs"
+compare_schema "$PLUGIN_RUNTIME_GENERATED" "$PLUGIN_RUNTIME_RUNTIME" "plugin runtime"
+compare_schema "$SETUP_STATE_GENERATED" "$SETUP_STATE_RUNTIME" "plugin setup state"
+compare_schema "$SETUP_TRANSITION_GENERATED" "$SETUP_TRANSITION_RUNTIME" "plugin setup transition"
+compare_schema "$SETUP_COMMIT_GENERATED" "$SETUP_COMMIT_RUNTIME" "plugin setup commit"
 compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
+compare_schema "$ATTRIBUTION_GENERATED" "$ATTRIBUTION_RUNTIME" "attribution catalog"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
 compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
 compare_schema "$COMMAND_RESULT_GENERATED" "$COMMAND_RESULT_RUNTIME" "command result"
 compare_schema "$CLOSED_ITEMS_GENERATED" "$CLOSED_ITEMS_RUNTIME" "closed items contribution"
 compare_schema "$ENTITY_DETAIL_GENERATED" "$ENTITY_DETAIL_RUNTIME" "entity detail"
+compare_schema "$APPLICATION_CONFIG_GENERATED" "$APPLICATION_CONFIG_RUNTIME" "application config"
+compare_schema "$APPLICATION_DEFAULTS_GENERATED" "$APPLICATION_DEFAULTS_RUNTIME" "application defaults"
+compare_schema "$GOOGLE_CONFIG_GENERATED" "$GOOGLE_CONFIG_RUNTIME" "Google configuration"
+compare_schema "$GOOGLE_DEFAULTS_GENERATED" "$GOOGLE_DEFAULTS_RUNTIME" "Google configuration defaults"
+compare_schema "$GOOGLE_PRESENTATION_GENERATED" "$GOOGLE_PRESENTATION_RUNTIME" "Google configuration presentation"
+compare_schema "$LANDSCAPE_CONFIG_GENERATED" "$LANDSCAPE_CONFIG_RUNTIME" "Landscape configuration"
+compare_schema "$LANDSCAPE_DEFAULTS_GENERATED" "$LANDSCAPE_DEFAULTS_RUNTIME" "Landscape configuration defaults"
+compare_schema "$LANDSCAPE_PRESENTATION_GENERATED" "$LANDSCAPE_PRESENTATION_RUNTIME" "Landscape configuration presentation"
+compare_schema "$REFERENCE_CONFIG_GENERATED" "$REFERENCE_CONFIG_RUNTIME" "reference configuration"
+compare_schema "$REFERENCE_DEFAULTS_GENERATED" "$REFERENCE_DEFAULTS_RUNTIME" "reference configuration defaults"
+compare_schema "$REFERENCE_PRESENTATION_GENERATED" "$REFERENCE_PRESENTATION_RUNTIME" "reference configuration presentation"
 
 validate_success() {
   local definition="$1"
@@ -86,8 +267,32 @@ validate_success() {
   local generated_schema="$3"
   local fixture="$4"
 
-  cue vet -c -d "$definition" "$cue_path" "$fixture"
-  cue vet -c "$generated_schema" "$fixture"
+  if [[ "$cue_path" == ./schema/* ]]; then
+    (
+      cd ./schema
+      cue vet -c -d "$definition" \
+        "./${cue_path#./schema/}" "$ROOT_DIR/${fixture#./}"
+    )
+  else
+    cue vet -c -d "$definition" "$cue_path" "$fixture"
+  fi
+  python - "$generated_schema" "$fixture" <<'PY'
+import json
+import sys
+
+from jsonschema import Draft202012Validator, FormatChecker
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    schema = json.load(source)
+with open(sys.argv[2], encoding="utf-8") as source:
+    document = json.load(source)
+errors = list(
+    Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(document)
+)
+if errors:
+    print(f"generated runtime schema rejected {sys.argv[2]}: {errors[0].message}")
+    raise SystemExit(1)
+PY
 }
 
 validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
@@ -98,6 +303,14 @@ validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
   ./mission_control/builtin_plugins/google/registration.json
 validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" \
   ./mission_control/builtin_plugins/landscape/registration.json
+validate_success '#PluginCall' ./schema/plugin "$PLUGIN_CALL_GENERATED" \
+  ./schema/examples/valid-plugin-call.json
+validate_success '#PluginCallResult' ./schema/plugin "$PLUGIN_CALL_RESULT_GENERATED" \
+  ./schema/examples/valid-plugin-call-result.json
+validate_success '#State' ./schema/setup "$SETUP_STATE_GENERATED" \
+  ./schema/examples/valid-setup-state.json
+validate_success '#Transition' ./schema/setup "$SETUP_TRANSITION_GENERATED" \
+  ./schema/examples/valid-setup-transition.json
 
 for fixture in \
   ./schema/examples/valid-landscape-agenda.json \
@@ -119,6 +332,10 @@ validate_success '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS
   ./schema/examples/valid-landscape-closed-items.json
 validate_success '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/valid-landscape-entity-detail.json
+validate_success '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/valid-application-config.json
+validate_success '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/valid-demo-config.json
 
 validate_cue_success() {
   local definition="$1"
@@ -133,7 +350,7 @@ validate_cue_success() {
 validate_cue_success '#GoogleRegistration' \
   ../mission_control/builtin_plugins/google/registration.json
 validate_cue_success '#GoogleDemoConfiguration' \
-  ../mission_control/builtin_plugins/google/demo-settings.json
+  ./google/examples/valid-demo-config.json
 validate_cue_success '#GoogleDemoFixture' \
   ../mission_control/builtin_plugins/google/demo.json
 validate_cue_success '#GoogleMappingCases' \
@@ -147,34 +364,74 @@ expect_failure() {
   local generated_schema="$3"
   local fixture="$4"
 
-  if cue vet -c -d "$definition" "$cue_path" "$fixture" >/dev/null 2>&1; then
+  if [[ "$cue_path" == ./schema/* ]]; then
+    if (
+      cd ./schema
+      cue vet -c -d "$definition" \
+        "./${cue_path#./schema/}" "$ROOT_DIR/${fixture#./}"
+    ) >/dev/null 2>&1; then
+      echo "expected direct CUE validation to fail: $fixture" >&2
+      exit 1
+    fi
+  elif cue vet -c -d "$definition" "$cue_path" "$fixture" >/dev/null 2>&1; then
     echo "expected direct CUE validation to fail: $fixture" >&2
     exit 1
   fi
 
-  if cue vet -c "$generated_schema" "$fixture" >/dev/null 2>&1; then
-    echo "expected generated JSON Schema validation to fail: $fixture" >&2
-    exit 1
-  fi
+  python - "$generated_schema" "$fixture" <<'PY'
+import json
+import sys
+
+from jsonschema import Draft202012Validator, FormatChecker
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    schema = json.load(source)
+with open(sys.argv[2], encoding="utf-8") as source:
+    document = json.load(source)
+if not list(
+    Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(document)
+):
+    print(f"expected generated JSON Schema validation to fail: {sys.argv[2]}")
+    raise SystemExit(1)
+PY
 }
 
 for fixture in \
   ./schema/examples/invalid-misspelled-key.json \
-  ./schema/examples/invalid-argument-key.json \
-  ./schema/examples/invalid-argument-type.json \
-  ./schema/examples/invalid-value-type.json \
-  ./schema/examples/invalid-default-type.json; do
+  ./schema/examples/invalid-plugin-resource-path.json \
+  ./schema/examples/invalid-plugin-configuration-key.json \
+  ./schema/examples/invalid-plugin-v1.json; do
   expect_failure '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" "$fixture"
 done
 
 expect_failure '#CommandEnvelope' ./schema/command "$COMMAND_GENERATED" \
   ./schema/examples/invalid-command-key.json
+expect_failure '#PluginCall' ./schema/plugin "$PLUGIN_CALL_GENERATED" \
+  ./schema/examples/invalid-plugin-call.json
 expect_failure '#CommandResult' ./schema/command "$COMMAND_RESULT_GENERATED" \
   ./schema/examples/invalid-command-result.json
 expect_failure '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_GENERATED" \
   ./schema/examples/invalid-closed-item-key.json
 expect_failure '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/invalid-entity-detail-key.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-config.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-plugin-block.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-plugin-id.json
+expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
+  ./schema/examples/invalid-application-credential-name.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-demo-settings.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-live-demo-anchor.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-demo-date.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-duplicate-selection.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-duplicate-principal.json
 
 expect_cue_failure() {
   local definition="$1"

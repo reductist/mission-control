@@ -1,4 +1,18 @@
 {
-  "mode": "demo",
-  "oauth": "must-not-be-plugin-settings"
+  "settings": {
+    "connections": {
+      "demo": {
+        "label": "Google demo",
+        "mode": "demo",
+        "oauth": "must-not-be-plugin-settings",
+        "calendars": {"mode": "defaults"},
+        "tasks": {"mode": "disabled"}
+      }
+    },
+    "lookahead_days": 42,
+    "lookback_days": 42,
+    "request_timeout_seconds": 15,
+    "sync_interval_seconds": 300
+  },
+  "credentials": {}
 }

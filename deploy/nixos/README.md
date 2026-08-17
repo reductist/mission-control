@@ -2,6 +2,11 @@
 
 The flake exports `nixosModules.default` and `nixosModules.mission-control`. The module installs and supervises the same `mctrld` application provided by the portable package.
 
+The module's Nix options are an adapter: they generate
+`mission-control.config/v2` TOML and start `mctrld --config` with that document.
+They do not implement alternate plugin, default, credential, or validation
+semantics.
+
 ## Basic configuration
 
 Add Mission Control as a flake input and import its module:
@@ -43,23 +48,38 @@ slice is selected separately through the bundled Landscape provider:
 services.mission-control = {
   enable = true;
   demo = true;
-  plugins = [ "google" "landscape" ];
-  pluginSettings.google = ./google-demo-settings.json;
+  plugins = [ "google-calendar" "landscape" ];
+  pluginSettings."google-calendar" = ./google-demo-settings.json;
 };
 ```
 
 `demo = true` enables the House showcase only. Google fixture mode remains an
 explicit, plugin-owned setting so the core never changes a provider's source.
-The referenced settings file contains `{ "mode": "demo" }`.
+The referenced settings file uses the same provider-owned shape as every other
+release target, for example:
+
+```json
+{
+  "connections": {
+    "demo": {
+      "label": "Google demo",
+      "mode": "demo",
+      "demo_anchor_date": "2026-08-14",
+      "calendars": {"mode": "defaults"},
+      "tasks": {"mode": "all"}
+    }
+  }
+}
+```
 
 Google fixture mode requires no credential. For live mode, keep non-secret settings in a JSON path and provide the authorized-user credential through systemd's credential mechanism:
 
 ```nix
 services.mission-control = {
   enable = true;
-  plugins = [ "google" ];
-  pluginSettings.google = ./google-settings.json;
-  pluginCredentials.google.oauth = "/run/secrets/mission-control-google-oauth.json";
+  plugins = [ "google-calendar" ];
+  pluginSettings."google-calendar" = ./google-settings.json;
+  pluginCredentials."google-calendar".personal-oauth = "/run/secrets/mission-control-google-oauth.json";
 };
 ```
 
@@ -68,7 +88,11 @@ manifest resources may live outside the bundled package, but the Python module
 declared by each runtime entrypoint must already be installed in the service's
 package closure.
 
-The settings file may enter the Nix store and must not contain OAuth values. The credential source is loaded by PID 1 into the service's private `/run/credentials` directory and is not copied into the store or passed as a secret-bearing process argument. See [`../../docs/google-integration.md`](../../docs/google-integration.md) for the settings and OAuth contract.
+The optional `workspace` attribute set passes the renderer-neutral principal and
+accent catalog through to the same canonical application document used by direct
+installs. The adapter does not reinterpret or separately validate those semantics.
+
+The settings file may enter the Nix store and must not contain OAuth values. The module decodes it into the plugin's namespaced settings in the generated canonical TOML. The credential source is loaded by PID 1 into the service's private `/run/credentials` directory; only that runtime file reference appears in configuration, and secret contents are not copied into the store or passed as process arguments. See [`../../docs/google-integration.md`](../../docs/google-integration.md) for the settings and OAuth contract.
 
 Do not point demo mode at a production database.
 
@@ -98,6 +122,7 @@ services.mission-control.databasePath
 services.mission-control.host
 services.mission-control.port
 services.mission-control.demo
+services.mission-control.workspace
 services.mission-control.plugins
 services.mission-control.pluginRoots
 services.mission-control.pluginSettings

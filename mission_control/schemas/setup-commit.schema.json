@@ -1,0 +1,59 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        }
+    },
+    "anyOf": [
+        {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "disposition": {
+                    "const": "managed"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                },
+                "restart_required": {
+                    "const": true
+                },
+                "schema_version": {
+                    "const": "mission-control.setup-commit/v1"
+                }
+            },
+            "required": [
+                "disposition",
+                "plugin_id",
+                "restart_required",
+                "schema_version"
+            ]
+        },
+        {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "disposition": {
+                    "const": "exported"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                },
+                "restart_required": {
+                    "const": false
+                },
+                "schema_version": {
+                    "const": "mission-control.setup-commit/v1"
+                }
+            },
+            "required": [
+                "disposition",
+                "plugin_id",
+                "restart_required",
+                "schema_version"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+  "settings": {
+    "connections": {
+      "demo": {
+        "label": "Google demo",
+        "mode": "demo",
+        "calendars": {"mode": "defaults"},
+        "tasks": {"mode": "disabled"},
+        "attribution": {
+          "calendars": {
+            "primary": {"principal_ids": ["pat", "pat"]}
+          }
+        }
+      }
+    },
+    "lookahead_days": 42,
+    "lookback_days": 42,
+    "request_timeout_seconds": 15,
+    "sync_interval_seconds": 300
+  },
+  "credentials": {}
+}

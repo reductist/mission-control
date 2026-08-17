@@ -27,6 +27,7 @@ from mission_control.commands import (
     Unauthorized,
     outcome_to_dict,
     parse_command,
+    parse_command_result,
 )
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
@@ -118,6 +119,20 @@ def test_core_task_command_accepts_current_revision_and_rejects_stale_view(tmp_p
     assert outcome_to_dict(stale)["status"] == "stale"
 
 
+def test_command_result_round_trips_through_the_json_contract():
+    command = parse_command(command_document())
+    outcome = Accepted(
+        command.command_id,
+        command.target,
+        "revision-2",
+        JsonObject((("changed", True),)),
+    )
+
+    parsed = parse_command_result(outcome_to_dict(outcome))
+
+    assert parsed == outcome
+
+
 def test_owner_argument_errors_are_structured_rejections(tmp_path):
     repo = repository(tmp_path)
     task = repo.create("Reject bad command")
@@ -169,12 +184,18 @@ def test_router_rejects_an_outcome_for_a_different_command():
 def test_router_enforces_registered_and_current_plugin_capabilities():
     registration = parse_plugin_registration(
         {
-            "schema_version": "mission-control.plugin/v1",
+            "schema_version": "mission-control.plugin/v3",
             "id": "example",
             "name": "Example",
             "version": "1",
             "plugin_api": ">=1 <2",
             "capabilities": ["commands"],
+            "configuration": {
+                "document_version": "mission-control.example.config/v1",
+                "schema_resource": "config.schema.json",
+                "defaults_resource": "config.defaults.json",
+                "presentation_resource": "config.presentation.json",
+            },
             "entity_types": {"action": {"capabilities": ["lifecycle.complete"]}},
         }
     )

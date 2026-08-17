@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.plugin/v1",
+  "schema_version": "mission-control.plugin/v3",
   "id": "landscape",
   "name": "Yard",
   "version": "0.1.0",
@@ -7,10 +7,16 @@
   "capabilities": ["agenda", "closed-items", "commands", "entity-details"],
   "runtime": {
     "entrypoint": "mission_control.builtin_plugins.landscape:activate",
-    "migration_set": "landscape",
+    "migration_set": "landscape_v2",
     "agenda_seed": "agenda.json"
   },
   "permissions": ["database"],
+  "configuration": {
+    "document_version": "mission-control.landscape.config/v1",
+    "schema_resource": "config.schema.json",
+    "defaults_resource": "config.defaults.json",
+    "presentation_resource": "config.presentation.json"
+  },
   "entity_types": {
     "initiative": {
       "capabilities": [

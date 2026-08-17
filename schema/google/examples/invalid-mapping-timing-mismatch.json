@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.google-mapping-cases/v1",
+  "schema_version": "mission-control.google-mapping-cases/v3",
   "cases": [
     {
       "name": "mapped timing must match upstream boundaries",
@@ -14,13 +14,14 @@
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v3",
         "status": "mapped",
         "entry": {
+          "attribution": {"principal_ids": []},
           "id": "gcal-appointment",
           "kind": "event",
           "source": {
-            "plugin_id": "google",
+            "plugin_id": "google-calendar",
             "entity_type": "calendar-event",
             "entity_id": "gcal-appointment"
           },

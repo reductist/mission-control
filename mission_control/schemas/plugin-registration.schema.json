@@ -1,108 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$defs": {
-        "#ArgumentDefinition": {
-            "anyOf": [
-                {
-                    "$ref": "#/$defs/%23StringArgument"
-                },
-                {
-                    "$ref": "#/$defs/%23IntegerArgument"
-                },
-                {
-                    "$ref": "#/$defs/%23NumberArgument"
-                },
-                {
-                    "$ref": "#/$defs/%23BooleanArgument"
-                },
-                {
-                    "$ref": "#/$defs/%23ArrayArgument"
-                },
-                {
-                    "$ref": "#/$defs/%23ObjectArgument"
-                }
-            ]
-        },
-        "#ArgumentType": {
-            "enum": [
-                "string",
-                "integer",
-                "number",
-                "boolean",
-                "array",
-                "object"
-            ]
-        },
-        "#ArrayArgument": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "default": {
-                    "type": "array"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "items": {
-                    "$ref": "#/$defs/%23ArgumentDefinition"
-                },
-                "max_items": {
-                    "allOf": [
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "integer",
-                            "minimum": 0
-                        }
-                    ]
-                },
-                "min_items": {
-                    "allOf": [
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "integer",
-                            "minimum": 0
-                        }
-                    ]
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/$defs/%23ArgumentType",
-                    "const": "array"
-                }
-            },
-            "required": [
-                "items",
-                "type"
-            ]
-        },
-        "#BooleanArgument": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "default": {
-                    "type": "boolean"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/$defs/%23ArgumentType",
-                    "const": "boolean"
-                }
-            },
-            "required": [
-                "type"
-            ]
-        },
         "#Capability": {
             "enum": [
                 "agenda",
@@ -117,103 +15,55 @@
                 "health"
             ]
         },
-        "#IntegerArgument": {
+        "#ConfigurationContract": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-                "default": {
-                    "type": "integer"
+                "defaults_resource": {
+                    "$ref": "#/$defs/%23ResourceName"
                 },
-                "description": {
-                    "type": "string"
+                "document_version": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
                 },
-                "enum": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                "presentation_resource": {
+                    "$ref": "#/$defs/%23ResourceName"
                 },
-                "maximum": {
-                    "type": "integer"
-                },
-                "minimum": {
-                    "type": "integer"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/$defs/%23ArgumentType",
-                    "const": "integer"
+                "schema_resource": {
+                    "$ref": "#/$defs/%23ResourceName"
                 }
             },
             "required": [
-                "type"
+                "defaults_resource",
+                "document_version",
+                "presentation_resource",
+                "schema_resource"
             ]
         },
-        "#NumberArgument": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "default": {
-                    "type": "number"
+        "#EntityCapability": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/%23StandardEntityCapability"
                 },
-                "description": {
-                    "type": "string"
-                },
-                "enum": {
-                    "type": "array",
-                    "items": {
-                        "type": "number"
-                    }
-                },
-                "maximum": {
-                    "type": "number"
-                },
-                "minimum": {
-                    "type": "number"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/$defs/%23ArgumentType",
-                    "const": "number"
+                {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]*\\.[A-Za-z0-9][A-Za-z0-9._:-]*$"
                 }
-            },
-            "required": [
-                "type"
             ]
         },
-        "#ObjectArgument": {
+        "#EntityTypeRegistration": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-                "additional_properties": {
-                    "type": "boolean"
-                },
-                "default": {
-                    "const": {}
-                },
-                "description": {
-                    "type": "string"
-                },
-                "properties": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/$defs/%23ArgumentDefinition"
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23EntityCapability"
                     }
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/$defs/%23ArgumentType",
-                    "const": "object"
                 }
             },
             "required": [
-                "type"
+                "capabilities"
             ]
         },
         "#Permission": {
@@ -244,82 +94,58 @@
                 "entrypoint"
             ]
         },
-        "#StringArgument": {
+        "#PluginSetup": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-                "default": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "enum": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "max_length": {
-                    "allOf": [
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "integer",
-                            "minimum": 0
-                        }
-                    ]
-                },
-                "min_length": {
-                    "allOf": [
-                        {
-                            "type": "number"
-                        },
-                        {
-                            "type": "integer",
-                            "minimum": 0
-                        }
-                    ]
-                },
-                "pattern": {
-                    "type": "string"
-                },
-                "required": {
-                    "type": "boolean"
-                },
-                "type": {
-                    "$ref": "#/$defs/%23ArgumentType",
-                    "const": "string"
+                "entrypoint": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"
                 }
             },
             "required": [
-                "type"
+                "entrypoint"
+            ]
+        },
+        "#ResourceName": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "#StandardEntityCapability": {
+            "enum": [
+                "entity.annotate",
+                "entity.attach",
+                "activity.read",
+                "lifecycle.complete",
+                "lifecycle.reopen",
+                "lifecycle.acknowledge",
+                "lifecycle.dismiss",
+                "entity.edit",
+                "entity.delete"
             ]
         }
     },
     "type": "object",
     "additionalProperties": false,
     "properties": {
-        "arguments": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/$defs/%23ArgumentDefinition"
-            }
-        },
         "capabilities": {
             "type": "array",
             "items": {
                 "$ref": "#/$defs/%23Capability"
             }
         },
-        "credentials": {
-            "type": "object",
-            "additionalProperties": true
+        "configuration": {
+            "$ref": "#/$defs/%23ConfigurationContract"
         },
         "entity_types": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": {
+                "$ref": "#/$defs/%23EntityTypeRegistration"
+            },
+            "propertyNames": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            }
         },
         "id": {
             "type": "string",
@@ -343,7 +169,10 @@
             "$ref": "#/$defs/%23PluginRuntime"
         },
         "schema_version": {
-            "const": "mission-control.plugin/v1"
+            "const": "mission-control.plugin/v3"
+        },
+        "setup": {
+            "$ref": "#/$defs/%23PluginSetup"
         },
         "version": {
             "type": "string",
@@ -352,6 +181,7 @@
     },
     "required": [
         "capabilities",
+        "configuration",
         "id",
         "name",
         "plugin_api",

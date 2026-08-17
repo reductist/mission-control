@@ -2,6 +2,8 @@
 
 package agenda
 
+import attributionSchema "mission-control.dev/schema/attribution"
+
 #PluginID:   string & =~"^[a-z][a-z0-9-]*$"
 #Identifier: string & =~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
 #Timestamp:  string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
@@ -86,6 +88,7 @@ let entryCommon = {
 	detail?:   string & !=""
 	revision?: string & !=""
 	affordances?: [...#EntityAffordance]
+	attribution!: attributionSchema.#EntryAttribution
 }
 
 #Initiative: close({
@@ -110,7 +113,7 @@ let entryCommon = {
 #AgendaEntry: #Initiative | #Action | #Event
 
 #AgendaContribution: close({
-	schema_version!: "mission-control.agenda/v1"
+	schema_version!: "mission-control.agenda/v2"
 	provider!:       #ProviderRef
 	revision!:       string & !=""
 	generated_at!:   #Timestamp

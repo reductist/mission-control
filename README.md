@@ -1,8 +1,15 @@
 # Mission Control
 
-Mission Control is a portable, self-hosted source of truth for projects, tasks, decisions, and durable operational history.
+Mission Control brings the work scattered across calendars, task lists, and
+special-purpose tools into one calm place. Its job is to absorb the sharp edges
+of those integrations, check what they send, and present consistent controls
+that ask for less attention. The technology should serve the people using it:
+lighten cognitive load, preserve context, and free up focus for the things that
+actually matter.
 
-A NixOS host is the first deployment target and proving ground, not an application dependency. Mission Control remains usable independently of NixOS and any particular host configuration.
+It is portable and self-hosted. NixOS is the first convenient deployment target
+and proving ground, not an application dependency; the application and its
+configuration do not assume Nix, systemd, or any particular host.
 
 ## Naming
 
@@ -36,8 +43,9 @@ The executable implementation provides:
 - browser task creation, completion, and reopening through authoritative owners
 - responsive Overview, completed History, focused entity notes with collapsible activity, and synthetic House demo workspaces
 - an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, agenda projections, and owner-routed completion
-- an explicitly selected read-only Google provider with Calendar events, appointments, Tasks, and migrated Reminders projected into a generic Schedule view
+- an explicitly selected read-only Google Calendar provider with independently isolated account connections; Calendar events, appointments, Tasks, and migrated Reminders project into a generic Schedule view
 - validated per-plugin settings, named runtime credentials, background refresh jobs, stale-cache retention, and safe provider health
+- a private `mcctl setup` browser flow that guides Google connection discovery and selection, validates the result, and writes only its dedicated configuration fragment
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
 - frozen registration domain values, enum-backed finite vocabularies, and an immutable discovery catalog
@@ -69,27 +77,57 @@ mcctl --database ./mission-control.db task list --format table
 mcctl --database ./mission-control.db task update TASK_ID --state ready
 mcctl --database ./mission-control.db task history TASK_ID
 mcctl --database ./mission-control.db agenda list
-mcctl --database ./mission-control.db agenda list --plugin landscape
 mcctl --database ./mission-control.db agenda list --format table
 mcctl --database ./mission-control.db render markdown
+mcctl config validate ./mission-control.toml
+mcctl config effective ./mission-control.toml
+mcctl config explain ./mission-control.toml /plugins/google-calendar/settings/connections/demo/mode
 mcctl plugin validate ./plugins/reference/registration.json
 mcctl plugin list --root ./plugins
 mcctl plugin list --root ./plugins --format table
+mkdir -p ./config.d
+mcctl --config-dir ./config.d setup google-calendar
 pytest
 ```
 
-`MC_DATABASE` may be used instead of passing `--database` to every command. `mcctl render markdown --output tasks.md` writes the rendered document directly to a file. Plugin registration validation and discovery do not initialize the database or import plugin implementation code.
+`--database` is a narrow override for core-only administrative work. The daemon,
+enabled plugins, and repeatable operational commands should use the canonical TOML
+configuration through `--config`; optional `--config-dir` paths add lexically
+ordered `*.toml` fragments. `mcctl render markdown --output tasks.md` writes the
+rendered document directly to a file. Configuration and plugin registration
+validation do not initialize the database or import plugin implementation code.
 
 ### MVP browser demo
 
-Run the demo against a disposable database:
+Create `mission-control-demo.toml`:
+
+```toml
+schema_version = "mission-control.config/v2"
+demo = true
+
+[database]
+path = "mission-control-demo.db"
+
+[plugins.google-calendar]
+enabled = true
+
+[plugins.google-calendar.settings.connections.demo]
+label = "Google demo"
+mode = "demo"
+demo_anchor_date = "2026-08-14"
+[plugins.google-calendar.settings.connections.demo.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.demo.tasks]
+mode = "all"
+
+[plugins.landscape]
+enabled = true
+```
+
+Then run it against a disposable database:
 
 ```sh
-mctrld --database ./mission-control-demo.db \
-  --demo \
-  --plugin google \
-  --plugin-settings google=./mission_control/builtin_plugins/google/demo-settings.json \
-  --plugin landscape
+mctrld --config ./mission-control-demo.toml
 ```
 
 Then open `http://127.0.0.1:8000`. `--demo` enables only the synthetic House showcase; Google fixture mode is selected independently through Google-owned settings. The evergreen Google fixture includes a trip, cross-timezone travel, an appointment, tasks, and reminders without contacting Google. The shared Schedule view can switch between its grouped Agenda and provider-neutral 3-day, weekday, week, and month calendars in the viewer's timezone. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details, see only current notes in the focused Notes panel, or add a durable measurement/observation note. The full event history is collapsed under Activity; removed notes can be restored there, and both transitions retain the original note and append audit state. Core task, annotation, and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Providers register only their declared public contributions while enabled.
@@ -98,7 +136,7 @@ For a live read-only Google connection, follow [`docs/google-integration.md`](do
 
 #### Upgrading an existing Yard demo
 
-An existing demo database may retain the earlier core-owned `Measure the driveway drop-off for equipment access` and `Review low-voltage shade lighting options` tasks. Mission Control does not delete or reclassify stored tasks by title. Complete those two legacy demo tasks before enabling `--plugin landscape` so they do not appear as duplicate active work. Use a fresh database only when the old demo state and history are confirmed disposable.
+An existing demo database may retain the earlier core-owned `Measure the driveway drop-off for equipment access` and `Review low-voltage shade lighting options` tasks. Mission Control does not delete or reclassify stored tasks by title. Complete those two legacy demo tasks before enabling the `landscape` configuration block so they do not appear as duplicate active work. Use a fresh database only when the old demo state and history are confirmed disposable.
 
 The current MVP has no user authentication. It binds to loopback by default. Keep it on loopback or reach it through an SSH tunnel or access-controlled Tailscale Serve; do not expose it directly to an untrusted or shared network. This is especially important when the Google provider contains private calendar details. Authentication and production deployment are separate follow-up slices.
 
@@ -130,7 +168,12 @@ List commands default to deterministic JSON so scripts and other programs receiv
 
 Rich is confined to the imperative CLI shell. Presentation functions construct tables from existing domain values but do not read files, access SQLite, mutate state, or print by themselves. The CLI owns stdout and stderr consoles and performs the final rendering effect.
 
-Rich may later provide trees for nested configuration and plugin argument definitions, terminal Markdown previews, and progress displays for long-running backup, restore, migration, installation, synchronization, health-check, and automation commands. It does not define public contracts, replace CUE or JSON Schema, serialize JSON, generate durable Markdown artifacts, implement lifecycle decisions, or render the web UI. Textual remains deferred until a concrete full-screen interactive workflow requires it.
+Rich may later provide trees for nested configuration, terminal Markdown previews,
+and progress displays for long-running backup, restore, migration, installation,
+synchronization, health-check, and automation commands. It does not define public
+contracts, replace CUE or JSON Schema, serialize JSON, generate durable Markdown
+artifacts, implement lifecycle decisions, or render the web UI. Textual remains
+deferred until a concrete full-screen interactive workflow requires it.
 
 ## Product layers
 
@@ -185,13 +228,16 @@ mcctl task add
 mcctl task update
 mcctl task list [--format json|table]
 mcctl task history
-mcctl agenda list [--format json|table] [--plugin landscape]
+mcctl agenda list [--format json|table]
 mcctl render markdown
+mcctl config validate|effective CONFIG.toml [--fragment-dir DIR]
+mcctl config explain CONFIG.toml /JSON/POINTER [--fragment-dir DIR]
 mcctl plugin validate
 mcctl plugin list [--format json|table]
-mctrld [--database PATH] [--host HOST] [--port PORT] [--demo] [--plugin google|landscape]
-       [--plugin-settings PLUGIN_ID=PATH]
-       [--plugin-credential PLUGIN_ID.NAME=PATH]
+mcctl plugin conformance REGISTRATION [--settings SETTINGS.json]
+mcctl [--config CONFIG.toml] --config-dir CONFIG_DIR setup PLUGIN_ID
+mctrld [--config PATH] [--config-dir DIR]
+       [--database PATH] [--host HOST] [--port PORT] [--demo]
 ```
 
 Planned additions:

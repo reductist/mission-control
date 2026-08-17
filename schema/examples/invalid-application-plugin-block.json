@@ -1,0 +1,9 @@
+{
+  "schema_version": "mission-control.config/v2",
+  "plugins": {
+    "google-calendar": {
+      "enabled": true,
+      "unexpected": true
+    }
+  }
+}

@@ -1,0 +1,78 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#ConfigurationField": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "order": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "path": {
+                    "$ref": "#/$defs/%23JSONPointer"
+                },
+                "widget": {
+                    "enum": [
+                        "text",
+                        "number",
+                        "checkbox",
+                        "select",
+                        "credential-file"
+                    ]
+                }
+            },
+            "required": [
+                "label",
+                "path"
+            ]
+        },
+        "#JSONPointer": {
+            "anyOf": [
+                {
+                    "const": ""
+                },
+                {
+                    "type": "string",
+                    "pattern": "^/([^~/]|~[01])*(/([^~/]|~[01])*)*$"
+                }
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "configuration_schema": {
+            "type": "string",
+            "minLength": 1
+        },
+        "fields": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/%23ConfigurationField"
+            }
+        },
+        "schema_version": {
+            "const": "mission-control.plugin-config-presentation/v1"
+        }
+    },
+    "required": [
+        "configuration_schema",
+        "fields",
+        "schema_version"
+    ]
+}

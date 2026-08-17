@@ -11,7 +11,7 @@ from mission_control.agenda import (
 
 def valid_contribution() -> dict[str, object]:
     return {
-        "schema_version": "mission-control.agenda/v1",
+        "schema_version": "mission-control.agenda/v2",
         "provider": {"plugin_id": "landscape"},
         "revision": "1",
         "generated_at": "2026-07-29T13:00:00-04:00",
@@ -24,6 +24,7 @@ def valid_contribution() -> dict[str, object]:
                     "entity_id": "measure-dropoff",
                 },
                 "title": "Measure driveway drop-off",
+                "attribution": {"principal_ids": []},
                 "kind": "action",
                 "state": "ready",
                 "timing": {"kind": "anytime"},

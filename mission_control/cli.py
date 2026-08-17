@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from collections.abc import Iterable
+import tempfile
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,15 +13,30 @@ from pathlib import Path
 from rich.console import Console
 
 from mission_control import __version__
-from mission_control.agenda import aggregate_agenda, agenda_to_list, project_core_tasks
+from mission_control.agenda import (
+    aggregate_agenda,
+    agenda_to_list,
+    project_core_tasks,
+    validate_agenda_attribution,
+)
+from mission_control.application_config import (
+    ApplicationConfigError,
+    load_application_config,
+    prepare_application_plugins,
+)
+from mission_control.attribution import AttributionCatalog
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_lifecycle import (
     PluginLifecycleError,
+    activate_plugins,
     activate_agenda_plugins,
-    prepare_agenda_plugins,
+    prepare_plugins,
+    require_agenda_plugins,
 )
+from mission_control.plugin_api import PluginCallContractError, PluginCallRejected
 from mission_control.plugins import (
+    Capability,
     PluginDiscoveryError,
     PluginRegistrationError,
     catalog_to_list,
@@ -40,15 +54,55 @@ OUTPUT_FORMATS = ("json", "table")
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mcctl")
     parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="read the canonical TOML application configuration",
+    )
+    parser.add_argument(
+        "--config-dir",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="merge lexically ordered *.toml fragments from PATH; may be repeated",
+    )
+    parser.add_argument(
         "--database",
-        default=os.environ.get("MC_DATABASE", "mission-control.db"),
-        help="SQLite database path (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured SQLite database path",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("version", help="print the installed version")
     subcommands.add_parser("init", help="initialize or migrate the database")
     subcommands.add_parser("doctor", help="check database readiness")
+
+    config = subcommands.add_parser("config", help="inspect application configuration")
+    config_commands = config.add_subparsers(dest="config_command", required=True)
+    for name, help_text in (
+        ("validate", "validate configuration and enabled plugin preflight"),
+        ("effective", "render the redacted effective configuration"),
+    ):
+        command = config_commands.add_parser(name, help=help_text)
+        command.add_argument("path", help="base TOML configuration path")
+        command.add_argument(
+            "--fragment-dir",
+            action="append",
+            default=[],
+            metavar="PATH",
+            help="merge lexically ordered *.toml fragments from PATH",
+        )
+    explain = config_commands.add_parser(
+        "explain", help="show a value and the layers that assigned it"
+    )
+    explain.add_argument("path", help="base TOML configuration path")
+    explain.add_argument("pointer", help="effective value as an RFC 6901 JSON Pointer")
+    explain.add_argument(
+        "--fragment-dir",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="merge lexically ordered *.toml fragments from PATH",
+    )
 
     task = subcommands.add_parser("task", help="manage tasks")
     task_commands = task.add_subparsers(dest="task_command", required=True)
@@ -123,34 +177,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="json",
         help="output format (default: %(default)s)",
     )
-    agenda_list.add_argument(
-        "--plugin",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID",
-        help="include an agenda provider by manifest ID; may be repeated",
-    )
-    agenda_list.add_argument(
-        "--plugin-root",
-        action="append",
-        default=[],
-        metavar="PATH",
-        help="discover additional plugin manifests/resources below PATH; may be repeated",
-    )
-    agenda_list.add_argument(
-        "--plugin-settings",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID=PATH",
-        help="read one plugin's non-secret JSON settings; may be repeated",
-    )
-    agenda_list.add_argument(
-        "--plugin-credential",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID.NAME=PATH",
-        help="provide one named credential file to a plugin; may be repeated",
-    )
 
     render = subcommands.add_parser("render", help="render read models")
     render_commands = render.add_subparsers(dest="render_command", required=True)
@@ -184,6 +210,64 @@ def build_parser() -> argparse.ArgumentParser:
         default="json",
         help="output format (default: %(default)s)",
     )
+    conformance = plugin_commands.add_parser(
+        "conformance",
+        help="activate a plugin in a temporary workspace and verify its JSON calls",
+    )
+    conformance.add_argument("registration", type=Path)
+    conformance.add_argument(
+        "--settings", type=Path, help="JSON object containing plugin settings"
+    )
+    conformance.add_argument(
+        "--credential",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        help="named credential file reference; may be repeated",
+    )
+    conformance.add_argument(
+        "--workspace",
+        type=Path,
+        help="JSON workspace object supplying principals for semantic references",
+    )
+
+    setup = subcommands.add_parser(
+        "setup", help="run a private loopback wizard for one plugin"
+    )
+    setup.add_argument("plugin_id", help="plugin ID to configure")
+    setup.add_argument(
+        "--root",
+        action="append",
+        default=[],
+        type=Path,
+        help="additional plugin root; may be repeated",
+    )
+    setup.add_argument(
+        "--managed-fragment",
+        type=Path,
+        help=(
+            "wizard-owned TOML fragment (default: one plugin-specific file in "
+            "the first --config-dir)"
+        ),
+    )
+    setup.add_argument(
+        "--credential-dir",
+        type=Path,
+        default=Path("mission-control.credentials"),
+        help="private directory for credentials imported by the wizard",
+    )
+    setup.add_argument(
+        "--export-only",
+        action="store_true",
+        help="write configuration only; reject newly uploaded credentials",
+    )
+    setup.add_argument("--port", type=int, default=0, help="loopback port (default: automatic)")
+    setup.add_argument(
+        "--timeout",
+        type=int,
+        default=900,
+        help="session lifetime in seconds (30-3600; default: %(default)s)",
+    )
     return parser
 
 
@@ -191,11 +275,63 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     stdout = Console(file=sys.stdout, highlight=False)
     stderr = Console(file=sys.stderr, highlight=False)
-    database = Database(Path(args.database))
 
     if args.command == "version":
         print(__version__)
         return 0
+
+    if args.command == "setup":
+        from mission_control.setup_host import SetupHostError, run_setup_host
+
+        try:
+            managed_fragment = args.managed_fragment
+            if managed_fragment is None:
+                if args.export_only:
+                    managed_fragment = Path("mission-control.setup.toml")
+                elif args.config_dir:
+                    safe_plugin_id = args.plugin_id.translate(
+                        str.maketrans({".": "-", ":": "-", "_": "-"})
+                    )
+                    managed_fragment = (
+                        Path(args.config_dir[0])
+                        / f"90-mission-control-setup--{safe_plugin_id}.toml"
+                    )
+                else:
+                    raise SetupHostError(
+                        "managed setup requires --config-dir so the service will "
+                        "consume the wizard-owned fragment"
+                    )
+            result = run_setup_host(
+                args.plugin_id,
+                base_path=args.config,
+                fragment_dirs=args.config_dir,
+                roots=args.root,
+                managed_fragment=managed_fragment,
+                credential_dir=args.credential_dir,
+                export_only=args.export_only,
+                port=args.port,
+                timeout_seconds=args.timeout,
+                announce=lambda url: stdout.print(
+                    f"Open this private setup link:\n{url}", markup=False
+                ),
+            )
+            if result is None:
+                stderr.print("error: setup expired or was cancelled", markup=False)
+                return 2
+            print(json.dumps(result, sort_keys=True))
+            return 0
+        except KeyboardInterrupt:
+            stderr.print("setup cancelled", markup=False)
+            return 130
+        except (
+            ApplicationConfigError,
+            OSError,
+            PluginLifecycleError,
+            SetupHostError,
+            ValueError,
+        ) as error:
+            stderr.print(f"error: {error}", markup=False)
+            return 2
 
     if args.command == "plugin" and args.plugin_command == "validate":
         try:
@@ -219,20 +355,119 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(catalog_to_list(catalog), sort_keys=True))
         return 0
 
-    prepared_plugins = ()
-    if args.command == "agenda" and args.agenda_command == "list":
+    if args.command == "plugin" and args.plugin_command == "conformance":
         try:
-            configurations = _plugin_settings(args.plugin_settings)
-            credentials = _plugin_credentials(args.plugin_credential)
-            prepared_plugins = prepare_agenda_plugins(
-                args.plugin,
-                roots=args.plugin_root,
-                configurations=configurations,
-                credentials=credentials,
+            registration = load_registration(args.registration)
+            settings: object = {}
+            if args.settings is not None:
+                settings = json.loads(args.settings.read_text(encoding="utf-8"))
+            if not isinstance(settings, dict):
+                raise ValueError("settings must be a JSON object")
+            credentials: dict[str, str] = {}
+            for item in args.credential:
+                name, separator, path = item.partition("=")
+                if not separator or not name or not path:
+                    raise ValueError("credential must use NAME=PATH")
+                if name in credentials:
+                    raise ValueError(f"credential {name!r} was supplied more than once")
+                credentials[name] = path
+            catalogs = None
+            if args.workspace is not None:
+                workspace = json.loads(args.workspace.read_text(encoding="utf-8"))
+                attribution = AttributionCatalog.from_workspace(workspace)
+                catalogs = {"workspace-principal": attribution.principal_ids}
+            (prepared,) = prepare_plugins(
+                (registration.plugin_id.value,),
+                roots=(args.registration.parent,),
+                configurations={registration.plugin_id.value: settings},
+                credentials={registration.plugin_id.value: credentials},
+                reference_catalogs=catalogs,
             )
-        except (OSError, PluginLifecycleError, ValueError) as error:
+            if prepared.registration.runtime is None:
+                raise ValueError("plugin does not declare a runtime entrypoint")
+            with tempfile.TemporaryDirectory(prefix="mission-control-conformance-") as root:
+                (provider,) = activate_plugins(
+                    Database(Path(root) / "mission-control.db"), (prepared,)
+                )
+                try:
+                    probes: list[str] = []
+                    if Capability.HEALTH in registration.capabilities:
+                        provider.health()
+                        probes.append("health.get")
+                    if Capability.JOBS in registration.capabilities:
+                        provider.jobs()
+                        probes.append("jobs.list")
+                    print(
+                        json.dumps(
+                            {
+                                "plugin_id": registration.plugin_id.value,
+                                "valid": True,
+                                "operations": list(provider.operations),
+                                "probed": probes,
+                            },
+                            sort_keys=True,
+                        )
+                    )
+                finally:
+                    provider.stop()
+        except PluginCallRejected as error:
+            stderr.print(
+                f"error: plugin rejected conformance probe ({error.code})",
+                markup=False,
+            )
+            return 2
+        except (
+            OSError,
+            json.JSONDecodeError,
+            PluginCallContractError,
+            PluginLifecycleError,
+            PluginRegistrationError,
+            ValueError,
+        ) as error:
             stderr.print(f"error: {error}", markup=False)
             return 2
+        return 0
+
+    if args.command == "config":
+        try:
+            snapshot = load_application_config(
+                base_path=args.path,
+                fragment_dirs=args.fragment_dir,
+            )
+            prepare_application_plugins(snapshot)
+            if args.config_command == "validate":
+                print(
+                    json.dumps(
+                        {
+                            "schema_version": snapshot.to_dict()["schema_version"],
+                            "valid": True,
+                        },
+                        sort_keys=True,
+                    )
+                )
+            elif args.config_command == "effective":
+                print(json.dumps(snapshot.to_dict(redacted=True), sort_keys=True))
+            else:
+                print(json.dumps(asdict(snapshot.explain(args.pointer)), sort_keys=True))
+        except ApplicationConfigError as error:
+            stderr.print(f"error: {error}", markup=False)
+            return 2
+        return 0
+
+    overrides = (
+        {"database": {"path": args.database}} if hasattr(args, "database") else None
+    )
+    try:
+        snapshot = load_application_config(
+            base_path=args.config,
+            fragment_dirs=args.config_dir,
+            overrides=overrides,
+        )
+        prepared_plugins = prepare_application_plugins(snapshot)
+    except ApplicationConfigError as error:
+        stderr.print(f"error: {error}", markup=False)
+        return 2
+    database = Database(Path(snapshot.database_path))
 
     runner = MigrationRunner(database)
 
@@ -260,26 +495,52 @@ def main(argv: list[str] | None = None) -> int:
     repository = TaskRepository(database)
 
     if args.command == "agenda" and args.agenda_command == "list":
+        providers = ()
         try:
-            providers = activate_agenda_plugins(database, prepared_plugins)
+            providers = activate_agenda_plugins(
+                database, require_agenda_plugins(prepared_plugins)
+            )
         except PluginLifecycleError as error:
             stderr.print(f"error: {error}", markup=False)
             return 2
-        generated_at = datetime.now(UTC)
-        contribution = project_core_tasks(repository.list(), generated_at=generated_at)
-        agenda_snapshot = aggregate_agenda(
-            (
-                contribution,
-                *(
-                    provider.contribution(generated_at=generated_at)
-                    for provider in providers
-                ),
+        try:
+            generated_at = datetime.now(UTC)
+            contribution = project_core_tasks(
+                repository.list(), generated_at=generated_at
             )
-        )
-        if args.format == "table":
-            stdout.print(agenda_table(agenda_snapshot))
-        else:
-            print(json.dumps(agenda_to_list(agenda_snapshot), sort_keys=True))
+            plugin_contributions = []
+            for provider in providers:
+                plugin_contribution = provider.contribution(
+                    generated_at=generated_at
+                )
+                validate_agenda_attribution(
+                    plugin_contribution, snapshot.attribution_catalog
+                )
+                plugin_contributions.append(plugin_contribution)
+            agenda_snapshot = aggregate_agenda(
+                (
+                    contribution,
+                    *plugin_contributions,
+                )
+            )
+            if args.format == "table":
+                stdout.print(
+                    agenda_table(agenda_snapshot, snapshot.attribution_catalog)
+                )
+            else:
+                print(json.dumps(agenda_to_list(agenda_snapshot), sort_keys=True))
+        except Exception as error:
+            stderr.print(
+                f"error: plugin agenda read failed ({type(error).__name__})",
+                markup=False,
+            )
+            return 2
+        finally:
+            for provider in reversed(providers):
+                try:
+                    provider.stop()
+                except Exception:
+                    continue
         return 0
 
     if args.command == "task":
@@ -325,44 +586,5 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     raise AssertionError("unreachable command")
-
-
-def _plugin_settings(values: Iterable[str]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for value in values:
-        plugin_id, path = _assignment(value, "--plugin-settings")
-        if plugin_id in result:
-            raise ValueError(f"plugin settings supplied more than once: {plugin_id}")
-        result[plugin_id] = json.loads(Path(path).read_text(encoding="utf-8"))
-    return result
-
-
-def _plugin_credentials(values: Iterable[str]) -> dict[str, dict[str, str]]:
-    result: dict[str, dict[str, str]] = {}
-    for value in values:
-        identity, path = _assignment(value, "--plugin-credential")
-        if "." not in identity:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_id, name = identity.split(".", 1)
-        if not plugin_id or not name:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_credentials = result.setdefault(plugin_id, {})
-        if name in plugin_credentials:
-            raise ValueError(
-                f"plugin credential supplied more than once: {plugin_id}.{name}"
-            )
-        plugin_credentials[name] = path
-    return result
-
-
-def _assignment(value: str, option: str) -> tuple[str, str]:
-    if "=" not in value:
-        raise ValueError(f"{option} must use NAME=PATH")
-    name, path = value.split("=", 1)
-    if not name or not path:
-        raise ValueError(f"{option} must use NAME=PATH")
-    return name, path
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

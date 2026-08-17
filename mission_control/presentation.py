@@ -22,6 +22,7 @@ from mission_control.agenda import (
     TimedTiming,
     WindowTiming,
 )
+from mission_control.attribution import AttributionCatalog
 from mission_control.plugins import (
     AvailablePlugin,
     ConflictedPlugin,
@@ -160,7 +161,28 @@ def _agenda_state(entry: AgendaEntry) -> str:
     raise AssertionError(f"unhandled agenda entry: {entry!r}")
 
 
-def agenda_table(agenda: AggregatedAgenda) -> Table:
+def _agenda_attribution(entry: AgendaEntry, catalog: AttributionCatalog) -> str:
+    principal_labels = [
+        principal.label
+        for reference in entry.attribution.principals
+        if (principal := catalog.principal(reference.principal_id)) is not None
+    ]
+    integration = entry.attribution.integration
+    source_parts: list[str] = []
+    if integration is not None:
+        if integration.collection_label:
+            source_parts.append(integration.collection_label)
+        source_parts.append(integration.connection_label)
+    else:
+        source_parts.append(entry.source.plugin_id.value)
+    people = " & ".join(principal_labels)
+    source = " · ".join(source_parts)
+    return " — ".join(part for part in (people, source) if part)
+
+
+def agenda_table(
+    agenda: AggregatedAgenda, catalog: AttributionCatalog | None = None
+) -> Table:
     """Build a read-only aggregate agenda table without performing I/O."""
 
     table = Table(
@@ -175,7 +197,7 @@ def agenda_table(agenda: AggregatedAgenda) -> Table:
     table.add_column("State", no_wrap=True)
     table.add_column("Title", ratio=3, overflow="fold")
     table.add_column("Context", ratio=2, overflow="fold")
-    table.add_column("Owner", no_wrap=True, overflow="ellipsis")
+    table.add_column("People / source", no_wrap=True, overflow="ellipsis")
 
     if not agenda.entries:
         table.add_row("", "", "", _text("No agenda entries."), "", "")
@@ -188,6 +210,6 @@ def agenda_table(agenda: AggregatedAgenda) -> Table:
             _text(_agenda_state(entry)),
             _text(entry.title),
             _text(entry.context),
-            _text(entry.source.plugin_id.value),
+            _text(_agenda_attribution(entry, catalog or AttributionCatalog())),
         )
     return table

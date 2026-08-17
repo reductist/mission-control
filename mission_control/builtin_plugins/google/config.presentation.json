@@ -1,0 +1,23 @@
+{
+    "schema_version": "mission-control.plugin-config-presentation/v1",
+    "configuration_schema": "mission-control.google-calendar.config/v2",
+    "fields": [
+        {
+            "path": "/settings/connections",
+            "label": "Google connections",
+            "order": 10
+        },
+        {
+            "path": "/settings/lookback_days",
+            "label": "Past calendar window",
+            "order": 20,
+            "widget": "number"
+        },
+        {
+            "path": "/settings/lookahead_days",
+            "label": "Future calendar window",
+            "order": 30,
+            "widget": "number"
+        }
+    ]
+}

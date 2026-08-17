@@ -1,0 +1,14 @@
+{
+    "schema_version": "mission-control.plugin-config-defaults/v1",
+    "configuration_schema": "mission-control.google-calendar.config/v2",
+    "defaults": {
+        "settings": {
+            "connections": {},
+            "lookahead_days": 42,
+            "lookback_days": 42,
+            "request_timeout_seconds": 15,
+            "sync_interval_seconds": 300
+        },
+        "credentials": {}
+    }
+}

@@ -1,0 +1,6 @@
+{
+  "schema_version": "mission-control.config/v2",
+  "plugins": {
+    "Bad_ID": {"enabled": false}
+  }
+}

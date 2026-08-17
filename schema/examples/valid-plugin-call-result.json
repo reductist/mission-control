@@ -1,0 +1,6 @@
+{
+  "schema_version": "mission-control.plugin-call-result/v1",
+  "operation": "entity-details.get",
+  "status": "ok",
+  "output": null
+}

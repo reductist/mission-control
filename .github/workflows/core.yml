@@ -69,22 +69,46 @@ jobs:
               "mission_control/migrations/0003_entity_note_status_events.sql",
               "mission_control/migrations/0004_plugin_schema_migrations.sql",
               "mission_control/builtin_plugins/landscape/agenda.json",
+              "mission_control/builtin_plugins/landscape/config.defaults.json",
+              "mission_control/builtin_plugins/landscape/config.presentation.json",
+              "mission_control/builtin_plugins/landscape/config.schema.json",
               "mission_control/builtin_plugins/landscape/migrations/0001_initial.sql",
               "mission_control/builtin_plugins/landscape/migrations/0002_domain_text_bounds.sql",
               "mission_control/builtin_plugins/landscape/registration.json",
               "mission_control/builtin_plugins/google/demo.json",
               "mission_control/builtin_plugins/google/demo-settings.json",
+              "mission_control/builtin_plugins/google/config.defaults.json",
+              "mission_control/builtin_plugins/google/config.presentation.json",
+              "mission_control/builtin_plugins/google/config.schema.json",
               "mission_control/builtin_plugins/google/migrations/0001_initial.sql",
               "mission_control/builtin_plugins/google/migrations/0002_cache_source.sql",
+              "mission_control/builtin_plugins/google/migrations/0003_connections.sql",
               "mission_control/builtin_plugins/google/registration.json",
               "mission_control/builtin_plugins/google/mapping.py",
               "mission_control/schemas/agenda-contribution.schema.json",
+              "mission_control/schemas/attribution-catalog.schema.json",
               "mission_control/schemas/agenda-query.schema.json",
+              "mission_control/schemas/application-config.defaults.json",
+              "mission_control/schemas/application-config.schema.json",
               "mission_control/schemas/closed-items-contribution.schema.json",
               "mission_control/schemas/command-envelope.schema.json",
               "mission_control/schemas/command-result.schema.json",
+              "mission_control/schemas/command-state.schema.json",
               "mission_control/schemas/entity-detail.schema.json",
+              "mission_control/schemas/plugin-call-result.schema.json",
+              "mission_control/schemas/plugin-call.schema.json",
               "mission_control/schemas/plugin-registration.schema.json",
+              "mission_control/schemas/plugin-config-defaults.schema.json",
+              "mission_control/schemas/plugin-config-presentation.schema.json",
+              "mission_control/schemas/plugin-health.schema.json",
+              "mission_control/schemas/plugin-jobs.schema.json",
+              "mission_control/schemas/plugin-runtime.schema.json",
+              "mission_control/schemas/setup-state.schema.json",
+              "mission_control/schemas/setup-transition.schema.json",
+              "mission_control/schemas/setup-commit.schema.json",
+              "mission_control/setup_web/app.js",
+              "mission_control/setup_web/index.html",
+              "mission_control/setup_web/styles.css",
               "mission_control/web/app.js",
               "mission_control/web/demo.json",
               "mission_control/web/index.html",
@@ -95,6 +119,68 @@ jobs:
           if missing:
               raise SystemExit(f"missing packaged resources: {', '.join(missing)}")
           print(f"verified runtime resources in {wheel.name}")
+          PY
+
+      - name: Preflight the installed wheel outside the checkout
+        run: |
+          python -m pip install --force-reinstall --no-deps dist/mission_control-*.whl
+          cp -R plugins/reference /tmp/mission-control-reference-plugin
+          cd /tmp
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          from mission_control.plugin_lifecycle import prepare_agenda_plugins
+          from mission_control.plugins import load_registration, validate_plugin_configuration
+
+          (plugin,) = prepare_agenda_plugins(
+              ("google-calendar",),
+              configurations={
+                  "google-calendar": {
+                      "connections": {
+                          "demo": {
+                              "label": "Google demo",
+                              "mode": "demo",
+                              "calendars": {"mode": "defaults"},
+                              "tasks": {"mode": "all"},
+                          }
+                      }
+                  }
+              },
+          )
+          assert plugin.registration.plugin_id.value == "google-calendar"
+          assert plugin.configuration.to_dict()["sync_interval_seconds"] == 300
+
+          root = Path("/tmp/mission-control-reference-plugin")
+          registration = load_registration(root / "registration.json")
+          configured = validate_plugin_configuration(
+              registration,
+              lambda name: json.loads((root / name).read_text(encoding="utf-8")),
+              {"message": "hello"},
+              {},
+          )
+          assert configured.settings.to_dict() == {"message": "hello", "repeat": 1}
+
+          settings = Path("/tmp/reference-settings.json")
+          settings.write_text('{"message":"installed wheel"}', encoding="utf-8")
+          completed = subprocess.run(
+              [
+                  "mcctl",
+                  "plugin",
+                  "conformance",
+                  str(root / "registration.json"),
+                  "--settings",
+                  str(settings),
+              ],
+              check=True,
+              capture_output=True,
+              text=True,
+          )
+          assert json.loads(completed.stdout)["operations"] == [
+              "health.get",
+              "runtime.describe",
+          ]
           PY
 
   nix:

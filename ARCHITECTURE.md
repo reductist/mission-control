@@ -50,6 +50,13 @@ Each plugin owns:
 
 Plugins may use only documented core interfaces. They must not import private core modules, mutate core projections directly, modify another plugin's tables, bypass authorization, or emit unvalidated events.
 
+The target authoring boundary is versioned JSON validated from CUE, with a small
+public language adapter. In-process Python is an initial runtime mechanism, not a
+license for plugins to exchange core-private classes. Core supplies a narrow,
+plugin-namespaced storage and event adapter inside one transaction so domain
+mutation and event append remain atomic. See
+[`docs/configuration-and-schema-evolution.md`](docs/configuration-and-schema-evolution.md).
+
 ## Public plugin lifecycle
 
 All plugins, including built-in plugins, follow the same lifecycle:
@@ -62,6 +69,12 @@ All plugins, including built-in plugins, follow the same lifecycle:
 6. Start background work only after the application becomes ready.
 7. Stop jobs and unregister contributions during disable or shutdown.
 8. Preserve plugin data when disabled unless an explicit destructive removal is requested.
+
+Guided setup is deliberately outside that runtime lifecycle. An explicit setup
+host may import a separately declared setup entry point after manifest and
+configuration-artifact preflight, but it supplies no database or plugin storage.
+A completed setup draft must pass normal startup configuration validation before
+the host may export or commit it.
 
 The runtime must be able to identify a failed plugin, isolate its contributions, and start Mission Control in a recoverable mode when core invariants remain intact.
 
@@ -85,6 +98,13 @@ The interface catalog is defined in `INTERFACES.md`. At minimum, the public API 
 
 The source of truth for these contracts should eventually be machine-readable and language-agnostic. CUE is the canonical public contract language, with generated JSON Schema, validation artifacts, and future reference documentation tracked in #3.
 
+The web application is the primary and reference user interface, but it is not
+the definition of a view. Workspace snapshots, affordances, setup actions, form
+descriptors, and declarative plugin contributions remain transport-neutral. A
+future terminal UI must be able to consume those same contracts without importing
+web modules or reimplementing plugin semantics; renderers own layout and interaction
+appropriate to their medium.
+
 ## Isolation guarantees
 
 The architecture should preserve these properties:
@@ -101,6 +121,10 @@ The architecture should preserve these properties:
 10. Public interface compatibility is testable before startup and upgrade.
 
 ## Configuration
+
+The detailed source, merge, identity, setup-write, and pre-1.0 schema-evolution
+decisions are recorded in
+[`docs/configuration-and-schema-evolution.md`](docs/configuration-and-schema-evolution.md).
 
 Mission Control accepts one application-level configuration format with:
 

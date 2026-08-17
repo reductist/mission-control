@@ -90,7 +90,7 @@ class LandscapeMigrationRunner:
                 {
                     row[0]
                     for row in connection.execute(
-                        "SELECT version FROM landscape_schema_migrations"
+                        "SELECT version FROM plugin__9__landscape__schema_migrations"
                     ).fetchall()
                 }
                 if self._has_migration_table(connection)
@@ -113,7 +113,7 @@ class LandscapeMigrationRunner:
     def _has_migration_table(connection: sqlite3.Connection) -> bool:
         row = connection.execute(
             "SELECT 1 FROM sqlite_master "
-            "WHERE type = 'table' AND name = 'landscape_schema_migrations'"
+            "WHERE type = 'table' AND name = 'plugin__9__landscape__schema_migrations'"
         ).fetchone()
         return row is not None
 
@@ -173,7 +173,7 @@ class SQLiteLandscapeRepository:
         occurred_at = datetime.now(UTC).isoformat()
         with self.database.connect() as connection:
             imported = connection.execute(
-                "SELECT 1 FROM landscape_seed_imports WHERE import_id = ?",
+                "SELECT 1 FROM plugin__9__landscape__seed_imports WHERE import_id = ?",
                 (import_id,),
             ).fetchone()
             if imported is not None:
@@ -191,7 +191,7 @@ class SQLiteLandscapeRepository:
                         "Landscape's initial seed supports initiatives and actions only"
                     )
             connection.execute(
-                "INSERT INTO landscape_seed_imports(import_id, source_revision, imported_at) "
+                "INSERT INTO plugin__9__landscape__seed_imports(import_id, source_revision, imported_at) "
                 "VALUES (?, ?, ?)",
                 (import_id, seed.revision, occurred_at),
             )
@@ -214,21 +214,21 @@ class SQLiteLandscapeRepository:
     def list_initiatives(self) -> tuple[LandscapeInitiative, ...]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM landscape_initiatives ORDER BY created_at, initiative_id"
+                "SELECT * FROM plugin__9__landscape__initiatives ORDER BY created_at, initiative_id"
             ).fetchall()
         return tuple(self._initiative_from_row(row) for row in rows)
 
     def list_actions(self) -> tuple[LandscapeAction, ...]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM landscape_actions ORDER BY created_at, action_id"
+                "SELECT * FROM plugin__9__landscape__actions ORDER BY created_at, action_id"
             ).fetchall()
         return tuple(self._action_from_row(row) for row in rows)
 
     def get_initiative(self, initiative_id: str) -> LandscapeInitiative:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM landscape_initiatives WHERE initiative_id = ?",
+                "SELECT * FROM plugin__9__landscape__initiatives WHERE initiative_id = ?",
                 (initiative_id,),
             ).fetchone()
         if row is None:
@@ -238,7 +238,7 @@ class SQLiteLandscapeRepository:
     def get_action(self, action_id: str) -> LandscapeAction:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM landscape_actions WHERE action_id = ?", (action_id,)
+                "SELECT * FROM plugin__9__landscape__actions WHERE action_id = ?", (action_id,)
             ).fetchone()
         if row is None:
             raise KeyError(action_id)
@@ -284,7 +284,7 @@ class SQLiteLandscapeRepository:
         with self.database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT * FROM landscape_actions WHERE action_id = ?", (action_id,)
+                "SELECT * FROM plugin__9__landscape__actions WHERE action_id = ?", (action_id,)
             ).fetchone()
             if row is None:
                 raise KeyError(action_id)
@@ -294,7 +294,7 @@ class SQLiteLandscapeRepository:
 
             updated = transition(current, datetime.now(UTC))
             result = connection.execute(
-                "UPDATE landscape_actions SET state = ?, version = ?, updated_at = ? "
+                "UPDATE plugin__9__landscape__actions SET state = ?, version = ?, updated_at = ? "
                 "WHERE action_id = ? AND version = ?",
                 (
                     updated.state.value,
@@ -306,7 +306,7 @@ class SQLiteLandscapeRepository:
             )
             if result.rowcount != 1:
                 latest = connection.execute(
-                    "SELECT version FROM landscape_actions WHERE action_id = ?",
+                    "SELECT version FROM plugin__9__landscape__actions WHERE action_id = ?",
                     (action_id,),
                 ).fetchone()
                 if latest is None:
@@ -328,7 +328,7 @@ class SQLiteLandscapeRepository:
         with self.database.connect() as connection:
             rows = connection.execute(
                 "SELECT sequence, event_id, entity_kind, entity_id, event_type, "
-                "payload_json, occurred_at FROM landscape_events "
+                "payload_json, occurred_at FROM plugin__9__landscape__events "
                 "WHERE entity_kind = ? AND entity_id = ? ORDER BY sequence",
                 (entity_kind.value, entity_id),
             ).fetchall()
@@ -379,7 +379,7 @@ class SQLiteLandscapeRepository:
             ).encode()
         ).hexdigest()
         return AgendaContribution(
-            schema_version=AgendaSchemaVersion.V1,
+            schema_version=AgendaSchemaVersion.V2,
             provider=ProviderRef(PLUGIN_ID),
             revision=revision,
             generated_at=generated_at,
@@ -442,7 +442,7 @@ class SQLiteLandscapeRepository:
         )
         try:
             connection.execute(
-                "INSERT INTO landscape_initiatives(initiative_id, title, state, context, "
+                "INSERT INTO plugin__9__landscape__initiatives(initiative_id, title, state, context, "
                 "detail, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
                 (
                     initiative.initiative_id,
@@ -498,7 +498,7 @@ class SQLiteLandscapeRepository:
 
         try:
             connection.execute(
-                "INSERT INTO landscape_actions(action_id, title, state, timing_kind, "
+                "INSERT INTO plugin__9__landscape__actions(action_id, title, state, timing_kind, "
                 "due_on, due_at, starts_at, ends_at, context, detail, version, created_at, "
                 "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
                 (
@@ -539,7 +539,7 @@ class SQLiteLandscapeRepository:
         occurred_at: str,
     ) -> None:
         connection.execute(
-            "INSERT INTO landscape_events(event_id, entity_kind, entity_id, event_type, "
+            "INSERT INTO plugin__9__landscape__events(event_id, entity_kind, entity_id, event_type, "
             "payload_json, occurred_at) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 str(uuid4()),

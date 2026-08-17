@@ -388,6 +388,62 @@ function scheduleFilterButton(value, label) {
   return `<button class="schedule-filter ${selected ? "is-active" : ""}" data-schedule-filter="${value}" type="button" aria-pressed="${selected}">${escapeHtml(label)}</button>`;
 }
 
+function attributionCatalog() {
+  return dashboard?.attribution_catalog || { principals: [], accents: [] };
+}
+
+function entryProvenance(entry) {
+  const catalog = attributionCatalog();
+  const principalById = new Map(
+    (catalog.principals || []).map((principal) => [principal.id, principal.label]),
+  );
+  const people = (entry.attribution?.principal_ids || [])
+    .map((principalId) => principalById.get(principalId) || principalId);
+  const integration = entry.attribution?.integration;
+  const source = integration
+    ? [integration.collection?.label, integration.connection?.label].filter(Boolean).join(" · ")
+    : pluginLabel(entry.source?.plugin_id);
+  return [people.join(" & "), source].filter(Boolean).join(" — ");
+}
+
+function entryAccentToken(entry) {
+  const attribution = entry.attribution || {};
+  const integration = attribution.integration;
+  const pluginId = entry.source?.plugin_id;
+  const accents = attributionCatalog().accents || [];
+  const principalIds = new Set(attribution.principal_ids || []);
+  const principalTokens = new Set(
+    accents
+      .filter((item) => item?.target?.kind === "principal"
+        && principalIds.has(item.target.principal_id)
+        && /^accent-[1-8]$/.test(item.token))
+      .map((item) => item.token),
+  );
+  if (principalTokens.size === 1) return [...principalTokens][0];
+  const candidates = [
+    (target) => target.kind === "collection"
+      && target.plugin_id === pluginId
+      && target.connection_id === integration?.connection?.id
+      && target.collection_id === integration?.collection?.id,
+    (target) => target.kind === "connection"
+      && target.plugin_id === pluginId
+      && target.connection_id === integration?.connection?.id,
+    (target) => target.kind === "plugin" && target.plugin_id === pluginId,
+  ];
+  for (const matches of candidates) {
+    const preference = accents.find(
+      (item) => item?.target && matches(item.target),
+    );
+    if (preference && /^accent-[1-8]$/.test(preference.token)) return preference.token;
+  }
+  return "";
+}
+
+function entryAccentAttribute(entry) {
+  const token = entryAccentToken(entry);
+  return token ? ` data-accent="${token}"` : "";
+}
+
 function calendarRange(mode, anchor) {
   if (mode === "three-day") {
     return { columns: 3, month: null, days: civilDateSequence(anchor, 3) };
@@ -510,11 +566,11 @@ function calendarEntryChip(entry, day, timeZone) {
     time = "All day";
   }
   const kindClass = entry.kind === "event" ? "is-event" : "is-task";
-  const content = `<span>${escapeHtml(time)}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(pluginLabel(entry.source?.plugin_id))}</small>`;
+  const content = `<span>${escapeHtml(time)}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entryProvenance(entry))}</small>`;
   if (providerHasCapability(entry.source?.plugin_id, "entity-details")) {
-    return `<button class="calendar-item ${kindClass}" type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}">${content}</button>`;
+    return `<button class="calendar-item ${kindClass}"${entryAccentAttribute(entry)} type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}">${content}</button>`;
   }
-  return `<div class="calendar-item ${kindClass}">${content}</div>`;
+  return `<div class="calendar-item ${kindClass}"${entryAccentAttribute(entry)}>${content}</div>`;
 }
 
 function scheduleDay(key, entries) {
@@ -531,12 +587,12 @@ function scheduleDay(key, entries) {
 
 function scheduleRow(entry) {
   const kindLabel = entry.kind === "event" ? "Event" : "Task";
-  const provenance = [pluginLabel(entry.source?.plugin_id), entry.context, kindLabel]
+  const provenance = [entryProvenance(entry), kindLabel]
     .filter(Boolean)
     .join(" · ");
   const timeValue = scheduleTimeValue(entry);
   return `
-    <article class="schedule-row">
+    <article class="schedule-row"${entryAccentAttribute(entry)}>
       <time class="schedule-time"${timeValue ? ` datetime="${escapeHtml(timeValue)}"` : ""}>${escapeHtml(scheduleTimingLabel(entry))}</time>
       <div>
         <h3 class="task-title">${entityTitle(entry)}</h3>
@@ -756,7 +812,7 @@ function renderHouse() {
 function renderYard() {
   const entries = landscapeEntries();
   if (!entries.length) {
-    renderNoDemo("Yard planning", "Start mctrld with --plugin landscape to load the Yard workspace.");
+    renderNoDemo("Yard planning", "Enable the landscape plugin in Mission Control configuration to load the Yard workspace.");
     return;
   }
   const initiatives = entries.filter((entry) => entry.kind === "initiative");

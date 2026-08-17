@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from io import StringIO
 
+import pytest
 from rich.console import Console
 
 from mission_control.agenda import aggregate_agenda, parse_agenda_contribution
 from mission_control.cli import main
+from mission_control.plugin_api import PluginCallRejected
 from mission_control.presentation import agenda_table
 
 
@@ -26,7 +28,7 @@ def render_text(renderable, *, width: int = 72) -> str:
 def test_agenda_table_is_readable_without_color_at_narrow_width():
     contribution = parse_agenda_contribution(
         {
-            "schema_version": "mission-control.agenda/v1",
+            "schema_version": "mission-control.agenda/v2",
             "provider": {"plugin_id": "landscape"},
             "revision": "1",
             "generated_at": "2026-07-29T13:00:00-04:00",
@@ -39,6 +41,7 @@ def test_agenda_table_is_readable_without_color_at_narrow_width():
                         "entity_id": "equipment-access",
                     },
                     "title": "Improve backyard equipment access",
+                    "attribution": {"principal_ids": []},
                     "context": "Backyard",
                     "kind": "initiative",
                     "state": "open",
@@ -51,6 +54,7 @@ def test_agenda_table_is_readable_without_color_at_narrow_width():
                         "entity_id": "measure-dropoff",
                     },
                     "title": "Measure driveway drop-off",
+                    "attribution": {"principal_ids": []},
                     "kind": "action",
                     "state": "ready",
                     "timing": {"kind": "anytime"},
@@ -92,8 +96,9 @@ def test_cli_projects_core_tasks_to_json_and_table(tmp_path, capsys):
     assert main(["--database", str(database), "agenda", "list"]) == 0
     machine_output = json.loads(capsys.readouterr().out)
     assert machine_output == [
-        {
-            "context": "Core tasks",
+            {
+                "attribution": {"principal_ids": []},
+                "context": "Core tasks",
             "id": task["id"],
             "kind": "action",
             "revision": task["updated_at"],
@@ -141,17 +146,19 @@ def test_done_core_tasks_are_not_projected(tmp_path, capsys):
 
 def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
     database = tmp_path / "mission-control.db"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+schema_version = "mission-control.config/v2"
+[database]
+path = "{database}"
+[plugins.landscape]
+enabled = true
+""",
+        encoding="utf-8",
+    )
 
-    assert main(
-        [
-            "--database",
-            str(database),
-            "agenda",
-            "list",
-            "--plugin",
-            "landscape",
-        ]
-    ) == 0
+    assert main(["--config", str(config), "agenda", "list"]) == 0
     output = json.loads(capsys.readouterr().out)
 
     assert {entry["source"]["plugin_id"] for entry in output} == {"landscape"}
@@ -164,48 +171,78 @@ def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
 
 def test_cli_accepts_explicit_google_demo_settings(tmp_path, capsys):
     database = tmp_path / "mission-control.db"
-    settings = tmp_path / "google.json"
-    settings.write_text(
-        json.dumps({"mode": "demo", "demo_anchor_date": "2026-08-14"}),
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+schema_version = "mission-control.config/v2"
+[database]
+path = "{database}"
+[plugins.google-calendar]
+enabled = true
+[plugins.google-calendar.settings.connections.demo]
+label = "Google demo"
+mode = "demo"
+demo_anchor_date = "2026-08-14"
+[plugins.google-calendar.settings.connections.demo.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.demo.tasks]
+mode = "all"
+""",
         encoding="utf-8",
     )
 
-    assert main(
-        [
-            "--database",
-            str(database),
-            "agenda",
-            "list",
-            "--plugin",
-            "google",
-            "--plugin-settings",
-            f"google={settings}",
-        ]
-    ) == 0
+    assert main(["--config", str(config), "agenda", "list"]) == 0
     output = json.loads(capsys.readouterr().out)
 
-    assert {entry["source"]["plugin_id"] for entry in output} == {"google"}
+    assert {entry["source"]["plugin_id"] for entry in output} == {"google-calendar"}
     assert {entry["title"] for entry in output} >= {
         "Switzerland trip",
         "Download offline maps",
     }
 
 
-def test_invalid_provider_selection_does_not_initialize_database(tmp_path, capsys):
+def test_invalid_enabled_provider_does_not_initialize_database(tmp_path, capsys):
     database = tmp_path / "must-not-exist.db"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+schema_version = "mission-control.config/v2"
+[database]
+path = "{database}"
+[plugins.unavailable]
+enabled = true
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["--config", str(config), "agenda", "list"]) == 2
+
+    assert "unknown agenda plugin 'unavailable'" in capsys.readouterr().err
+    assert not database.exists()
+
+
+def test_agenda_cli_sanitizes_provider_failure_and_stops_runtime(
+    tmp_path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stopped = False
+
+    class RejectingProvider:
+        def contribution(self, *, generated_at):
+            raise PluginCallRejected("not-ready", "private agenda secret")
+
+        def stop(self):
+            nonlocal stopped
+            stopped = True
+
+    monkeypatch.setattr(
+        "mission_control.cli.activate_agenda_plugins",
+        lambda _database, _prepared: (RejectingProvider(),),
+    )
 
     assert main(
-        [
-            "--database",
-            str(database),
-            "agenda",
-            "list",
-            "--plugin",
-            "landscape",
-            "--plugin",
-            "landscape",
-        ]
+        ["--database", str(tmp_path / "mission-control.db"), "agenda", "list"]
     ) == 2
-
-    assert "selected more than once" in capsys.readouterr().err
-    assert not database.exists()
+    captured = capsys.readouterr()
+    assert "plugin agenda read failed (PluginCallRejected)" in captured.err
+    assert "private agenda secret" not in captured.err
+    assert stopped is True

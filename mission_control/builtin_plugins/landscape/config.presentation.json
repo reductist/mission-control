@@ -1,0 +1,5 @@
+{
+    "schema_version": "mission-control.plugin-config-presentation/v1",
+    "configuration_schema": "mission-control.landscape.config/v1",
+    "fields": []
+}

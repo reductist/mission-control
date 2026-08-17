@@ -1,0 +1,18 @@
+{
+  "settings": {
+    "connections": {
+      "demo": {
+        "label": "Google demo",
+        "mode": "demo",
+        "demo_anchor_date": "2026-08-14",
+        "calendars": {"mode": "defaults"},
+        "tasks": {"mode": "all"}
+      }
+    },
+    "lookahead_days": 42,
+    "lookback_days": 42,
+    "request_timeout_seconds": 15,
+    "sync_interval_seconds": 300
+  },
+  "credentials": {}
+}

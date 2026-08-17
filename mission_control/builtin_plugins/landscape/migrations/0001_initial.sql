@@ -1,11 +1,11 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE landscape_schema_migrations (
+CREATE TABLE plugin__9__landscape__schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) STRICT;
 
-CREATE TABLE landscape_initiatives (
+CREATE TABLE plugin__9__landscape__initiatives (
   initiative_id TEXT PRIMARY KEY,
   title TEXT NOT NULL CHECK (length(trim(title)) > 0),
   state TEXT NOT NULL
@@ -17,7 +17,7 @@ CREATE TABLE landscape_initiatives (
   updated_at TEXT NOT NULL
 ) STRICT;
 
-CREATE TABLE landscape_actions (
+CREATE TABLE plugin__9__landscape__actions (
   action_id TEXT PRIMARY KEY,
   title TEXT NOT NULL CHECK (length(trim(title)) > 0),
   state TEXT NOT NULL
@@ -41,7 +41,7 @@ CREATE TABLE landscape_actions (
   )
 ) STRICT;
 
-CREATE TABLE landscape_events (
+CREATE TABLE plugin__9__landscape__events (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id TEXT NOT NULL UNIQUE,
   entity_kind TEXT NOT NULL CHECK (entity_kind IN ('initiative', 'action')),
@@ -51,25 +51,25 @@ CREATE TABLE landscape_events (
   occurred_at TEXT NOT NULL
 ) STRICT;
 
-CREATE INDEX landscape_events_entity_sequence_idx
-  ON landscape_events(entity_kind, entity_id, sequence);
+CREATE INDEX plugin__9__landscape__events_entity_sequence_idx
+  ON plugin__9__landscape__events(entity_kind, entity_id, sequence);
 
-CREATE TABLE landscape_seed_imports (
+CREATE TABLE plugin__9__landscape__seed_imports (
   import_id TEXT PRIMARY KEY,
   source_revision TEXT NOT NULL,
   imported_at TEXT NOT NULL
 ) STRICT;
 
-CREATE TRIGGER landscape_events_are_immutable_update
-BEFORE UPDATE ON landscape_events
+CREATE TRIGGER plugin__9__landscape__events_are_immutable_update
+BEFORE UPDATE ON plugin__9__landscape__events
 BEGIN
   SELECT RAISE(ABORT, 'landscape events are immutable');
 END;
 
-CREATE TRIGGER landscape_events_are_immutable_delete
-BEFORE DELETE ON landscape_events
+CREATE TRIGGER plugin__9__landscape__events_are_immutable_delete
+BEFORE DELETE ON plugin__9__landscape__events
 BEGIN
   SELECT RAISE(ABORT, 'landscape events are immutable');
 END;
 
-INSERT INTO landscape_schema_migrations(version) VALUES (1);
+INSERT INTO plugin__9__landscape__schema_migrations(version) VALUES (1);

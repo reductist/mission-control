@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import os
 import re
 import secrets
 from collections.abc import Iterable
@@ -25,12 +24,19 @@ from mission_control.agenda import (
     agenda_to_list,
     aggregate_agenda,
     project_core_tasks,
+    validate_agenda_attribution,
     validate_agenda_capabilities,
 )
+from mission_control.attribution import AttributionCatalog
 from mission_control.annotations import (
     AnnotationCommandHandler,
     AnnotationLifecycleCommandHandler,
     AnnotationRepository,
+)
+from mission_control.application_config import (
+    ApplicationConfigError,
+    load_application_config,
+    prepare_application_plugins,
 )
 from mission_control.commands import (
     CommandContext,
@@ -58,12 +64,12 @@ from mission_control.entity_details import (
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_runtime import PluginJobSupervisor
 from mission_control.plugin_lifecycle import (
-    PluginLifecycleError,
-    PreparedAgendaPlugin,
+    PreparedPlugin,
     activate_agenda_plugins_isolated,
-    prepare_agenda_plugins,
+    require_agenda_plugins,
 )
 from mission_control.plugins import (
+    Capability,
     EntityCapability,
     PluginId,
     StandardEntityCapability,
@@ -107,8 +113,9 @@ class MissionControlApplication:
         demo: bool = False,
         write_token: str | None = None,
         agenda_contributions: Iterable[AgendaContribution] = (),
-        builtin_plugins: Iterable[PreparedAgendaPlugin] = (),
+        builtin_plugins: Iterable[PreparedPlugin] = (),
         plugin_failures: Mapping[str, tuple[str, str]] | None = None,
+        attribution_catalog: AttributionCatalog | None = None,
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
@@ -116,6 +123,9 @@ class MissionControlApplication:
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
+        self.attribution_catalog = attribution_catalog or AttributionCatalog()
+        for contribution in self.agenda_contributions:
+            validate_agenda_attribution(contribution, self.attribution_catalog)
         self.builtin_plugins = tuple(builtin_plugins)
         self.plugin_activations = activate_agenda_plugins_isolated(
             database, self.builtin_plugins
@@ -138,8 +148,8 @@ class MissionControlApplication:
         }
         self.entity_detail_providers = {
             provider.plugin_id.value: provider
-            for provider in self.agenda_providers
-            if callable(getattr(provider, "entity_detail", None))
+            for plugin, provider in self.active_plugins
+            if Capability.ENTITY_DETAILS in plugin.registration.capabilities
         }
         command_owners = {
             "core": EntityTypeCommandOwner(
@@ -171,16 +181,26 @@ class MissionControlApplication:
                 )
             },
         )
-        self.job_supervisor = PluginJobSupervisor(
-            job
-            for provider in self.agenda_providers
-            for job in (
-                provider.jobs() if callable(getattr(provider, "jobs", None)) else ()
-            )
-        )
         self._last_agenda_contributions: dict[str, AgendaContribution] = {}
         self._last_closed_contributions: dict[str, ClosedItemsContribution] = {}
-        self._provider_runtime_failures: dict[str, tuple[str, str]] = {}
+        self._provider_runtime_failures: dict[
+            str, dict[str, tuple[str, str]]
+        ] = {}
+        jobs = []
+        for plugin, provider in self.active_plugins:
+            if Capability.JOBS not in plugin.registration.capabilities:
+                continue
+            plugin_id = plugin.registration.plugin_id.value
+            try:
+                jobs.extend(provider.jobs())
+            except Exception:
+                self._set_provider_failure(
+                    plugin_id,
+                    "jobs",
+                    "jobs-read-failed",
+                    "Provider jobs could not be initialized safely.",
+                )
+        self.job_supervisor = PluginJobSupervisor(jobs)
         self._demo_fixture = _load_demo_fixture() if demo else None
         if demo:
             _seed_demo_tasks(self.repository)
@@ -222,6 +242,8 @@ class MissionControlApplication:
             project_core_closed_items(tasks, generated_at=generated_at)
         ]
         for plugin, provider in self.active_plugins:
+            if Capability.CLOSED_ITEMS not in plugin.registration.capabilities:
+                continue
             project_closed = getattr(provider, "closed_items", None)
             if not callable(project_closed):
                 continue
@@ -230,7 +252,9 @@ class MissionControlApplication:
                 contribution = project_closed(generated_at=generated_at)
                 validate_closed_items_capabilities(plugin.registration, contribution)
             except Exception:
-                self._provider_runtime_failures[plugin_id] = (
+                self._set_provider_failure(
+                    plugin_id,
+                    "closed-items",
                     "closed-items-read-failed",
                     "Provider history failed; the last available view was retained.",
                 )
@@ -239,6 +263,7 @@ class MissionControlApplication:
                         self._last_closed_contributions[plugin_id]
                     )
             else:
+                self._clear_provider_failure(plugin_id, "closed-items")
                 self._last_closed_contributions[plugin_id] = contribution
                 closed_contributions.append(contribution)
         closed_items = aggregate_closed_items(closed_contributions)
@@ -264,6 +289,7 @@ class MissionControlApplication:
             "agenda": agenda_to_list(agenda),
             "closed_items": closed_items_to_list(closed_items),
             "providers": self._provider_documents(),
+            "attribution_catalog": self.attribution_catalog.to_dict(),
             "demo": self._demo_fixture,
         }
 
@@ -276,8 +302,11 @@ class MissionControlApplication:
             try:
                 contribution = provider.contribution(generated_at=generated_at)
                 validate_agenda_capabilities(plugin.registration, contribution)
+                validate_agenda_attribution(contribution, self.attribution_catalog)
             except Exception:
-                self._provider_runtime_failures[plugin_id] = (
+                self._set_provider_failure(
+                    plugin_id,
+                    "agenda",
                     "agenda-read-failed",
                     "Provider agenda failed; the last available view was retained.",
                 )
@@ -285,9 +314,25 @@ class MissionControlApplication:
                     contributions.append(self._last_agenda_contributions[plugin_id])
             else:
                 self._last_agenda_contributions[plugin_id] = contribution
-                self._provider_runtime_failures.pop(plugin_id, None)
+                self._clear_provider_failure(plugin_id, "agenda")
                 contributions.append(contribution)
         return tuple(contributions)
+
+    def _set_provider_failure(
+        self, plugin_id: str, surface: str, code: str, detail: str
+    ) -> None:
+        self._provider_runtime_failures.setdefault(plugin_id, {})[surface] = (
+            code,
+            detail,
+        )
+
+    def _clear_provider_failure(self, plugin_id: str, surface: str) -> None:
+        failures = self._provider_runtime_failures.get(plugin_id)
+        if failures is None:
+            return
+        failures.pop(surface, None)
+        if not failures:
+            self._provider_runtime_failures.pop(plugin_id, None)
 
     def _plugin_health(self) -> list[dict[str, object]]:
         documents: list[dict[str, object]] = [
@@ -306,14 +351,15 @@ class MissionControlApplication:
         for plugin, provider in self.active_plugins:
             plugin_id = plugin.registration.plugin_id.value
             if plugin_id in self._provider_runtime_failures:
-                code, detail = self._provider_runtime_failures[plugin_id]
+                code, detail = next(
+                    iter(self._provider_runtime_failures[plugin_id].values())
+                )
                 documents.append(self._failed_plugin_health(plugin_id, code, detail))
                 continue
-            health = getattr(provider, "health", None)
-            if not callable(health):
+            if Capability.HEALTH not in plugin.registration.capabilities:
                 continue
             try:
-                document = health().to_dict()
+                document = provider.health().to_dict()
                 if document.get("plugin_id") != plugin_id:
                     raise ValueError(
                         "provider health identity does not match registration"
@@ -453,16 +499,31 @@ class MissionControlApplication:
                 "entity detail is not available",
             )
         project = getattr(provider, "entity_detail")
-        detail = project(target)
+        try:
+            detail = project(target)
+            if detail is not None:
+                validate_entity_detail_capabilities(
+                    registration, detail, expected_source=target
+                )
+        except Exception:
+            self._set_provider_failure(
+                plugin_id,
+                "entity-details",
+                "entity-detail-read-failed",
+                "Provider entity detail could not be read safely.",
+            )
+            raise ApiError(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "entity-detail-read-failed",
+                "entity detail is temporarily unavailable",
+            ) from None
+        self._clear_provider_failure(plugin_id, "entity-details")
         if detail is None:
             raise ApiError(
                 HTTPStatus.NOT_FOUND,
                 "entity-not-found",
                 "entity detail is not available",
             )
-        validate_entity_detail_capabilities(
-            registration, detail, expected_source=target
-        )
         declared = entity_type_registration(registration, entity_type)
         assert declared is not None
         can_read_activity = any(
@@ -753,53 +814,38 @@ def _web_resource(name: str):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mctrld")
     parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="read the canonical TOML application configuration",
+    )
+    parser.add_argument(
+        "--config-dir",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="merge lexically ordered *.toml fragments from PATH; may be repeated",
+    )
+    parser.add_argument(
         "--database",
-        default=os.environ.get("MC_DATABASE", "mission-control.db"),
-        help="SQLite database path (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured SQLite database path",
     )
     parser.add_argument(
         "--host",
-        default=os.environ.get("MC_HOST", "127.0.0.1"),
-        help="listen address (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured listen address",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("MC_PORT", "8000")),
-        help="listen port (default: %(default)s)",
+        default=argparse.SUPPRESS,
+        help="override the configured listen port",
     )
     parser.add_argument(
         "--demo",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="load the synthetic House fixture and seed its example task",
-    )
-    parser.add_argument(
-        "--plugin",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID",
-        help="load a bundled provider by its manifest ID; may be repeated",
-    )
-    parser.add_argument(
-        "--plugin-root",
-        action="append",
-        default=[],
-        metavar="PATH",
-        help="discover additional plugin manifests/resources below PATH; may be repeated",
-    )
-    parser.add_argument(
-        "--plugin-settings",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID=PATH",
-        help="read one plugin's non-secret JSON settings; may be repeated",
-    )
-    parser.add_argument(
-        "--plugin-credential",
-        action="append",
-        default=[],
-        metavar="PLUGIN_ID.NAME=PATH",
-        help="provide one named credential file to a plugin; may be repeated",
     )
     return parser
 
@@ -807,46 +853,38 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    overrides: dict[str, object] = {}
+    if hasattr(args, "database"):
+        overrides["database"] = {"path": args.database}
+    http: dict[str, object] = {}
+    if hasattr(args, "host"):
+        http["host"] = args.host
+    if hasattr(args, "port"):
+        http["port"] = args.port
+    if http:
+        overrides["http"] = http
+    if hasattr(args, "demo"):
+        overrides["demo"] = args.demo
     try:
-        configurations = _plugin_settings(args.plugin_settings)
-        credentials = _plugin_credentials(args.plugin_credential)
-        selected = set(args.plugin)
-        unexpected = sorted((set(configurations) | set(credentials)) - selected)
-        if unexpected:
-            raise ValueError(
-                "configuration supplied for unselected plugins: "
-                + ", ".join(unexpected)
-            )
-        if len(selected) != len(args.plugin):
-            raise ValueError("plugin selected more than once")
-    except (OSError, ValueError) as error:
+        snapshot = load_application_config(
+            base_path=args.config,
+            fragment_dirs=args.config_dir,
+            overrides=overrides,
+        )
+        builtin_plugins = require_agenda_plugins(
+            prepare_application_plugins(snapshot)
+        )
+    except ApplicationConfigError as error:
         parser.error(str(error))
-    builtin_plugins: list[PreparedAgendaPlugin] = []
-    plugin_failures: dict[str, tuple[str, str]] = {}
-    for plugin_id in args.plugin:
-        try:
-            builtin_plugins.extend(
-                prepare_agenda_plugins(
-                    (plugin_id,),
-                    roots=args.plugin_root,
-                    configurations=configurations,
-                    credentials=credentials,
-                )
-            )
-        except (PluginLifecycleError, OSError, ValueError):
-            plugin_failures[plugin_id] = (
-                "preparation-failed",
-                "Plugin validation failed; its contributions are unavailable.",
-            )
     application = MissionControlApplication(
-        Database(Path(args.database)),
-        demo=args.demo,
+        Database(Path(snapshot.database_path)),
+        demo=snapshot.demo,
         builtin_plugins=builtin_plugins,
-        plugin_failures=plugin_failures,
+        attribution_catalog=snapshot.attribution_catalog,
     )
-    server = build_server(application, args.host, args.port)
+    server = build_server(application, snapshot.host, snapshot.port)
     host, port = server.server_address[:2]
-    showcase = "house showcase enabled" if args.demo else "operational workspace"
+    showcase = "house showcase enabled" if snapshot.demo else "operational workspace"
     print(
         f"Mission Control {__version__} ({showcase}) listening on http://{host}:{port}"
     )
@@ -863,49 +901,6 @@ def main(argv: list[str] | None = None) -> int:
         server.server_close()
         application.stop()
     return 0
-
-
-def _plugin_settings(values: Iterable[str]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for value in values:
-        plugin_id, path = _assignment(value, "--plugin-settings")
-        if plugin_id in result:
-            raise ValueError(f"plugin settings supplied more than once: {plugin_id}")
-        try:
-            result[plugin_id] = json.loads(Path(path).read_text(encoding="utf-8"))
-        except json.JSONDecodeError as error:
-            raise ValueError(
-                f"{plugin_id}: invalid settings JSON at line {error.lineno}, "
-                f"column {error.colno}"
-            ) from error
-    return result
-
-
-def _plugin_credentials(values: Iterable[str]) -> dict[str, dict[str, str]]:
-    result: dict[str, dict[str, str]] = {}
-    for value in values:
-        identity, path = _assignment(value, "--plugin-credential")
-        if "." not in identity:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_id, name = identity.split(".", 1)
-        if not plugin_id or not name:
-            raise ValueError("--plugin-credential identity must use PLUGIN_ID.NAME")
-        plugin_credentials = result.setdefault(plugin_id, {})
-        if name in plugin_credentials:
-            raise ValueError(
-                f"plugin credential supplied more than once: {plugin_id}.{name}"
-            )
-        plugin_credentials[name] = path
-    return result
-
-
-def _assignment(value: str, option: str) -> tuple[str, str]:
-    if "=" not in value:
-        raise ValueError(f"{option} must use NAME=PATH")
-    name, path = value.split("=", 1)
-    if not name or not path:
-        raise ValueError(f"{option} must use NAME=PATH")
-    return name, path
 
 
 if __name__ == "__main__":

@@ -1,0 +1,43 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "credentials": {
+            "const": {}
+        },
+        "settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                },
+                "repeat": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 10,
+                            "minimum": 1
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "message",
+                "repeat"
+            ]
+        }
+    },
+    "required": [
+        "credentials",
+        "settings"
+    ],
+    "$id": "mission-control.reference.config/v1"
+}

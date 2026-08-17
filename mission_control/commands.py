@@ -269,6 +269,22 @@ def parse_command(document: object) -> CommandEnvelope:
     )
 
 
+def command_to_dict(command: CommandEnvelope) -> dict[str, object]:
+    """Serialize and self-validate one command envelope for a plugin call."""
+
+    return _validated_document(
+        {
+            "schema_version": command.schema_version.value,
+            "command_id": command.command_id,
+            "target": _source_to_dict(command.target),
+            "expected_revision": command.expected_revision,
+            "command": command.command,
+            "arguments": _thaw_json(command.arguments),
+        },
+        _command_validator(),
+    )
+
+
 def outcome_to_dict(outcome: CommandOutcome) -> dict[str, object]:
     """Serialize and self-validate a structured command result."""
 
@@ -292,6 +308,37 @@ def outcome_to_dict(outcome: CommandOutcome) -> dict[str, object]:
         return _validated_document(result, _result_validator())
     except CommandContractError as error:
         raise AssertionError(f"invalid internal command outcome: {error}") from error
+
+
+def parse_command_result(document: object) -> CommandOutcome:
+    """Parse an untrusted JSON command result into the closed outcome union."""
+
+    raw = _validated_document(document, _result_validator())
+    target = raw["target"]
+    source = SourceRef(
+        PluginId(target["plugin_id"]), target["entity_type"], target["entity_id"]
+    )
+    status = CommandStatus(raw["status"])
+    if status is CommandStatus.ACCEPTED:
+        return Accepted(
+            raw["command_id"],
+            source,
+            raw["revision"],
+            freeze_json_object(raw.get("result", {})),
+        )
+    error = CommandError(raw["error"]["code"], raw["error"]["detail"])
+    outcome_type = {
+        CommandStatus.REJECTED: Rejected,
+        CommandStatus.CONFLICTED: Conflicted,
+        CommandStatus.STALE: Stale,
+        CommandStatus.UNAUTHORIZED: Unauthorized,
+        CommandStatus.FAILED: Failed,
+    }[status]
+    if status in {CommandStatus.CONFLICTED, CommandStatus.STALE}:
+        return outcome_type(
+            raw["command_id"], source, raw["current_revision"], error
+        )
+    return outcome_type(raw["command_id"], source, error)
 
 
 def _source_to_dict(source: SourceRef) -> dict[str, str]:

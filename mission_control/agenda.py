@@ -15,6 +15,15 @@ from typing import Any, ClassVar, TypeAlias, cast
 
 from jsonschema import Draft202012Validator
 
+from mission_control.attribution import (
+    AttributionCatalog,
+    CollectionRef,
+    ConnectionRef,
+    EntryAttribution,
+    IntegrationAttribution,
+    PrincipalRef,
+    validate_entry_attribution,
+)
 from mission_control.plugins import (
     EntityAffordance,
     EntityCapability,
@@ -38,7 +47,7 @@ class AgendaCapabilityError(AgendaContributionError):
 
 
 class AgendaSchemaVersion(StrEnum):
-    V1 = "mission-control.agenda/v1"
+    V2 = "mission-control.agenda/v2"
 
 
 class AgendaQuerySchemaVersion(StrEnum):
@@ -141,6 +150,7 @@ class Initiative:
     detail: str | None = None
     revision: str | None = None
     affordances: tuple[EntityAffordance, ...] = ()
+    attribution: EntryAttribution = EntryAttribution()
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.INITIATIVE
 
 
@@ -155,6 +165,7 @@ class Action:
     detail: str | None = None
     revision: str | None = None
     affordances: tuple[EntityAffordance, ...] = ()
+    attribution: EntryAttribution = EntryAttribution()
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.ACTION
 
 
@@ -168,6 +179,7 @@ class Event:
     detail: str | None = None
     revision: str | None = None
     affordances: tuple[EntityAffordance, ...] = ()
+    attribution: EntryAttribution = EntryAttribution()
     kind: ClassVar[AgendaEntryKind] = AgendaEntryKind.EVENT
 
 
@@ -291,6 +303,43 @@ def _parse_source(raw: Mapping[str, Any]) -> SourceRef:
     )
 
 
+def _parse_attribution(
+    raw: Mapping[str, Any], index: int, plugin_id: PluginId
+) -> EntryAttribution:
+    principal_ids = tuple(cast(list[str], raw["principal_ids"]))
+    if len(principal_ids) != len(set(principal_ids)):
+        raise AgendaContributionError(
+            f"entries.{index}.attribution.principal_ids: principal IDs must be unique"
+        )
+    integration_raw = raw.get("integration")
+    if not isinstance(integration_raw, Mapping):
+        return EntryAttribution(tuple(PrincipalRef(item) for item in principal_ids))
+    connection_raw = cast(Mapping[str, str], integration_raw["connection"])
+    collection_raw = integration_raw.get("collection")
+    collection = (
+        CollectionRef(
+            ConnectionRef(plugin_id, connection_raw["id"]),
+            cast(Mapping[str, str], collection_raw)["id"],
+        )
+        if isinstance(collection_raw, Mapping)
+        else None
+    )
+    return EntryAttribution(
+        tuple(PrincipalRef(item) for item in principal_ids),
+        IntegrationAttribution(
+            ConnectionRef(plugin_id, connection_raw["id"]),
+            connection_raw["label"],
+            collection,
+            cast(Mapping[str, str], collection_raw)["kind"]
+            if isinstance(collection_raw, Mapping)
+            else None,
+            cast(Mapping[str, str], collection_raw)["label"]
+            if isinstance(collection_raw, Mapping)
+            else None,
+        ),
+    )
+
+
 def _parse_affordances(
     raw: list[Mapping[str, Any]], *, index: int, revision: str | None
 ) -> tuple[EntityAffordance, ...]:
@@ -362,7 +411,9 @@ def _parse_event_timing(raw: Mapping[str, Any], path: str) -> EventTiming:
     raise AssertionError(f"unhandled event timing: {kind}")
 
 
-def _parse_entry(raw: Mapping[str, Any], index: int) -> AgendaEntry:
+def _parse_entry(
+    raw: Mapping[str, Any], index: int, plugin_id: PluginId
+) -> AgendaEntry:
     kind = AgendaEntryKind(raw["kind"])
     revision = raw.get("revision")
     common = {
@@ -375,6 +426,7 @@ def _parse_entry(raw: Mapping[str, Any], index: int) -> AgendaEntry:
         "affordances": _parse_affordances(
             raw.get("affordances", []), index=index, revision=revision
         ),
+        "attribution": _parse_attribution(raw["attribution"], index, plugin_id),
     }
     match kind:
         case AgendaEntryKind.INITIATIVE:
@@ -415,7 +467,10 @@ def parse_agenda_contribution(document: object) -> AgendaContribution:
 
     raw = _validated_document(document)
     provider = ProviderRef(PluginId(raw["provider"]["plugin_id"]))
-    entries = tuple(_parse_entry(entry, index) for index, entry in enumerate(raw["entries"]))
+    entries = tuple(
+        _parse_entry(entry, index, provider.plugin_id)
+        for index, entry in enumerate(raw["entries"])
+    )
 
     seen: set[str] = set()
     for entry in entries:
@@ -469,6 +524,29 @@ def validate_agenda_capabilities(
                 )
 
 
+def validate_agenda_attribution(
+    contribution: AgendaContribution, catalog: AttributionCatalog
+) -> None:
+    """Resolve principal references without changing authoritative source routing."""
+
+    for entry in contribution.entries:
+        validate_entry_attribution(entry.attribution, catalog)
+        integration = entry.attribution.integration
+        if integration is None:
+            continue
+        if integration.connection.plugin_id != contribution.provider.plugin_id:
+            raise AgendaContributionError(
+                f"entry {entry.entry_id!r}: attribution connection belongs to a different plugin"
+            )
+        if (
+            integration.collection is not None
+            and integration.collection.connection != integration.connection
+        ):
+            raise AgendaContributionError(
+                f"entry {entry.entry_id!r}: collection attribution belongs to a different connection"
+            )
+
+
 def _datetime_text(value: datetime) -> str:
     return value.isoformat()
 
@@ -518,6 +596,7 @@ def agenda_entry_to_dict(entry: AgendaEntry) -> dict[str, object]:
         "kind": entry.kind.value,
         "source": _source_to_dict(entry.source),
         "title": entry.title,
+        "attribution": _attribution_to_dict(entry.attribution),
     }
     if entry.context is not None:
         result["context"] = entry.context
@@ -543,6 +622,31 @@ def agenda_entry_to_dict(entry: AgendaEntry) -> dict[str, object]:
         result["timing"] = _event_timing_to_dict(entry.timing)
     else:
         raise AssertionError(f"unhandled agenda entry: {entry!r}")
+    return result
+
+
+def _attribution_to_dict(attribution: EntryAttribution) -> dict[str, object]:
+    result: dict[str, object] = {
+        "principal_ids": [
+            principal.principal_id for principal in attribution.principals
+        ]
+    }
+    integration = attribution.integration
+    if integration is None:
+        return result
+    integration_document: dict[str, object] = {
+        "connection": {
+            "id": integration.connection.connection_id,
+            "label": integration.connection_label,
+        }
+    }
+    if integration.collection is not None:
+        integration_document["collection"] = {
+            "id": integration.collection.collection_id,
+            "kind": integration.collection_kind,
+            "label": integration.collection_label,
+        }
+    result["integration"] = integration_document
     return result
 
 
@@ -692,7 +796,7 @@ def project_core_tasks(
         json.dumps(serializable_tasks, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return AgendaContribution(
-        schema_version=AgendaSchemaVersion.V1,
+        schema_version=AgendaSchemaVersion.V2,
         provider=provider,
         revision=revision,
         generated_at=generated_at,

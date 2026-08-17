@@ -20,6 +20,9 @@ package command
 	arguments!:        {[string]: _}
 })
 
+// CommandEnvelope is the exported shape used by other public contract packages.
+CommandEnvelope: #CommandEnvelope
+
 #CommandError: close({
 	code!:   #Identifier
 	detail!: string & != ""
