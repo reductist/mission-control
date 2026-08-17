@@ -25,11 +25,22 @@ pkgs.testers.nixosTest {
 
     services.mission-control = {
       enable = true;
-      plugins = [ "google" ];
-      pluginSettings.google = pkgs.writeText "google-live-settings" ''
-        {"mode":"live","sync_interval_seconds":86400}
+      plugins = [ "google-calendar" ];
+      pluginSettings."google-calendar" = pkgs.writeText "google-calendar-live-settings" ''
+        {
+          "connections": {
+            "test": {
+              "label": "Credential staging test",
+              "mode": "live",
+              "credential": "oauth",
+              "calendars": {"mode": "disabled"},
+              "tasks": {"mode": "disabled"}
+            }
+          },
+          "sync_interval_seconds": 86400
+        }
       '';
-      pluginCredentials.google.oauth = toString (pkgs.writeText "test-google-oauth" ''
+      pluginCredentials."google-calendar".oauth = toString (pkgs.writeText "test-google-oauth" ''
         {"client_id":"test","client_secret":"test","refresh_token":"test"}
       '');
     };
@@ -68,11 +79,11 @@ pkgs.testers.nixosTest {
     credentials.start()
     credentials.wait_for_unit("mission-control.service")
     credentials.succeed(
-      "test $(stat -c %a /run/mission-control/google-oauth) = 600"
+      "test $(stat -c %a /run/mission-control/google-calendar-oauth) = 600"
     )
     credentials.succeed(
-      "systemctl show mission-control.service --property=ExecStart --value "
-      "| grep -Fq 'google.oauth=/run/mission-control/google-oauth'"
+      "systemctl cat mission-control.service "
+      "| grep -Fq 'LoadCredential=google-calendar-oauth:'"
     )
   '';
 }
