@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.plugin/v2",
+  "schema_version": "mission-control.plugin/v3",
   "id": "github",
   "name": "GitHub",
   "version": "0.1.0",

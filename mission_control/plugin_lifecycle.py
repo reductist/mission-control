@@ -7,7 +7,7 @@ import json
 import logging
 import re
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -36,6 +36,7 @@ from mission_control.plugin_api import (
     PluginCallContractError,
     PluginCallRejected,
     PluginContext,
+    PluginSetupContext,
 )
 from mission_control.plugins import (
     Capability,
@@ -47,9 +48,11 @@ from mission_control.plugins import (
     PluginRegistrationError,
     Permission,
     ensure_plugin_api_compatible,
+    load_plugin_configuration_bundle,
     parse_plugin_registration,
     validate_plugin_configuration,
 )
+from mission_control.setup import DocumentPluginSetup, SetupSession
 
 
 class PluginLifecycleError(ValueError):
@@ -87,6 +90,14 @@ class PreparedPlugin:
     seed: AgendaContribution | None
     configuration: PluginConfiguration
     credentials: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedPluginSetup:
+    """One setup entrypoint whose manifest and config bundle passed preflight."""
+
+    registration: PluginRegistration
+    source: PluginResourceSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -420,6 +431,38 @@ def prepare_plugins(
     return tuple(prepared)
 
 
+def prepare_plugin_setup(
+    plugin_id: str, *, roots: Iterable[str | Path] = ()
+) -> PreparedPluginSetup:
+    """Preflight a setup provider without requiring final settings or opening a DB."""
+
+    selected = _selected_sources((plugin_id,), roots)
+    _, source = selected[0]
+    try:
+        registration = parse_plugin_registration(
+            _document(source, "registration.json")
+        )
+        if registration.plugin_id.value != plugin_id:
+            raise ValueError("selected and registration ids must match")
+        ensure_plugin_api_compatible(registration)
+        _validate_permissions(registration)
+        validate_runtime_capability_adapters(registration)
+        if registration.setup is None:
+            raise ValueError("plugin does not declare a setup entrypoint")
+        load_plugin_configuration_bundle(registration, source.document)
+    except (
+        OSError,
+        json.JSONDecodeError,
+        PluginConfigurationError,
+        PluginCallContractError,
+        PluginCompatibilityError,
+        PluginRegistrationError,
+        ValueError,
+    ) as error:
+        raise PluginLifecycleError(f"{plugin_id}: {error}") from error
+    return PreparedPluginSetup(registration, source)
+
+
 def prepare_agenda_plugins(
     plugin_ids: Iterable[str],
     *,
@@ -645,8 +688,18 @@ def _activate_one(database: Database, plugin: PreparedPlugin) -> PluginProvider:
 def _import_plugin_module(plugin: PreparedPlugin, module_name: str):
     """Load a simple local development module or an installed Python package."""
 
-    if isinstance(plugin.source.root, Path):
-        root = plugin.source.root.resolve()
+    return _import_plugin_module_from_source(
+        plugin.source, plugin.registration.plugin_id, module_name
+    )
+
+
+def _import_plugin_module_from_source(
+    source: PluginResourceSource, plugin_id: PluginId, module_name: str
+):
+    """Load one contained development module or an installed Python package."""
+
+    if isinstance(source.root, Path):
+        root = source.root.resolve()
         candidate = root.joinpath(*module_name.split(".")).with_suffix(".py")
         resolved = candidate.resolve()
         if candidate.is_file() or candidate.is_symlink():
@@ -655,7 +708,7 @@ def _import_plugin_module(plugin: PreparedPlugin, module_name: str):
                     f"unsafe plugin runtime module: {module_name!r}"
                 )
             qualified = (
-                f"_mission_control_plugin_{plugin.registration.plugin_id.value.replace('-', '_')}"
+                f"_mission_control_plugin_{plugin_id.value.replace('-', '_')}"
             )
             spec = importlib_util.spec_from_file_location(qualified, resolved)
             if spec is None or spec.loader is None:
@@ -664,6 +717,97 @@ def _import_plugin_module(plugin: PreparedPlugin, module_name: str):
             spec.loader.exec_module(implementation)
             return implementation
     return import_module(module_name)
+
+
+def activate_plugin_setup(
+    prepared: PreparedPluginSetup,
+    *,
+    credential_resolver: Callable[[str], str],
+) -> DocumentPluginSetup:
+    """Import one setup entrypoint with no database or normal runtime context."""
+
+    setup = prepared.registration.setup
+    assert setup is not None
+
+    def reject_credential(_handle: str) -> str:
+        raise ValueError("plugin does not declare credentials permission")
+
+    approved_resolver = (
+        credential_resolver
+        if Permission.CREDENTIALS in prepared.registration.permissions
+        else reject_credential
+    )
+    module_name, callable_name = setup.entrypoint.split(":", 1)
+    try:
+        implementation = _import_plugin_module_from_source(
+            prepared.source, prepared.registration.plugin_id, module_name
+        )
+        activate = getattr(implementation, callable_name)
+        handler = activate(
+            PluginSetupContext.create(
+                plugin_id=prepared.registration.plugin_id.value,
+                credential_resolver=approved_resolver,
+            )
+        )
+        call = getattr(handler, "call", None)
+    except Exception as error:
+        raise PluginLifecycleError(
+            f"{prepared.registration.plugin_id.value}: plugin setup activation failed "
+            f"({type(error).__name__})"
+        ) from error
+    if not callable(call):
+        raise PluginLifecycleError(
+            f"{prepared.registration.plugin_id.value}: setup entrypoint must return "
+            "a JSON capability handler"
+        )
+    return DocumentPluginSetup(prepared.registration, handler)
+
+
+def create_plugin_setup_session(
+    prepared: PreparedPluginSetup,
+    *,
+    credential_paths: Mapping[str, str],
+    settings: Mapping[str, object] | None = None,
+    configured_credentials: Mapping[str, str] | None = None,
+    principals: tuple[Mapping[str, str], ...] = (),
+) -> SetupSession:
+    """Build a setup session whose completed draft uses normal config validation."""
+
+    def resolve(handle: str) -> str:
+        try:
+            return credential_paths[handle]
+        except KeyError as error:
+            raise ValueError("unknown credential handle") from error
+
+    provider = activate_plugin_setup(prepared, credential_resolver=resolve)
+
+    def validate_complete(draft: Mapping[str, object]):
+        raw_credentials = draft.get("credentials", {})
+        if not isinstance(raw_credentials, Mapping):
+            raise PluginConfigurationError("setup draft credentials are invalid")
+        credentials: dict[str, str] = {}
+        for name, reference in raw_credentials.items():
+            if not isinstance(reference, Mapping) or not isinstance(
+                reference.get("handle"), str
+            ):
+                raise PluginConfigurationError("setup credential handle is invalid")
+            credentials[str(name)] = resolve(str(reference["handle"]))
+        principal_ids = frozenset(str(item["id"]) for item in principals)
+        return validate_plugin_configuration(
+            prepared.registration,
+            prepared.source.document,
+            draft.get("settings", {}),
+            credentials,
+            reference_catalogs={"workspace-principal": principal_ids},
+        )
+
+    return SetupSession(
+        provider,
+        settings=settings,
+        credential_handles=configured_credentials,
+        principals=principals,
+        validate_complete=validate_complete,
+    )
 
 
 def activate_plugins(

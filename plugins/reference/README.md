@@ -15,6 +15,12 @@ context, and returns a `CapabilityRouter`. Its health operation accepts and
 returns ordinary JSON-shaped documents. Core validates the versioned call and
 result envelopes plus the health document before using it.
 
+The same module also exports the optional storage-free setup entry point. It
+returns renderer-neutral setup transitions through `PluginSetupContext` and
+never receives a database. Its completed draft is accepted only after core runs
+the ordinary generated configuration validator, demonstrating the same setup
+authoring path used by the bundled Google Calendar integration.
+
 The reference bundle is exercised by the same validators used for bundled and
 third-party plugins. It demonstrates the intended author workflow: describe the
 configuration once in CUE, generate portable data artifacts, and keep runtime

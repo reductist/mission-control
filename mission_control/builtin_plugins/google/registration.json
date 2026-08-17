@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.plugin/v2",
+  "schema_version": "mission-control.plugin/v3",
   "id": "google-calendar",
   "name": "Google Calendar & Tasks",
   "version": "0.1.0",
@@ -8,6 +8,9 @@
   "runtime": {
     "entrypoint": "mission_control.builtin_plugins.google:activate",
     "migration_set": "google_calendar_v2"
+  },
+  "setup": {
+    "entrypoint": "mission_control.builtin_plugins.google.setup:activate"
   },
   "permissions": ["database", "network", "credentials"],
   "configuration": {

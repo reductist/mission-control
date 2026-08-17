@@ -184,7 +184,7 @@ def test_router_rejects_an_outcome_for_a_different_command():
 def test_router_enforces_registered_and_current_plugin_capabilities():
     registration = parse_plugin_registration(
         {
-            "schema_version": "mission-control.plugin/v2",
+            "schema_version": "mission-control.plugin/v3",
             "id": "example",
             "name": "Example",
             "version": "1",

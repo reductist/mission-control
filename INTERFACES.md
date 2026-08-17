@@ -29,6 +29,7 @@ A manifest is readable without importing plugin runtime code and declares:
 - migration set identifier
 - coarse capabilities and operational permissions
 - runtime entry point
+- optional out-of-band setup entry point
 
 Unknown required capabilities or incompatible interface ranges cause validation to fail before startup.
 
@@ -64,6 +65,29 @@ presentation metadata. Mission Control validates and binds all three artifacts,
 materializes defaults once, and validates the effective document before opening
 the database or importing provider code. A provider receives only its detached,
 validated settings and its own credential-name mapping.
+
+## Guided setup interface
+
+Plugin registration v3 may declare a `setup.entrypoint` independently of its
+normal runtime. Core validates the manifest and generated configuration bundle,
+then imports that entry point only for an explicit setup session. Setup receives
+no database, migrations, plugin storage, or normal runtime context.
+
+The shared `mission-control.setup-state/v1` document describes one current step:
+renderer-neutral fields, options, notices, actions, an opaque revision, and a
+draft containing non-secret settings plus core-issued credential handles.
+`setup.describe` produces the first step and `setup.action` advances it. Core
+checks revisions, rejects undeclared actions and fields, and validates a
+completed draft with the exact configuration validator used at daemon startup.
+The plugin owns provider-specific discovery and remediation; it returns data,
+never HTML, JavaScript, CSS, filesystem paths, or credential values.
+
+The first Google Calendar implementation proves connection identity, OAuth-file
+validation, collection discovery and selection, optional principal assignment,
+and review without opening the application database. The web wizard remains the
+reference renderer, while `mcctl` and a future TUI may drive the same documents.
+Credential upload, managed storage, atomic config commit, and browser-session
+security belong to the separate loopback setup host, not to plugin code.
 
 ## Event interface
 
@@ -107,7 +131,7 @@ Plugins expose domain operations through registered command and query handlers. 
 
 Plugins may not reach into private core modules or mutate projections outside their registered operation boundaries.
 
-The current in-process adapter exchanges `mission-control.plugin-call/v1` and
+The current in-process adapter exchanges `mission-control.plugin-call/v2` and
 `mission-control.plugin-call-result/v1` JSON documents. Calls use closed,
 operation-specific inputs for Agenda snapshots, closed items, entity details,
 command state and execution, jobs, health, and shutdown. Outputs are validated

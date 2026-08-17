@@ -103,6 +103,8 @@ jobs:
               "mission_control/schemas/plugin-health.schema.json",
               "mission_control/schemas/plugin-jobs.schema.json",
               "mission_control/schemas/plugin-runtime.schema.json",
+              "mission_control/schemas/setup-state.schema.json",
+              "mission_control/schemas/setup-transition.schema.json",
               "mission_control/web/app.js",
               "mission_control/web/demo.json",
               "mission_control/web/index.html",

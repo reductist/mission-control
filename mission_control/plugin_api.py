@@ -6,9 +6,10 @@ import json
 import math
 import sqlite3
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from importlib.resources import files
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, ContextManager, Protocol, cast
 
@@ -68,6 +69,31 @@ class PluginContext:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class PluginSetupContext:
+    """Storage-free context for an explicit, out-of-band setup session."""
+
+    plugin_id: str
+    _credential_resolver: Callable[[str], str] = field(repr=False)
+
+    @classmethod
+    def create(
+        cls, *, plugin_id: str, credential_resolver: Callable[[str], str]
+    ) -> PluginSetupContext:
+        return cls(plugin_id, credential_resolver)
+
+    def resolve_credential(self, handle: str) -> Path:
+        """Resolve an opaque core-issued handle inside plugin code only."""
+
+        try:
+            return Path(self._credential_resolver(handle))
+        except (KeyError, ValueError) as error:
+            raise PluginCallRejected(
+                "credential-unavailable",
+                "The selected credential is no longer available; choose it again.",
+            ) from error
+
+
 class PluginCallHandler(Protocol):
     def call(self, request: object) -> object: ...
 
@@ -124,7 +150,7 @@ def call_plugin(
 
     request = validate_plugin_call(
         {
-            "schema_version": "mission-control.plugin-call/v1",
+            "schema_version": "mission-control.plugin-call/v2",
             "operation": operation,
             "input": dict(inputs),
         }

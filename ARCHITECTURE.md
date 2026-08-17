@@ -70,6 +70,12 @@ All plugins, including built-in plugins, follow the same lifecycle:
 7. Stop jobs and unregister contributions during disable or shutdown.
 8. Preserve plugin data when disabled unless an explicit destructive removal is requested.
 
+Guided setup is deliberately outside that runtime lifecycle. An explicit setup
+host may import a separately declared setup entry point after manifest and
+configuration-artifact preflight, but it supplies no database or plugin storage.
+A completed setup draft must pass normal startup configuration validation before
+the host may export or commit it.
+
 The runtime must be able to identify a failed plugin, isolate its contributions, and start Mission Control in a recoverable mode when core invariants remain intact.
 
 The Google vertical slice exercises the current application lifecycle: configuration and named credential requirements validate before runtime import, core applies the declared namespaced migrations before activation, and periodic work begins only after the application is ready. Each source refresh replaces one complete cached collection transactionally. A transient failed refresh retains the last good collection and reports degraded health without blocking core or unrelated providers; a terminal authorization revocation erases imported Google cache data and requires reconnection. OAuth secrets and access tokens are not persistence fields.

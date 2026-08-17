@@ -35,7 +35,7 @@ def document() -> dict[str, object]:
 def registration():
     return parse_plugin_registration(
         {
-            "schema_version": "mission-control.plugin/v2",
+            "schema_version": "mission-control.plugin/v3",
             "id": "landscape",
             "name": "Yard",
             "version": "1",

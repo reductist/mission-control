@@ -94,6 +94,19 @@
                 "entrypoint"
             ]
         },
+        "#PluginSetup": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "entrypoint": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"
+                }
+            },
+            "required": [
+                "entrypoint"
+            ]
+        },
         "#ResourceName": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
@@ -156,7 +169,10 @@
             "$ref": "#/$defs/%23PluginRuntime"
         },
         "schema_version": {
-            "const": "mission-control.plugin/v2"
+            "const": "mission-control.plugin/v3"
+        },
+        "setup": {
+            "$ref": "#/$defs/%23PluginSetup"
         },
         "version": {
             "type": "string",

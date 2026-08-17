@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.plugin/v2",
+  "schema_version": "mission-control.plugin/v3",
   "id": "reference",
   "name": "Reference Plugin",
   "version": "0.1.0",
@@ -7,6 +7,9 @@
   "capabilities": ["health"],
   "runtime": {
     "entrypoint": "runtime:activate"
+  },
+  "setup": {
+    "entrypoint": "runtime:activate_setup"
   },
   "configuration": {
     "document_version": "mission-control.reference.config/v1",

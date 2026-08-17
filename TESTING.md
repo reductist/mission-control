@@ -56,6 +56,9 @@ Every plugin, including built-in plugins, runs the same reusable contract tests.
 - capability inputs and outputs validate as JSON before core converts them internally
 - plugin persistence and event append use only its assigned namespaced transaction adapter
 - view, setup, and form contributions contain no browser-only implementation fields
+- setup providers open no application database or plugin storage, keep credential
+  paths and values behind opaque handles, and return drafts that pass the normal
+  startup validator before commit
 - the reference plugin's contribution fixtures are consumable by a non-web renderer harness
 
 A minimal reference plugin should exist solely to exercise the complete extension surface.

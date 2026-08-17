@@ -4,6 +4,8 @@ package plugin
 
 import cmd "mission-control.dev/schema/command"
 
+import setup "mission-control.dev/schema/setup"
+
 #PluginID:   string & =~"^[a-z][a-z0-9-]*$"
 #Identifier: string & =~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
 #Timestamp:  string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
@@ -15,7 +17,7 @@ import cmd "mission-control.dev/schema/command"
 })
 
 #SnapshotCall: close({
-	schema_version!: "mission-control.plugin-call/v1"
+	schema_version!: "mission-control.plugin-call/v2"
 	operation!:      "agenda.snapshot" | "closed-items.snapshot"
 	input!: close({
 		generated_at!: #Timestamp
@@ -23,36 +25,56 @@ import cmd "mission-control.dev/schema/command"
 })
 
 #EntityDetailCall: close({
-	schema_version!: "mission-control.plugin-call/v1"
+	schema_version!: "mission-control.plugin-call/v2"
 	operation!:      "entity-details.get"
 	input!: close({target!: #SourceRef})
 })
 
 #CommandStateCall: close({
-	schema_version!: "mission-control.plugin-call/v1"
+	schema_version!: "mission-control.plugin-call/v2"
 	operation!:      "commands.state"
 	input!: close({target!: #SourceRef})
 })
 
 #CommandExecuteCall: close({
-	schema_version!: "mission-control.plugin-call/v1"
+	schema_version!: "mission-control.plugin-call/v2"
 	operation!:      "commands.execute"
 	input!: close({
 		command!: cmd.CommandEnvelope
-		actor!:   string & != ""
+		actor!:   string & !=""
 	})
 })
 
 #EmptyCall: close({
-	schema_version!: "mission-control.plugin-call/v1"
+	schema_version!: "mission-control.plugin-call/v2"
 	operation!:      "health.get" | "jobs.list" | "runtime.describe" | "runtime.stop"
-	input!:           close({})
+	input!: close({})
 })
 
 #JobCall: close({
-	schema_version!: "mission-control.plugin-call/v1"
+	schema_version!: "mission-control.plugin-call/v2"
 	operation!:      "jobs.run" | "jobs.failure"
 	input!: close({job_id!: #Identifier})
+})
+
+#SetupDescribeCall: close({
+	schema_version!: "mission-control.plugin-call/v2"
+	operation!:      "setup.describe"
+	input!: close({
+		draft!: setup.#Draft
+		principals!: [...setup.#Principal]
+	})
+})
+
+#SetupActionCall: close({
+	schema_version!: "mission-control.plugin-call/v2"
+	operation!:      "setup.action"
+	input!: close({
+		action_id!: #Identifier
+		draft!:     setup.#Draft
+		principals!: [...setup.#Principal]
+		values!: setup.#JSONObject
+	})
 })
 
 #PluginCall:
@@ -61,23 +83,25 @@ import cmd "mission-control.dev/schema/command"
 	#CommandStateCall |
 	#CommandExecuteCall |
 	#EmptyCall |
-	#JobCall
+	#JobCall |
+	#SetupDescribeCall |
+	#SetupActionCall
 
 #PluginCallError: close({
 	code!:   #Identifier
-	detail!: string & != ""
+	detail!: string & !=""
 })
 
 #PluginCallSuccess: close({
 	schema_version!: "mission-control.plugin-call-result/v1"
-	operation!:      string & != ""
+	operation!:      string & !=""
 	status!:         "ok"
 	output!:         _
 })
 
 #PluginCallFailure: close({
 	schema_version!: "mission-control.plugin-call-result/v1"
-	operation!:      string & != ""
+	operation!:      string & !=""
 	status!:         "error"
 	error!:          #PluginCallError
 })
@@ -87,7 +111,7 @@ import cmd "mission-control.dev/schema/command"
 #CommandStateDocument: close({
 	schema_version!: "mission-control.command-state/v1"
 	target!:         #SourceRef
-	revision!:       string & != ""
+	revision!:       string & !=""
 	affordances!: [...close({
 		capability!: string & =~"^[a-z][A-Za-z0-9._:-]*$"
 		command!:    #Identifier
@@ -99,7 +123,7 @@ import cmd "mission-control.dev/schema/command"
 	plugin_id!:       #PluginID
 	state!:           "starting" | "ready" | "degraded" | "failed"
 	code!:            #Identifier
-	detail!:          string & != ""
+	detail!:          string & !=""
 	checked_at!:      #Timestamp
 	last_success_at?: #Timestamp
 	components!: [...close({
@@ -107,7 +131,7 @@ import cmd "mission-control.dev/schema/command"
 		label!:           string & !~"^\\s*$"
 		state!:           "starting" | "ready" | "degraded" | "failed"
 		code!:            #Identifier
-		detail!:          string & != ""
+		detail!:          string & !=""
 		last_success_at?: #Timestamp
 	})]
 })

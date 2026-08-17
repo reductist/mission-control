@@ -45,6 +45,7 @@ def test_reference_plugin_parses_into_immutable_domain_values():
     assert registration.configuration.document_version == (
         "mission-control.reference.config/v1"
     )
+    assert registration.schema_version.value == "mission-control.plugin/v3"
 
     with pytest.raises(FrozenInstanceError):
         registration.name = "mutated"  # type: ignore[misc]
@@ -71,6 +72,17 @@ def test_runtime_is_immutable_and_registration_round_trips():
 
     assert registration.runtime is not None
     assert registration.runtime.entrypoint == "example.reference:activate"
+    assert registration_to_dict(registration) == source
+
+
+def test_setup_entrypoint_is_immutable_and_round_trips():
+    source = reference_document()
+    source["setup"] = {"entrypoint": "example.reference_setup:activate"}
+
+    registration = parse_plugin_registration(source)
+
+    assert registration.setup is not None
+    assert registration.setup.entrypoint == "example.reference_setup:activate"
     assert registration_to_dict(registration) == source
 
 
@@ -132,6 +144,14 @@ def test_v1_argument_dsl_is_rejected():
     source["arguments"] = {"message": {"type": "string"}}
 
     with pytest.raises(PluginRegistrationError, match="schema_version|Additional"):
+        parse_plugin_registration(source)
+
+
+def test_closed_v2_registration_is_rejected_after_setup_contract_transition():
+    source = reference_document()
+    source["schema_version"] = "mission-control.plugin/v2"
+
+    with pytest.raises(PluginRegistrationError, match="schema_version"):
         parse_plugin_registration(source)
 
 

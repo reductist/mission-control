@@ -82,15 +82,19 @@ startup-only runtime supports hot reload.
 
 Static CUE fields and form hints are not treated as a setup protocol. A plugin that
 supports guided setup declares a versioned JSON setup capability with typed
-actions such as `validate`, `authorize`, `discover`, and `test`. Core owns setup
-sessions, draft configuration, action routing, redacted rendering, and commit;
-the plugin owns provider-specific authorization, discovery, and remediation.
+actions with typed intents such as `validate`, `authorize`, `discover`, and
+`test`. Core owns setup sessions, the accepted draft and compare-and-swap
+revision, action routing, redacted rendering, and commit. A plugin proposes the
+next draft only inside its own configuration namespace and owns provider-specific
+authorization, discovery, and remediation.
 Responses are data rendered by core, never arbitrary plugin JavaScript.
 The web wizard is the reference renderer for those documents; the same setup
 actions remain usable by `mcctl` or a future terminal UI.
 
-Credential handles are scoped by plugin ID, connection ID, and credential name.
-Configuration contains only the handle/reference. In a directly managed install,
+Credential handles are random, single-session references available only to the
+one setup provider being driven. The accepted draft binds each handle to a
+plugin-owned credential name, and normal final validation checks every reference
+before commit. Configuration contains only the resulting file reference. In a directly managed install,
 the bootstrap process stores newly acquired credentials atomically in a dedicated
 mode-0700 managed directory with mode-0600 credential files and returns only the
 handle to the browser. In a declarative deployment, setup validates or exports the
@@ -171,8 +175,9 @@ authoring problems:
 - manifest `arguments` duplicate Google's CUE configuration definition; and
 - Python plugins import core domain classes and return in-process objects.
 
-Plugin registration v2 has removed the argument DSL. A plugin defines its
-configuration once in CUE and packages generated validation, static-default, and
+Plugin registration v3 has removed the argument DSL and adds an optional,
+storage-free setup entry point. A plugin defines its configuration once in CUE
+and packages generated validation, static-default, and
 presentation-metadata artifacts. The manifest names and version-binds those
 resources. Runtime and CUE parity fixtures must produce the same effective values
 and failures; a CUE feature is not allowed in a public plugin configuration until
@@ -220,9 +225,11 @@ evidence shows it should be split further.
 6. **Complete:** add Google-owned multiple connections, explicit calendar/task enablement and
    selection policies, partitioned cache/sync, attribution mapping, and a versioned
    connection-health projection whose aggregate defines plugin health.
-7. Add the generic setup-action capability and contract-driven loopback wizard:
-   credential acquisition/reference, test, discovery, selection, principal
-   assignment, review, validation, atomic managed fragment write, and restart.
+7. **Provider boundary complete; setup host next:** add the generic setup-action
+   contract and Google provider flow for credential reference, test, discovery,
+   selection, principal assignment, review, and normal-validator handoff. Then
+   add the contract-driven loopback web host for secure acquisition, atomic
+   managed-fragment write/export, and explicit restart reporting.
 8. Make direct and NixOS adapters consume the same configuration fixtures, deploy
    feature parity to the canonical service, and remove the separate port-8001
    showcase service.

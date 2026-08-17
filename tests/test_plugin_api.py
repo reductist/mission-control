@@ -40,7 +40,7 @@ def test_call_contract_rejects_misspelled_input_before_plugin_code() -> None:
     with pytest.raises(PluginCallContractError, match="plugin call violates"):
         router.call(
             {
-                "schema_version": "mission-control.plugin-call/v1",
+                "schema_version": "mission-control.plugin-call/v2",
                 "operation": "entity-details.get",
                 "input": {"source": {}},
             }
@@ -107,7 +107,7 @@ def test_plugin_context_is_detached_and_top_level_read_only() -> None:
 def test_direct_call_validator_accepts_the_public_fixture_shape() -> None:
     validated = validate_plugin_call(
         {
-            "schema_version": "mission-control.plugin-call/v1",
+            "schema_version": "mission-control.plugin-call/v2",
             "operation": "health.get",
             "input": {},
         }

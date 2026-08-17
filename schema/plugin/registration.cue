@@ -32,6 +32,12 @@ import "strings"
 	agenda_seed?:   =~"^[A-Za-z0-9][A-Za-z0-9._-]*$"
 })
 
+// Setup runs out-of-band from the application runtime. It receives no database
+// or plugin storage and is used only by an explicit setup session.
+#PluginSetup: close({
+	entrypoint!: =~"^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"
+})
+
 #Permission: "database" | "network" | "credentials"
 
 #ResourceName: string & =~"^[A-Za-z0-9][A-Za-z0-9._-]*$"
@@ -49,13 +55,14 @@ import "strings"
 // PluginRegistration is the language-neutral document a plugin presents before
 // Mission Control imports or activates any implementation code.
 #PluginRegistration: {
-	schema_version!: "mission-control.plugin/v2"
+	schema_version!: "mission-control.plugin/v3"
 	id!:             =~"^[a-z][a-z0-9-]*$"
 	name!:           strings.MinRunes(1)
 	version!:        strings.MinRunes(1)
 	plugin_api!:     strings.MinRunes(1)
 	capabilities!: [...#Capability]
 	runtime?: #PluginRuntime
+	setup?:   #PluginSetup
 	permissions?: [...#Permission]
 	configuration!: #ConfigurationContract
 	entity_types?: {

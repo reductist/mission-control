@@ -20,6 +20,7 @@ import (
 		entrypoint:    "mission_control.builtin_plugins.google:activate"
 		migration_set: "google_calendar_v2"
 	}
+	setup: entrypoint: "mission_control.builtin_plugins.google.setup:activate"
 	permissions: ["database", "network", "credentials"]
 	configuration: {
 		document_version:      "mission-control.google-calendar.config/v2"

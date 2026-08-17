@@ -1,0 +1,29 @@
+{
+  "schema_version": "mission-control.setup-transition/v1",
+  "plugin_id": "google-calendar",
+  "draft": {
+    "settings": {},
+    "credentials": {}
+  },
+  "step": {
+    "id": "connection",
+    "title": "Add a connection",
+    "fields": [
+      {
+        "id": "label",
+        "label": "Display name",
+        "widget": "text",
+        "required": true
+      }
+    ],
+    "actions": [
+      {
+        "id": "continue",
+        "label": "Continue",
+        "style": "primary",
+        "intent": "continue"
+      }
+    ]
+  },
+  "complete": false
+}

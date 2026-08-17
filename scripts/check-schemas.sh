@@ -23,6 +23,10 @@ PLUGIN_JOBS_GENERATED="$GENERATED_DIR/plugin-jobs.runtime-check.schema.json"
 PLUGIN_JOBS_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-jobs.schema.json"
 PLUGIN_RUNTIME_GENERATED="$GENERATED_DIR/plugin-runtime.runtime-check.schema.json"
 PLUGIN_RUNTIME_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-runtime.schema.json"
+SETUP_STATE_GENERATED="$GENERATED_DIR/setup-state.runtime-check.schema.json"
+SETUP_STATE_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-state.schema.json"
+SETUP_TRANSITION_GENERATED="$GENERATED_DIR/setup-transition.runtime-check.schema.json"
+SETUP_TRANSITION_RUNTIME="$ROOT_DIR/mission_control/schemas/setup-transition.schema.json"
 AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
 ATTRIBUTION_GENERATED="$GENERATED_DIR/attribution-catalog.runtime-check.schema.json"
@@ -102,6 +106,10 @@ python ./scripts/merge-json.py "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$PLUGIN_GENERATE
     -o "$PLUGIN_JOBS_GENERATED" ./plugin
   cue def --force --out jsonschema -e '#PluginRuntimeDocument' \
     -o "$PLUGIN_RUNTIME_GENERATED" ./plugin
+  cue def --force --out jsonschema -e '#State' \
+    -o "$SETUP_STATE_GENERATED" ./setup
+  cue def --force --out jsonschema -e '#Transition' \
+    -o "$SETUP_TRANSITION_GENERATED" ./setup
 )
 (
   cd ./schema
@@ -227,6 +235,8 @@ compare_schema "$COMMAND_STATE_GENERATED" "$COMMAND_STATE_RUNTIME" "command stat
 compare_schema "$PLUGIN_HEALTH_GENERATED" "$PLUGIN_HEALTH_RUNTIME" "plugin health"
 compare_schema "$PLUGIN_JOBS_GENERATED" "$PLUGIN_JOBS_RUNTIME" "plugin jobs"
 compare_schema "$PLUGIN_RUNTIME_GENERATED" "$PLUGIN_RUNTIME_RUNTIME" "plugin runtime"
+compare_schema "$SETUP_STATE_GENERATED" "$SETUP_STATE_RUNTIME" "plugin setup state"
+compare_schema "$SETUP_TRANSITION_GENERATED" "$SETUP_TRANSITION_RUNTIME" "plugin setup transition"
 compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
 compare_schema "$ATTRIBUTION_GENERATED" "$ATTRIBUTION_RUNTIME" "attribution catalog"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
@@ -292,6 +302,10 @@ validate_success '#PluginCall' ./schema/plugin "$PLUGIN_CALL_GENERATED" \
   ./schema/examples/valid-plugin-call.json
 validate_success '#PluginCallResult' ./schema/plugin "$PLUGIN_CALL_RESULT_GENERATED" \
   ./schema/examples/valid-plugin-call-result.json
+validate_success '#State' ./schema/setup "$SETUP_STATE_GENERATED" \
+  ./schema/examples/valid-setup-state.json
+validate_success '#Transition' ./schema/setup "$SETUP_TRANSITION_GENERATED" \
+  ./schema/examples/valid-setup-transition.json
 
 for fixture in \
   ./schema/examples/valid-landscape-agenda.json \

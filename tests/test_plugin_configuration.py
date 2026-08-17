@@ -9,6 +9,7 @@ from mission_control.plugin_lifecycle import PluginLifecycleError, PluginResourc
 from mission_control.plugins import (
     PluginConfigurationError,
     load_registration,
+    load_plugin_configuration_bundle,
     validate_plugin_configuration,
 )
 
@@ -27,6 +28,19 @@ def resource_reader(root: Path):
 
 def google_registration():
     return load_registration(GOOGLE_ROOT / "registration.json")
+
+
+def test_configuration_bundle_preflight_does_not_require_a_complete_draft() -> None:
+    registration = load_registration(REFERENCE_ROOT / "registration.json")
+
+    bundle = load_plugin_configuration_bundle(
+        registration, resource_reader(REFERENCE_ROOT)
+    )
+
+    schema, defaults, presentation = bundle.documents()
+    assert schema["$id"] == "mission-control.reference.config/v1"
+    assert defaults["configuration_schema"] == schema["$id"]
+    assert presentation["configuration_schema"] == schema["$id"]
 
 
 def test_reference_bundle_materializes_defaults_without_overwriting_values() -> None:

@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.plugin-call/v1",
+  "schema_version": "mission-control.plugin-call/v2",
   "operation": "entity-details.get",
   "input": {
     "target": {

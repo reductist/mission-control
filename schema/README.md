@@ -11,6 +11,7 @@ The current contracts cover:
 - the entity-focused detail and immutable activity projection composed at read time
 - the command envelope a client sends to exactly one authoritative owner
 - the structured outcome returned for accepted, rejected, stale, unauthorized, or failed commands
+- the renderer-neutral state exchanged during an explicit plugin setup session
 
 CUE definitions are closed by default, so misspelled or undeclared keys fail validation rather than silently expanding a public object.
 
@@ -60,6 +61,8 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Plugin registration | `schema/plugin/registration.cue` | `mission_control/schemas/plugin-registration.schema.json` |
 | Plugin configuration defaults | `schema/plugin/configuration.cue` | `mission_control/schemas/plugin-config-defaults.schema.json` |
 | Plugin configuration presentation | `schema/plugin/configuration.cue` | `mission_control/schemas/plugin-config-presentation.schema.json` |
+| Plugin setup state | `schema/setup/contract.cue` | `mission_control/schemas/setup-state.schema.json` |
+| Plugin setup transition | `schema/setup/contract.cue` | `mission_control/schemas/setup-transition.schema.json` |
 | Application configuration | `schema/config/application.cue` | `mission_control/schemas/application-config.schema.json` |
 | Agenda contribution | `schema/agenda/contribution.cue` | `mission_control/schemas/agenda-contribution.schema.json` |
 | Attribution catalog | `schema/attribution/contract.cue` | `mission_control/schemas/attribution-catalog.schema.json` |
@@ -99,6 +102,13 @@ runtime-description, command-state, health, and job documents. Capability
 payloads such as Agenda, closed items, entity details, and command results keep
 their own focused schemas; the adapter composes them rather than creating one
 giant union that every plugin author must understand.
+
+Setup uses the same validated call envelope but a separate manifest entry point
+and `mission-control.setup-state/v1` output. Its draft contains only non-secret
+settings and opaque credential handles. Core owns session revision checks and
+final configuration validation; plugin setup code owns provider-specific test,
+discovery, selection, and remediation. The document contains no renderer or
+deployment-platform implementation fields.
 
 Bundled plugins own their CUE configuration definitions and package generated
 JSON Schema, explicit-default, and renderer-neutral presentation artifacts.

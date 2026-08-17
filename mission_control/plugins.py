@@ -36,7 +36,7 @@ class PluginDiscoveryError(ValueError):
 
 
 class PluginSchemaVersion(StrEnum):
-    V2 = "mission-control.plugin/v2"
+    V3 = "mission-control.plugin/v3"
 
 
 class Capability(StrEnum):
@@ -122,6 +122,11 @@ class PluginRuntime:
 
 
 @dataclass(frozen=True, slots=True)
+class PluginSetup:
+    entrypoint: str
+
+
+@dataclass(frozen=True, slots=True)
 class PluginConfigurationContract:
     document_version: str
     schema_resource: str
@@ -139,6 +144,7 @@ class PluginRegistration:
     capabilities: tuple[Capability, ...]
     configuration: PluginConfigurationContract
     runtime: PluginRuntime | None = None
+    setup: PluginSetup | None = None
     permissions: tuple[Permission, ...] = ()
     entity_types: tuple[EntityTypeRegistration, ...] = ()
 
@@ -157,6 +163,22 @@ class PluginConfiguration:
 class ValidatedPluginConfiguration:
     settings: PluginConfiguration
     credentials: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PluginConfigurationBundle:
+    """Validated, detached configuration artifacts safe to inspect pre-import."""
+
+    schema: JsonObject
+    defaults: JsonObject
+    presentation: JsonObject
+
+    def documents(self) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        return (
+            cast(dict[str, Any], _thaw_json(self.schema)),
+            cast(dict[str, Any], _thaw_json(self.defaults)),
+            cast(dict[str, Any], _thaw_json(self.presentation)),
+        )
 
 
 class PluginResourceReader(Protocol):
@@ -318,6 +340,12 @@ def parse_plugin_registration(document: object) -> PluginRegistration:
         if raw_runtime is not None
         else None
     )
+    raw_setup = raw.get("setup")
+    setup = (
+        PluginSetup(entrypoint=raw_setup["entrypoint"])
+        if raw_setup is not None
+        else None
+    )
     entity_types = tuple(
         EntityTypeRegistration(
             entity_type,
@@ -338,6 +366,7 @@ def parse_plugin_registration(document: object) -> PluginRegistration:
         capabilities=tuple(Capability(value) for value in raw["capabilities"]),
         configuration=configuration,
         runtime=runtime,
+        setup=setup,
         permissions=tuple(Permission(value) for value in raw.get("permissions", [])),
         entity_types=entity_types,
     )
@@ -718,15 +747,11 @@ def _configuration_error(error: Any) -> str:
     return f"{path}: configuration violates {error.validator or 'schema'}"
 
 
-def validate_plugin_configuration(
+def load_plugin_configuration_bundle(
     registration: PluginRegistration,
     read_resource: PluginResourceReader,
-    settings: object,
-    credentials: Mapping[str, str],
-    *,
-    reference_catalogs: Mapping[str, frozenset[str]] | None = None,
-) -> ValidatedPluginConfiguration:
-    """Load one generated CUE bundle and validate the full plugin namespace."""
+) -> PluginConfigurationBundle:
+    """Validate generated configuration artifacts without requiring final settings."""
 
     contract = registration.configuration
     try:
@@ -820,6 +845,28 @@ def validate_plugin_configuration(
         raise PluginConfigurationError(
             f"{contract.presentation_resource}: credential fields require credentials permission"
         )
+
+    return PluginConfigurationBundle(
+        cast(JsonObject, _freeze_json(schema)),
+        cast(JsonObject, _freeze_json(defaults)),
+        cast(JsonObject, _freeze_json(presentation)),
+    )
+
+
+def validate_plugin_configuration(
+    registration: PluginRegistration,
+    read_resource: PluginResourceReader,
+    settings: object,
+    credentials: Mapping[str, str],
+    *,
+    reference_catalogs: Mapping[str, frozenset[str]] | None = None,
+) -> ValidatedPluginConfiguration:
+    """Validate and materialize one plugin namespace from its trusted bundle."""
+
+    contract = registration.configuration
+    schema, defaults, _presentation = load_plugin_configuration_bundle(
+        registration, read_resource
+    ).documents()
 
     raw = {
         "settings": _configuration_document(settings, label="settings"),
@@ -978,6 +1025,8 @@ def registration_to_dict(registration: PluginRegistration) -> dict[str, Any]:
             result["runtime"]["migration_set"] = registration.runtime.migration_set
         if registration.runtime.agenda_seed is not None:
             result["runtime"]["agenda_seed"] = registration.runtime.agenda_seed
+    if registration.setup is not None:
+        result["setup"] = {"entrypoint": registration.setup.entrypoint}
     if registration.permissions:
         result["permissions"] = [item.value for item in registration.permissions]
     if registration.entity_types:

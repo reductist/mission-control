@@ -64,7 +64,7 @@
                     "const": "commands.execute"
                 },
                 "schema_version": {
-                    "const": "mission-control.plugin-call/v1"
+                    "const": "mission-control.plugin-call/v2"
                 }
             },
             "required": [
@@ -93,13 +93,44 @@
                     "const": "commands.state"
                 },
                 "schema_version": {
-                    "const": "mission-control.plugin-call/v1"
+                    "const": "mission-control.plugin-call/v2"
                 }
             },
             "required": [
                 "input",
                 "operation",
                 "schema_version"
+            ]
+        },
+        "#CredentialHandle": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "handle": {
+                    "$ref": "#/$defs/%23Identifier"
+                }
+            },
+            "required": [
+                "handle"
+            ]
+        },
+        "#Draft": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "credentials": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23CredentialHandle"
+                    }
+                },
+                "settings": {
+                    "$ref": "#/$defs/%23JSONObject"
+                }
+            },
+            "required": [
+                "credentials",
+                "settings"
             ]
         },
         "#EmptyCall": {
@@ -118,7 +149,7 @@
                     ]
                 },
                 "schema_version": {
-                    "const": "mission-control.plugin-call/v1"
+                    "const": "mission-control.plugin-call/v2"
                 }
             },
             "required": [
@@ -147,7 +178,7 @@
                     "const": "entity-details.get"
                 },
                 "schema_version": {
-                    "const": "mission-control.plugin-call/v1"
+                    "const": "mission-control.plugin-call/v2"
                 }
             },
             "required": [
@@ -159,6 +190,40 @@
         "#Identifier": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#JSONObject": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/$defs/%23JSONValue"
+            }
+        },
+        "#JSONValue": {
+            "anyOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "boolean"
+                },
+                {
+                    "type": "number"
+                },
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                }
+            ]
         },
         "#JobCall": {
             "type": "object",
@@ -183,7 +248,7 @@
                     ]
                 },
                 "schema_version": {
-                    "const": "mission-control.plugin-call/v1"
+                    "const": "mission-control.plugin-call/v2"
                 }
             },
             "required": [
@@ -195,6 +260,109 @@
         "#PluginID": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#Principal": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "id": {
+                    "$ref": "#/$defs/%23PrincipalID"
+                },
+                "label": {
+                    "type": "string",
+                    "not": {
+                        "pattern": "^\\s*$"
+                    }
+                }
+            },
+            "required": [
+                "id",
+                "label"
+            ]
+        },
+        "#PrincipalID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#SetupActionCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "action_id": {
+                            "$ref": "#/$defs/%23Identifier"
+                        },
+                        "draft": {
+                            "$ref": "#/$defs/%23Draft"
+                        },
+                        "principals": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/%23Principal"
+                            }
+                        },
+                        "values": {
+                            "$ref": "#/$defs/%23JSONObject"
+                        }
+                    },
+                    "required": [
+                        "action_id",
+                        "draft",
+                        "principals",
+                        "values"
+                    ]
+                },
+                "operation": {
+                    "const": "setup.action"
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v2"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
+        "#SetupDescribeCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "draft": {
+                            "$ref": "#/$defs/%23Draft"
+                        },
+                        "principals": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/%23Principal"
+                            }
+                        }
+                    },
+                    "required": [
+                        "draft",
+                        "principals"
+                    ]
+                },
+                "operation": {
+                    "const": "setup.describe"
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v2"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
         },
         "#SnapshotCall": {
             "type": "object",
@@ -219,7 +387,7 @@
                     ]
                 },
                 "schema_version": {
-                    "const": "mission-control.plugin-call/v1"
+                    "const": "mission-control.plugin-call/v2"
                 }
             },
             "required": [
@@ -274,6 +442,12 @@
         },
         {
             "$ref": "#/$defs/%23JobCall"
+        },
+        {
+            "$ref": "#/$defs/%23SetupDescribeCall"
+        },
+        {
+            "$ref": "#/$defs/%23SetupActionCall"
         }
     ]
 }
