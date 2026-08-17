@@ -360,6 +360,7 @@ def prepare_plugins(
     roots: Iterable[str | Path] = (),
     configurations: Mapping[str, object] | None = None,
     credentials: Mapping[str, Mapping[str, str]] | None = None,
+    reference_catalogs: Mapping[str, frozenset[str]] | None = None,
 ) -> tuple[PreparedPlugin, ...]:
     """Validate selected plugin bundles without importing implementation code."""
 
@@ -389,6 +390,7 @@ def prepare_plugins(
                 source.document,
                 (configurations or {}).get(plugin_id, {}),
                 (credentials or {}).get(plugin_id, {}),
+                reference_catalogs=reference_catalogs,
             )
             if (
                 validated_configuration.credentials
@@ -424,6 +426,7 @@ def prepare_agenda_plugins(
     roots: Iterable[str | Path] = (),
     configurations: Mapping[str, object] | None = None,
     credentials: Mapping[str, Mapping[str, str]] | None = None,
+    reference_catalogs: Mapping[str, frozenset[str]] | None = None,
 ) -> tuple[PreparedPlugin, ...]:
     """Prepare plugins for the current in-process Agenda runtime."""
 
@@ -432,6 +435,7 @@ def prepare_agenda_plugins(
         roots=roots,
         configurations=configurations,
         credentials=credentials,
+        reference_catalogs=reference_catalogs,
     )
     return require_agenda_plugins(prepared)
 

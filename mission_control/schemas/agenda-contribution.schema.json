@@ -129,7 +129,7 @@
             "additionalProperties": false,
             "properties": {
                 "id": {
-                    "$ref": "#/$defs/%23Identifier"
+                    "$ref": "#/$defs/%23CollectionID"
                 },
                 "kind": {
                     "$ref": "#/$defs/%23Identifier"
@@ -146,6 +146,12 @@
                 "kind",
                 "label"
             ]
+        },
+        "#CollectionID": {
+            "type": "string",
+            "not": {
+                "pattern": "^\\s*$"
+            }
         },
         "#Connection": {
             "type": "object",

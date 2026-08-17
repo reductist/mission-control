@@ -464,6 +464,14 @@ def _reject_external_schema_references(value: object, *, root: bool = True) -> N
         return
     if not isinstance(value, Mapping):
         return
+    reference_kind = value.get("x-mission-control-reference")
+    if reference_kind is not None and reference_kind not in {
+        "credential",
+        "workspace-principal",
+    }:
+        raise PluginConfigurationError(
+            "configuration schema declares an unsupported semantic reference"
+        )
     if not root and ("$id" in value or "$schema" in value):
         raise PluginConfigurationError(
             "configuration schema may declare identity and dialect only at its root"
@@ -480,6 +488,154 @@ def _reject_external_schema_references(value: object, *, root: bool = True) -> N
             )
     for item in value.values():
         _reject_external_schema_references(item, root=False)
+
+
+def _schema_is_string(
+    root: Mapping[str, Any],
+    node: Mapping[str, Any],
+    seen: set[int] | None = None,
+) -> bool:
+    visited = seen if seen is not None else set()
+    if id(node) in visited:
+        return False
+    visited.add(id(node))
+    if node.get("type") == "string":
+        return True
+    reference = node.get("$ref")
+    if isinstance(reference, str):
+        resolved = _resolve_local_ref(root, reference)
+        if resolved is not None and _schema_is_string(root, resolved, visited):
+            return True
+    branches = node.get("allOf")
+    return isinstance(branches, list) and any(
+        isinstance(branch, Mapping) and _schema_is_string(root, branch, visited)
+        for branch in branches
+    )
+
+
+def _semantic_reference_kinds(
+    root: Mapping[str, Any], value: object
+) -> frozenset[str]:
+    if isinstance(value, list):
+        return frozenset(
+            kind
+            for item in value
+            for kind in _semantic_reference_kinds(root, item)
+        )
+    if not isinstance(value, Mapping):
+        return frozenset()
+    kinds: set[str] = set()
+    reference_kind = value.get("x-mission-control-reference")
+    if isinstance(reference_kind, str):
+        if not _schema_is_string(root, value):
+            raise PluginConfigurationError(
+                "semantic references must annotate a string configuration field"
+            )
+        kinds.add(reference_kind)
+    for keyword, item in value.items():
+        if keyword in {"const", "default", "enum", "examples"}:
+            continue
+        kinds.update(_semantic_reference_kinds(root, item))
+    return frozenset(kinds)
+
+
+def _validate_semantic_references(
+    root: Mapping[str, Any],
+    node: Mapping[str, Any],
+    value: object,
+    catalogs: Mapping[str, frozenset[str]],
+    *,
+    path: tuple[str, ...] = (),
+    visited: set[tuple[int, int, tuple[str, ...]]] | None = None,
+) -> None:
+    """Resolve schema-declared references without teaching core plugin fields."""
+
+    seen = visited if visited is not None else set()
+    # Paths are significant: immutable JSON scalar objects may be interned and
+    # reused at several fields, but each reference must still be checked and
+    # reported at its own location.
+    marker = (id(node), id(value), path)
+    if marker in seen:
+        return
+    seen.add(marker)
+
+    reference_kind = node.get("x-mission-control-reference")
+    if isinstance(reference_kind, str) and isinstance(value, str):
+        catalog = catalogs.get(reference_kind)
+        rendered_path = "/" + "/".join(path)
+        if catalog is None:
+            raise PluginConfigurationError(
+                f"{rendered_path}: {reference_kind} catalog is unavailable"
+            )
+        if value not in catalog:
+            raise PluginConfigurationError(
+                f"{rendered_path}: unknown {reference_kind} reference"
+            )
+
+    reference = node.get("$ref")
+    if isinstance(reference, str):
+        resolved = _resolve_local_ref(root, reference)
+        if resolved is not None:
+            _validate_semantic_references(
+                root, resolved, value, catalogs, path=path, visited=seen
+            )
+    all_of = node.get("allOf")
+    if isinstance(all_of, list):
+        for branch in all_of:
+            if isinstance(branch, Mapping):
+                _validate_semantic_references(
+                    root, branch, value, catalogs, path=path, visited=seen
+                )
+    for keyword in ("anyOf", "oneOf"):
+        branches = node.get(keyword)
+        if isinstance(branches, list):
+            validator = Draft202012Validator(
+                root, format_checker=FormatChecker()
+            )
+            for branch in branches:
+                if isinstance(branch, Mapping) and validator.evolve(
+                    schema=branch
+                ).is_valid(value):
+                    _validate_semantic_references(
+                        root, branch, value, catalogs, path=path, visited=seen
+                    )
+    if isinstance(value, Mapping):
+        properties = node.get("properties")
+        explicit = properties if isinstance(properties, Mapping) else {}
+        for key, child_value in value.items():
+            child = explicit.get(key)
+            if isinstance(child, Mapping):
+                _validate_semantic_references(
+                    root,
+                    child,
+                    child_value,
+                    catalogs,
+                    path=(*path, str(key)),
+                    visited=seen,
+                )
+                continue
+            additional = node.get("additionalProperties")
+            if isinstance(additional, Mapping):
+                _validate_semantic_references(
+                    root,
+                    additional,
+                    child_value,
+                    catalogs,
+                    path=(*path, str(key)),
+                    visited=seen,
+                )
+    elif isinstance(value, list):
+        items = node.get("items")
+        if isinstance(items, Mapping):
+            for index, child_value in enumerate(value):
+                _validate_semantic_references(
+                    root,
+                    items,
+                    child_value,
+                    catalogs,
+                    path=(*path, str(index)),
+                    visited=seen,
+                )
 
 
 def _partial_configuration_schema(value: object) -> object:
@@ -567,6 +723,8 @@ def validate_plugin_configuration(
     read_resource: PluginResourceReader,
     settings: object,
     credentials: Mapping[str, str],
+    *,
+    reference_catalogs: Mapping[str, frozenset[str]] | None = None,
 ) -> ValidatedPluginConfiguration:
     """Load one generated CUE bundle and validate the full plugin namespace."""
 
@@ -590,6 +748,14 @@ def validate_plugin_configuration(
                 f"{contract.schema_resource}: invalid JSON Schema"
             ) from error
         _reject_external_schema_references(schema)
+        semantic_reference_kinds = _semantic_reference_kinds(schema, schema)
+        if (
+            "credential" in semantic_reference_kinds
+            and Permission.CREDENTIALS not in registration.permissions
+        ):
+            raise PluginConfigurationError(
+                f"{contract.schema_resource}: credential references require credentials permission"
+            )
 
         defaults = _configuration_document(
             read_resource(contract.defaults_resource), label=contract.defaults_resource
@@ -685,6 +851,15 @@ def validate_plugin_configuration(
         )
         raise PluginConfigurationError("; ".join(messages))
     assert isinstance(effective, dict)
+    _validate_semantic_references(
+        schema,
+        schema,
+        effective,
+        {
+            **(reference_catalogs or {}),
+            "credential": frozenset(credentials),
+        },
+    )
     effective_settings = effective["settings"]
     effective_credentials = effective["credentials"]
     assert isinstance(effective_settings, dict)

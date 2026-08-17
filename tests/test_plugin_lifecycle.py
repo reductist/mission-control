@@ -143,7 +143,17 @@ def test_declared_storage_requires_matching_permission() -> None:
     (prepared,) = prepare_agenda_plugins(
         ("google-calendar",),
         configurations={
-            "google-calendar": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+            "google-calendar": {
+                "connections": {
+                    "demo": {
+                        "label": "Google demo",
+                        "mode": "demo",
+                        "demo_anchor_date": "2026-08-14",
+                        "calendars": {"mode": "defaults"},
+                        "tasks": {"mode": "all"},
+                    }
+                }
+            }
         },
     )
     without_database = replace(

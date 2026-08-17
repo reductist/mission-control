@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.google-mapping-cases/v2",
+  "schema_version": "mission-control.google-mapping-cases/v3",
   "cases": [
     {
       "name": "unknown upstream fields are ignored recursively",
@@ -9,7 +9,9 @@
           "id": "future",
           "summary": "Future API",
           "accessRole": "owner",
-          "futureCollectionField": {"nested": true}
+          "futureCollectionField": {
+            "nested": true
+          }
         },
         "resource": {
           "id": "future-event",
@@ -17,9 +19,15 @@
           "status": "confirmed",
           "start": {
             "dateTime": "2026-08-20T09:00:00Z",
-            "futureBoundaryField": [1, 2, 3]
+            "futureBoundaryField": [
+              1,
+              2,
+              3
+            ]
           },
-          "end": {"dateTime": "2026-08-20T10:00:00Z"},
+          "end": {
+            "dateTime": "2026-08-20T10:00:00Z"
+          },
           "attendees": [
             {
               "self": false,
@@ -29,13 +37,23 @@
           ],
           "updated": "2026-08-19T18:00:00Z",
           "etag": "future-v1",
-          "futureResourceField": {"opaque": "value"}
+          "futureResourceField": {
+            "opaque": "value"
+          }
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v2",
+        "schema_version": "mission-control.google-mapping/v3",
         "status": "mapped",
         "entry": {
+          "id": "gcal-c47c971a2abd373fa26df6237416a4827934f323beec6faa13e44bd86bd72b82",
+          "kind": "event",
+          "source": {
+            "plugin_id": "google-calendar",
+            "entity_type": "calendar-event",
+            "entity_id": "gcal-c47c971a2abd373fa26df6237416a4827934f323beec6faa13e44bd86bd72b82"
+          },
+          "title": "Forward compatible",
           "attribution": {
             "principal_ids": [],
             "integration": {
@@ -44,23 +62,20 @@
                 "label": "Google Calendar"
               },
               "collection": {
-                "id": "gsrc-368f3d88ee1269f92560e9765686180fb5c601617421bb6eed0af33df55d3c2b",
+                "id": "calendar:future",
                 "kind": "calendar",
                 "label": "Future API"
               }
             }
           },
-          "id": "gcal-ae74fd81e7438ed44de5fad5f03913987ee7b279423233acc9cbe0c42ed8ab9c",
-          "kind": "event",
-          "source": {
-            "plugin_id": "google-calendar",
-            "entity_type": "calendar-event",
-            "entity_id": "gcal-ae74fd81e7438ed44de5fad5f03913987ee7b279423233acc9cbe0c42ed8ab9c"
-          },
-          "title": "Forward compatible",
           "context": "Future API",
           "revision": "future-v1",
-          "affordances": [{"capability": "entity.annotate", "command": "add-note"}],
+          "affordances": [
+            {
+              "capability": "entity.annotate",
+              "command": "add-note"
+            }
+          ],
           "timing": {
             "kind": "timed",
             "starts_at": "2026-08-20T09:00:00+00:00",

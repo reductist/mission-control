@@ -55,7 +55,22 @@ services.mission-control = {
 
 `demo = true` enables the House showcase only. Google fixture mode remains an
 explicit, plugin-owned setting so the core never changes a provider's source.
-The referenced settings file contains `{ "mode": "demo" }`.
+The referenced settings file uses the same provider-owned shape as every other
+release target, for example:
+
+```json
+{
+  "connections": {
+    "demo": {
+      "label": "Google demo",
+      "mode": "demo",
+      "demo_anchor_date": "2026-08-14",
+      "calendars": {"mode": "defaults"},
+      "tasks": {"mode": "all"}
+    }
+  }
+}
+```
 
 Google fixture mode requires no credential. For live mode, keep non-secret settings in a JSON path and provide the authorized-user credential through systemd's credential mechanism:
 
@@ -64,7 +79,7 @@ services.mission-control = {
   enable = true;
   plugins = [ "google-calendar" ];
   pluginSettings."google-calendar" = ./google-settings.json;
-  pluginCredentials."google-calendar".oauth = "/run/secrets/mission-control-google-oauth.json";
+  pluginCredentials."google-calendar".personal-oauth = "/run/secrets/mission-control-google-oauth.json";
 };
 ```
 

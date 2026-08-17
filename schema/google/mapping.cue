@@ -68,7 +68,7 @@ import "time"
 }
 
 #MappedCalendarOutcome: close({
-	schema_version: "mission-control.google-mapping/v2"
+	schema_version: "mission-control.google-mapping/v3"
 	status:         "mapped"
 	entry: agenda.#Event & {
 		source: {
@@ -79,7 +79,7 @@ import "time"
 })
 
 #MappedTaskOutcome: close({
-	schema_version: "mission-control.google-mapping/v2"
+	schema_version: "mission-control.google-mapping/v3"
 	status:         "mapped"
 	entry: agenda.#Action & {
 		source: {
@@ -90,19 +90,19 @@ import "time"
 })
 
 #FilteredCalendarOutcome: close({
-	schema_version: "mission-control.google-mapping/v2"
+	schema_version: "mission-control.google-mapping/v3"
 	status:         "filtered"
 	reason:         "cancelled" | "self-declined"
 })
 
 #FilteredTaskOutcome: close({
-	schema_version: "mission-control.google-mapping/v2"
+	schema_version: "mission-control.google-mapping/v3"
 	status:         "filtered"
 	reason:         "completed" | "deleted"
 })
 
 #RejectedMappingOutcome: close({
-	schema_version: "mission-control.google-mapping/v2"
+	schema_version: "mission-control.google-mapping/v3"
 	status:         "rejected"
 	code:           "invalid-upstream-resource"
 })
@@ -285,6 +285,6 @@ import "time"
 #GoogleMappingCase: #CalendarMappingCase | #TaskMappingCase
 
 #GoogleMappingCases: close({
-	schema_version: "mission-control.google-mapping-cases/v2"
+	schema_version: "mission-control.google-mapping-cases/v3"
 	cases: [#GoogleMappingCase, ...#GoogleMappingCase]
 })

@@ -95,13 +95,21 @@ import cmd "mission-control.dev/schema/command"
 })
 
 #PluginHealthDocument: close({
-	schema_version!:  "mission-control.plugin-health/v1"
+	schema_version!:  "mission-control.plugin-health/v2"
 	plugin_id!:       #PluginID
 	state!:           "starting" | "ready" | "degraded" | "failed"
 	code!:            #Identifier
 	detail!:          string & != ""
 	checked_at!:      #Timestamp
 	last_success_at?: #Timestamp
+	components!: [...close({
+		id!:              #Identifier
+		label!:           string & !~"^\\s*$"
+		state!:           "starting" | "ready" | "degraded" | "failed"
+		code!:            #Identifier
+		detail!:          string & != ""
+		last_success_at?: #Timestamp
+	})]
 })
 
 #PluginJobsDocument: close({

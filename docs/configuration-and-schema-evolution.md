@@ -215,9 +215,9 @@ evidence shows it should be split further.
 4. **Complete:** introduce versioned JSON capability calls, a small public adapter, and a
    conformance command/reference plugin. Preserve the existing namespaced shared
    transaction boundary; built-ins use the same adapter.
-5. Introduce the next agenda version with scoped connection/collection/principal
+5. **Complete:** introduce the next agenda version with scoped connection/collection/principal
    attribution, independent of presentation colors and authoritative `SourceRef`.
-6. Add Google-owned multiple connections, explicit calendar/task enablement and
+6. **Complete:** add Google-owned multiple connections, explicit calendar/task enablement and
    selection policies, partitioned cache/sync, attribution mapping, and a versioned
    connection-health projection whose aggregate defines plugin health.
 7. Add the generic setup-action capability and contract-driven loopback wizard:

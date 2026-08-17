@@ -37,6 +37,7 @@ from mission_control.plugin_api import (
 )
 from mission_control.plugin_runtime import (
     PluginHealth,
+    PluginHealthComponent,
     PluginHealthState,
     PluginJob,
 )
@@ -230,6 +231,7 @@ class DocumentPluginProvider:
             raise PluginCallContractError("plugin health belongs to a different plugin")
         checked_at = _timestamp(cast(str, raw["checked_at"]), "checked_at")
         last_success = raw.get("last_success_at")
+        components = cast(list[dict[str, object]], raw["components"])
         return PluginHealth(
             self.plugin_id,
             PluginHealthState(cast(str, raw["state"])),
@@ -239,6 +241,22 @@ class DocumentPluginProvider:
             _timestamp(cast(str, last_success), "last_success_at")
             if last_success is not None
             else None,
+            tuple(
+                PluginHealthComponent(
+                    cast(str, component["id"]),
+                    cast(str, component["label"]),
+                    PluginHealthState(cast(str, component["state"])),
+                    cast(str, component["code"]),
+                    cast(str, component["detail"]),
+                    _timestamp(
+                        cast(str, component["last_success_at"]),
+                        "components.last_success_at",
+                    )
+                    if component.get("last_success_at") is not None
+                    else None,
+                )
+                for component in components
+            ),
         )
 
     def stop(self) -> None:

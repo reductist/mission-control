@@ -82,6 +82,7 @@ jobs:
               "mission_control/builtin_plugins/google/config.schema.json",
               "mission_control/builtin_plugins/google/migrations/0001_initial.sql",
               "mission_control/builtin_plugins/google/migrations/0002_cache_source.sql",
+              "mission_control/builtin_plugins/google/migrations/0003_connections.sql",
               "mission_control/builtin_plugins/google/registration.json",
               "mission_control/builtin_plugins/google/mapping.py",
               "mission_control/schemas/agenda-contribution.schema.json",
@@ -129,7 +130,18 @@ jobs:
 
           (plugin,) = prepare_agenda_plugins(
               ("google-calendar",),
-              configurations={"google-calendar": {"mode": "demo"}},
+              configurations={
+                  "google-calendar": {
+                      "connections": {
+                          "demo": {
+                              "label": "Google demo",
+                              "mode": "demo",
+                              "calendars": {"mode": "defaults"},
+                              "tasks": {"mode": "all"},
+                          }
+                      }
+                  }
+              },
           )
           assert plugin.registration.plugin_id.value == "google-calendar"
           assert plugin.configuration.to_dict()["sync_interval_seconds"] == 300

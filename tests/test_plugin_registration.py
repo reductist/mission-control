@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -255,7 +256,19 @@ def test_cli_conformance_runs_bundled_plugins_through_the_same_adapter(
     root = Path(__file__).parents[1] / "mission_control" / "builtin_plugins"
     google_settings = tmp_path / "google-settings.json"
     google_settings.write_text(
-        json.dumps({"mode": "demo", "demo_anchor_date": "2026-08-14"}),
+        json.dumps(
+            {
+                "connections": {
+                    "demo": {
+                        "label": "Google demo",
+                        "mode": "demo",
+                        "demo_anchor_date": "2026-08-14",
+                        "calendars": {"mode": "defaults"},
+                        "tasks": {"mode": "all"},
+                    }
+                }
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -282,6 +295,39 @@ def test_cli_conformance_runs_bundled_plugins_through_the_same_adapter(
     landscape = json.loads(capsys.readouterr().out)
     assert landscape["plugin_id"] == "landscape"
     assert landscape["probed"] == []
+
+
+def test_cli_conformance_accepts_workspace_principal_catalog(
+    tmp_path, capsys
+) -> None:
+    plugin_root = tmp_path / "reference"
+    shutil.copytree(REFERENCE_REGISTRATION.parent, plugin_root)
+    schema_path = plugin_root / "config.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema["properties"]["settings"]["properties"]["message"].update(
+        {"x-mission-control-reference": "workspace-principal"}
+    )
+    schema_path.write_text(json.dumps(schema), encoding="utf-8")
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"message":"pat"}', encoding="utf-8")
+    workspace = tmp_path / "workspace.json"
+    workspace.write_text(
+        '{"principals":{"pat":{"label":"Pat","kind":"person"}},"accents":[]}',
+        encoding="utf-8",
+    )
+
+    assert main(
+        [
+            "plugin",
+            "conformance",
+            str(plugin_root / "registration.json"),
+            "--settings",
+            str(settings),
+            "--workspace",
+            str(workspace),
+        ]
+    ) == 0
+    assert json.loads(capsys.readouterr().out)["valid"] is True
 
 
 def test_cli_conformance_sanitizes_rejection_and_still_stops_provider(

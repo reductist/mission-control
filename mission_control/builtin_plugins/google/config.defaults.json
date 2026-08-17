@@ -1,15 +1,13 @@
 {
     "schema_version": "mission-control.plugin-config-defaults/v1",
-    "configuration_schema": "mission-control.google-calendar.config/v1",
+    "configuration_schema": "mission-control.google-calendar.config/v2",
     "defaults": {
         "settings": {
-            "calendar_ids": [],
+            "connections": {},
             "lookahead_days": 42,
             "lookback_days": 42,
-            "mode": "live",
             "request_timeout_seconds": 15,
-            "sync_interval_seconds": 300,
-            "task_list_ids": []
+            "sync_interval_seconds": 300
         },
         "credentials": {}
     }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import cast
 
 from mission_control.agenda import SourceRef, contribution_to_dict
@@ -30,20 +30,55 @@ def activate(context: PluginContext) -> CapabilityRouter:
         raise ValueError("Google does not declare an agenda seed resource")
     config = GoogleConfig.from_runtime(context.configuration, context.credentials)
     repository = SQLiteGoogleRepository(context.storage)
-    if config.mode == "demo":
-        client = FixtureGoogleClient.load(config.demo_anchor_date)
-        source_fingerprint = "packaged-fixture-v1"
-    else:
-        assert config.oauth_credential is not None
-        authorized = AuthorizedUserCredentials.load(config.oauth_credential)
-        source_fingerprint = authorized.source_fingerprint()
-        client = GoogleHttpClient(
-            authorized, timeout_seconds=config.request_timeout_seconds
+    repository.reconcile_configured_connections(
+        connection.connection_id for connection in config.connections
+    )
+    synchronizers: dict[str, GoogleSynchronizer] = {}
+    for connection in config.connections:
+        if connection.mode == "demo":
+            client = FixtureGoogleClient.load(connection.demo_anchor_date)
+            source_fingerprint = (
+                "packaged-fixture-v1:"
+                + (
+                    connection.demo_anchor_date.isoformat()
+                    if connection.demo_anchor_date is not None
+                    else "default"
+                )
+            )
+        else:
+            try:
+                assert connection.oauth_credential is not None
+                authorized = AuthorizedUserCredentials.load(
+                    connection.oauth_credential
+                )
+                source_fingerprint = authorized.source_fingerprint()
+                client = GoogleHttpClient(
+                    authorized, timeout_seconds=config.request_timeout_seconds
+                )
+            except (OSError, ValueError):
+                repository.prepare_source(
+                    connection.connection_id,
+                    connection.label,
+                    connection.mode,
+                    "connection-unavailable",
+                )
+                repository.record_failure(
+                    connection.connection_id,
+                    datetime.now(UTC),
+                    code="connection-unavailable",
+                    detail="Google authorization or connection setup is unavailable.",
+                )
+                continue
+        repository.prepare_source(
+            connection.connection_id,
+            connection.label,
+            connection.mode,
+            source_fingerprint,
         )
-    repository.prepare_source(config.mode, source_fingerprint)
-    synchronizer = GoogleSynchronizer(repository, client, config)
-    if config.mode == "demo":
-        synchronizer.sync_once()
+        synchronizer = GoogleSynchronizer(repository, client, config, connection)
+        synchronizers[connection.connection_id] = synchronizer
+        if connection.mode == "demo":
+            synchronizer.sync_once()
 
     def agenda_snapshot(inputs):
         generated_at = datetime.fromisoformat(cast(str, inputs["generated_at"]))
@@ -62,31 +97,37 @@ def activate(context: PluginContext) -> CapabilityRouter:
             "plugin_id": PLUGIN_ID.value,
             "jobs": [
                 {
-                    "job_id": "refresh",
+                    "job_id": f"refresh:{connection_id}",
                     "interval_seconds": config.sync_interval_seconds,
                 }
+                for connection_id in sorted(synchronizers)
             ],
         }
 
     def jobs_run(inputs):
-        if inputs["job_id"] != "refresh":
+        job_id = cast(str, inputs["job_id"])
+        if not job_id.startswith("refresh:") or job_id[8:] not in synchronizers:
             raise ValueError("unknown Google job")
-        synchronizer.sync_once()
+        synchronizers[job_id[8:]].sync_once()
         return {}
 
     def jobs_failure(inputs):
-        if inputs["job_id"] != "refresh":
+        job_id = cast(str, inputs["job_id"])
+        if not job_id.startswith("refresh:") or job_id[8:] not in synchronizers:
             raise ValueError("unknown Google job")
-        synchronizer.record_unexpected_failure()
+        synchronizers[job_id[8:]].record_unexpected_failure()
         return {}
 
     def health(_inputs):
         document = plugin_health(
             repository,
-            source_mode=config.mode,
-            runtime_failure_at=synchronizer.runtime_failure_at,
+            runtime_failures={
+                connection_id: synchronizer.runtime_failure_at
+                for connection_id, synchronizer in synchronizers.items()
+                if synchronizer.runtime_failure_at is not None
+            },
         ).to_dict()
-        return {"schema_version": "mission-control.plugin-health/v1", **document}
+        return {"schema_version": "mission-control.plugin-health/v2", **document}
 
     return CapabilityRouter(
         context.plugin_id,

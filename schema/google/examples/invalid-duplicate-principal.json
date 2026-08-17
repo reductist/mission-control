@@ -4,9 +4,13 @@
       "demo": {
         "label": "Google demo",
         "mode": "demo",
-        "oauth": "must-not-be-plugin-settings",
         "calendars": {"mode": "defaults"},
-        "tasks": {"mode": "disabled"}
+        "tasks": {"mode": "disabled"},
+        "attribution": {
+          "calendars": {
+            "primary": {"principal_ids": ["pat", "pat"]}
+          }
+        }
       }
     },
     "lookahead_days": 42,

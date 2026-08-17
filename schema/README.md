@@ -110,6 +110,24 @@ cases under `schema/google/`. Live Google inputs remain recursively open because
 the upstream APIs may add fields independently; mapped, filtered, and rejected
 outcomes are closed and the production mapper must match their golden fixtures.
 
+### Semantic configuration references
+
+A plugin may annotate a string field in its generated configuration-schema
+overlay with `x-mission-control-reference`. The supported values are
+`credential` and `workspace-principal`. Core resolves credential names against
+that plugin's configured credential references and principal IDs against the
+workspace catalog before any implementation import or migration. A credential
+annotation requires the registration's `credentials` permission. An annotation
+on a non-string schema, an unknown reference kind, or a missing catalog entry is
+a configuration error. Union annotations apply only to branches that validate
+the configured value.
+
+Plugin conformance accepts `--workspace WORKSPACE.json` when settings contain
+workspace-principal references. The file contains the ordinary workspace object
+with `principals` and `accents`; it is test input, not another application
+configuration format. Plugins continue to receive only their already-validated
+settings and credential paths.
+
 ## Boundaries
 
 CUE answers **what exchanged data is valid**. Runtime behavior remains defined by prose and executable contract tests, including:

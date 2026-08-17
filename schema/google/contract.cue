@@ -3,6 +3,7 @@ package google
 import (
 	common "mission-control.dev/schema/common"
 	plugin "mission-control.dev/schema/plugin"
+	"list"
 	"time"
 )
 
@@ -21,7 +22,7 @@ import (
 	}
 	permissions: ["database", "network", "credentials"]
 	configuration: {
-		document_version:      "mission-control.google-calendar.config/v1"
+		document_version:      "mission-control.google-calendar.config/v2"
 		schema_resource:       "config.schema.json"
 		defaults_resource:     "config.defaults.json"
 		presentation_resource: "config.presentation.json"
@@ -32,56 +33,113 @@ import (
 	})
 }
 
-let googleSettings = {
-	calendar_ids?: [...string & !~"^\\s*$"]
-	lookahead_days?:          int & >=1 & <=366
-	lookback_days?:           int & >=0 & <=366
-	request_timeout_seconds?: int & >=3 & <=60
-	sync_interval_seconds?:   int & >=60 & <=86400
-	task_list_ids?: [...string & !~"^\\s*$"]
+#ConnectionID: string & =~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+
+#DisabledSelection: close({mode!: "disabled"})
+#DefaultSelection: close({mode!: "defaults"})
+#AllSelection: close({mode!: "all"})
+#SelectedSelection: close({
+	mode!: "selected"
+	ids!: [string & !~"^\\s*$", ...string & !~"^\\s*$"] & list.UniqueItems()
+})
+#CalendarSelection: #DisabledSelection | #DefaultSelection | #AllSelection | #SelectedSelection
+#TaskSelection: #DisabledSelection | #AllSelection | #SelectedSelection
+
+#CollectionAttribution: close({
+	principal_ids!: [...common.#PrincipalID] & list.UniqueItems()
+})
+
+let connectionCommon = {
+	label!:     string & !~"^\\s*$"
+	calendars!: #CalendarSelection
+	tasks!:     #TaskSelection
+	attribution?: close({
+		calendars?: [string]: #CollectionAttribution
+		task_lists?: [string]: #CollectionAttribution
+	})
 }
 
-// GoogleConfiguration is the only public configuration definition. It covers
-// settings and credential references together, so cross-field requirements are
-// enforced before migrations or plugin imports.
-#GoogleConfiguration:
-	close({
-		settings!: close(googleSettings & {
-			mode!: "live"
-		})
-		credentials!: close({
-			oauth!: common.#CredentialReference
-		})
-	}) |
-	close({
-		settings!: close(googleSettings & {
-			mode!:             "demo"
-			demo_anchor_date?: #Date
-		})
-		credentials!: close({})
-	})
+#LiveConnection: close(connectionCommon & {
+	mode!:       "live"
+	credential!: common.#CredentialName
+})
+
+#DemoConnection: close(connectionCommon & {
+	mode!:             "demo"
+	demo_anchor_date?: #Date
+})
+
+#GoogleConnection: #LiveConnection | #DemoConnection
+
+#GoogleSettings: close({
+	connections!: {
+		[string]:                   #GoogleConnection
+		[!~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"]: _|_("invalid connection ID")
+	}
+	lookahead_days!:          int & >=1 & <=366
+	lookback_days!:           int & >=0 & <=366
+	request_timeout_seconds!: int & >=3 & <=60
+	sync_interval_seconds!:   int & >=60 & <=86400
+})
+
+// GoogleConfiguration is the only public configuration definition. Credential
+// and workspace-principal references are annotated in the generated schema and
+// resolved generically by core before migrations or plugin imports.
+#GoogleConfiguration: close({
+	settings!: #GoogleSettings
+	credentials!: {
+		[string]:                          common.#CredentialReference
+		[!~common.#CredentialNamePattern]: _|_("invalid credential name")
+	}
+})
 
 #GoogleConfigurationJSONSchemaOverlay: {
-	"$id":     "mission-control.google-calendar.config/v1"
+	"$id":     "mission-control.google-calendar.config/v2"
 	"$schema": "https://json-schema.org/draft/2020-12/schema"
+	"$defs": {
+		"#SelectedSelection": properties: ids: {
+			minItems:    1
+			uniqueItems: true
+		}
+		"#GoogleSettings": properties: connections: propertyNames: {
+			type:    "string"
+			pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+		}
+		"#LiveConnection": properties: credential: {
+			"x-mission-control-reference": "credential"
+		}
+		"#CollectionAttribution": properties: principal_ids: {
+			uniqueItems: true
+			items: {
+				"x-mission-control-reference": "workspace-principal"
+			}
+		}
+	}
+	properties: credentials: propertyNames: {
+		type:    "string"
+		pattern: common.#CredentialNamePattern
+	}
 }
 
 #GoogleDemoConfiguration: #GoogleConfiguration & {
-	settings: mode: "demo"
+	settings: connections: demo: {
+		label: "Google demo"
+		mode:  "demo"
+		calendars: mode: "defaults"
+		tasks: mode: "all"
+	}
 }
 
 #GoogleConfigurationDefaults: plugin.#ConfigurationDefaults & {
 	schema_version:       "mission-control.plugin-config-defaults/v1"
-	configuration_schema: "mission-control.google-calendar.config/v1"
+	configuration_schema: "mission-control.google-calendar.config/v2"
 	defaults: {
 		settings: {
-			calendar_ids: []
+			connections: {}
 			lookahead_days:          42
 			lookback_days:           42
-			mode:                    "live"
 			request_timeout_seconds: 15
 			sync_interval_seconds:   300
-			task_list_ids: []
 		}
 		credentials: {}
 	}
@@ -89,12 +147,11 @@ let googleSettings = {
 
 #GoogleConfigurationPresentation: plugin.#ConfigurationPresentation & {
 	schema_version:       "mission-control.plugin-config-presentation/v1"
-	configuration_schema: "mission-control.google-calendar.config/v1"
+	configuration_schema: "mission-control.google-calendar.config/v2"
 	fields: [
-		{path: "/settings/mode", label: "Connection mode", order: 10, widget: "select"},
-		{path: "/credentials/oauth/file", label: "Google authorization", order: 20, widget: "credential-file"},
-		{path: "/settings/calendar_ids", label: "Calendars", order: 30},
-		{path: "/settings/task_list_ids", label: "Task lists", order: 40},
+		{path: "/settings/connections", label: "Google connections", order: 10},
+		{path: "/settings/lookback_days", label: "Past calendar window", order: 20, widget: "number"},
+		{path: "/settings/lookahead_days", label: "Future calendar window", order: 30, widget: "number"},
 	]
 }
 

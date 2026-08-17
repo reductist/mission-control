@@ -13,8 +13,26 @@ def test_daemon_parser_uses_canonical_command_name() -> None:
 @pytest.mark.parametrize(
     "settings",
     (
-        'mode = "invalid"',
-        'mode = "demo"\ndemo_anchor_date = "2026-02-31"',
+        'connections = "invalid"',
+        (
+            '[plugins.google-calendar.settings.connections.demo]\n'
+            'label = "Demo"\nmode = "demo"\n'
+            'demo_anchor_date = "2026-02-31"\n'
+            '[plugins.google-calendar.settings.connections.demo.calendars]\n'
+            'mode = "defaults"\n'
+            '[plugins.google-calendar.settings.connections.demo.tasks]\n'
+            'mode = "disabled"'
+        ),
+        (
+            '[plugins.google-calendar.settings.connections.demo]\n'
+            'label = "Demo"\nmode = "demo"\n'
+            '[plugins.google-calendar.settings.connections.demo.calendars]\n'
+            'mode = "defaults"\n'
+            '[plugins.google-calendar.settings.connections.demo.tasks]\n'
+            'mode = "disabled"\n'
+            '[plugins.google-calendar.settings.connections.demo.attribution.calendars.primary]\n'
+            'principal_ids = ["missing-person"]'
+        ),
     ),
 )
 def test_invalid_enabled_plugin_configuration_aborts_before_database_or_import(

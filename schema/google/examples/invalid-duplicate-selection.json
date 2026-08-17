@@ -4,8 +4,7 @@
       "demo": {
         "label": "Google demo",
         "mode": "demo",
-        "oauth": "must-not-be-plugin-settings",
-        "calendars": {"mode": "defaults"},
+        "calendars": {"mode": "selected", "ids": ["primary", "primary"]},
         "tasks": {"mode": "disabled"}
       }
     },

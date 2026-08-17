@@ -322,13 +322,15 @@ schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
 [plugins.google-calendar.settings]
-mode = "invalid"
+connections = "invalid"
 """,
     )
 
     snapshot = load_application_config(base_path=path)
 
-    with pytest.raises(ApplicationConfigError, match=r"google-calendar: .*settings/mode"):
+    with pytest.raises(
+        ApplicationConfigError, match=r"google-calendar: .*settings/connections"
+    ):
         prepare_application_plugins(snapshot)
 
 
@@ -391,8 +393,14 @@ def test_enabled_credential_reference_must_be_available(tmp_path) -> None:
 schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
-[plugins.google-calendar.settings]
+[plugins.google-calendar.settings.connections.personal]
+label = "Personal Google"
 mode = "live"
+credential = "oauth"
+[plugins.google-calendar.settings.connections.personal.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.personal.tasks]
+mode = "disabled"
 [plugins.google-calendar.credentials.oauth]
 file = "{missing}"
 """,
@@ -413,8 +421,14 @@ def test_enabled_credential_reference_must_not_be_broadly_readable(tmp_path) -> 
 schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
-[plugins.google-calendar.settings]
+[plugins.google-calendar.settings.connections.personal]
+label = "Personal Google"
 mode = "live"
+credential = "oauth"
+[plugins.google-calendar.settings.connections.personal.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.personal.tasks]
+mode = "disabled"
 [plugins.google-calendar.credentials.oauth]
 file = "{credential}"
 """,

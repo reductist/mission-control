@@ -24,6 +24,7 @@ from mission_control.application_config import (
     load_application_config,
     prepare_application_plugins,
 )
+from mission_control.attribution import AttributionCatalog
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.plugin_lifecycle import (
@@ -224,6 +225,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME=PATH",
         help="named credential file reference; may be repeated",
     )
+    conformance.add_argument(
+        "--workspace",
+        type=Path,
+        help="JSON workspace object supplying principals for semantic references",
+    )
     return parser
 
 
@@ -274,11 +280,17 @@ def main(argv: list[str] | None = None) -> int:
                 if name in credentials:
                     raise ValueError(f"credential {name!r} was supplied more than once")
                 credentials[name] = path
+            catalogs = None
+            if args.workspace is not None:
+                workspace = json.loads(args.workspace.read_text(encoding="utf-8"))
+                attribution = AttributionCatalog.from_workspace(workspace)
+                catalogs = {"workspace-principal": attribution.principal_ids}
             (prepared,) = prepare_plugins(
                 (registration.plugin_id.value,),
                 roots=(args.registration.parent,),
                 configurations={registration.plugin_id.value: settings},
                 credentials={registration.plugin_id.value: credentials},
+                reference_catalogs=catalogs,
             )
             if prepared.registration.runtime is None:
                 raise ValueError("plugin does not declare a runtime entrypoint")

@@ -179,9 +179,14 @@ schema_version = "mission-control.config/v2"
 path = "{database}"
 [plugins.google-calendar]
 enabled = true
-[plugins.google-calendar.settings]
+[plugins.google-calendar.settings.connections.demo]
+label = "Google demo"
 mode = "demo"
 demo_anchor_date = "2026-08-14"
+[plugins.google-calendar.settings.connections.demo.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.demo.tasks]
+mode = "all"
 """,
         encoding="utf-8",
     )

@@ -23,6 +23,51 @@
         "code": {
             "$ref": "#/$defs/%23Identifier"
         },
+        "components": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "code": {
+                        "$ref": "#/$defs/%23Identifier"
+                    },
+                    "detail": {
+                        "type": "string",
+                        "not": {
+                            "const": ""
+                        }
+                    },
+                    "id": {
+                        "$ref": "#/$defs/%23Identifier"
+                    },
+                    "label": {
+                        "type": "string",
+                        "not": {
+                            "pattern": "^\\s*$"
+                        }
+                    },
+                    "last_success_at": {
+                        "$ref": "#/$defs/%23Timestamp"
+                    },
+                    "state": {
+                        "enum": [
+                            "starting",
+                            "ready",
+                            "degraded",
+                            "failed"
+                        ]
+                    }
+                },
+                "required": [
+                    "code",
+                    "detail",
+                    "id",
+                    "label",
+                    "state"
+                ]
+            }
+        },
         "detail": {
             "type": "string",
             "not": {
@@ -36,7 +81,7 @@
             "$ref": "#/$defs/%23PluginID"
         },
         "schema_version": {
-            "const": "mission-control.plugin-health/v1"
+            "const": "mission-control.plugin-health/v2"
         },
         "state": {
             "enum": [
@@ -50,6 +95,7 @@
     "required": [
         "checked_at",
         "code",
+        "components",
         "detail",
         "plugin_id",
         "schema_version",

@@ -52,9 +52,14 @@ demo = true
 path = "mission-control-demo.db"
 [plugins.google-calendar]
 enabled = true
-[plugins.google-calendar.settings]
+[plugins.google-calendar.settings.connections.demo]
+label = "Google demo"
 mode = "demo"
 demo_anchor_date = "2026-08-14"
+[plugins.google-calendar.settings.connections.demo.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.demo.tasks]
+mode = "all"
 [plugins.landscape]
 enabled = true
 ```
@@ -97,19 +102,58 @@ schema_version = "mission-control.config/v2"
 path = "mission-control.db"
 [plugins.google-calendar]
 enabled = true
-[plugins.google-calendar.credentials.oauth]
+[plugins.google-calendar.credentials.personal-oauth]
 file = "/run/secrets/mission-control-google-oauth.json"
+
 [plugins.google-calendar.settings]
-mode = "live"
-calendar_ids = []
-task_list_ids = []
 lookback_days = 42
 lookahead_days = 42
 sync_interval_seconds = 300
 request_timeout_seconds = 15
+
+[plugins.google-calendar.settings.connections.personal]
+label = "Personal Google"
+mode = "live"
+credential = "personal-oauth"
+
+[plugins.google-calendar.settings.connections.personal.calendars]
+mode = "defaults"
+
+[plugins.google-calendar.settings.connections.personal.tasks]
+mode = "all"
 ```
 
-Empty calendar IDs select the primary and Google-selected calendars. Empty task-list IDs select every available task list. Explicit IDs limit either set.
+Each entry under `connections` is one independently authorized Google account.
+Add another named credential and connection block for another account; overlapping
+Google IDs remain separate, and one failed or revoked account cannot erase the
+other account's cache.
+
+Selection is explicit rather than encoded through overloaded empty lists:
+
+- Calendars accept `disabled`, `defaults` (primary plus Google-selected), `all`,
+  or `selected` with a non-empty `ids` list.
+- Tasks accept `disabled`, `all`, or `selected` with a non-empty `ids` list.
+
+To label entries by person without baking a household member into the plugin,
+declare people once in the shared workspace catalog and assign their IDs to the
+relevant Google collections:
+
+```toml
+[workspace.principals.pat]
+label = "Pat"
+kind = "person"
+
+[plugins.google-calendar.settings.connections.personal.attribution.calendars."primary@example.com"]
+principal_ids = ["pat"]
+```
+
+The calendar or task-list ID on that final table is the exact ID returned by
+Google discovery. Mission Control validates every principal reference against
+the workspace catalog before opening the database or importing plugin code.
+Public filter and accent identities prefix that value with `calendar:` or
+`task-list:` so Google's two resource namespaces cannot collide.
+Colors remain a workspace presentation preference, not Google-owned identity;
+text labels are always retained for accessibility and non-visual clients.
 
 6. Validate and start the daemon. Configuration stores only the credential file
    reference, never its contents:
@@ -119,7 +163,7 @@ mcctl config validate ./mission-control.toml
 mctrld --config ./mission-control.toml
 ```
 
-The first live refresh begins after application initialization. Calendar pages use a bounded moving window sized to cover the current month view by default; Tasks pages are fully polled because the Tasks API does not expose a compatible sync token. A source replaces its cached collection only after every page and resource validates. Other sources and the last good cache remain readable after transient failures. The plugin fingerprints the OAuth authorization without persisting a recoverable credential and clears cached imports before switching between fixture/live modes or authorizations, preventing one source's rows from appearing under another. If Google reports that authorization is no longer valid, Mission Control marks the provider `reconnect-required` and erases imported Google cache data rather than retaining private records after revocation.
+The first live refresh begins after application initialization. Calendar pages use a bounded moving window sized to cover the current month view by default; Tasks pages are fully polled because the Tasks API does not expose a compatible sync token. A source replaces its cached collection only after every page and resource validates. Other sources and the last good cache remain readable after transient failures. The plugin fingerprints each OAuth authorization without persisting a recoverable credential and clears only that connection's imported cache before switching modes or authorizations. Health reports both a safe plugin summary and one typed component per connection. If Google reports that authorization is no longer valid, Mission Control marks that connection `reconnect-required` and erases its imported Google cache rather than retaining private records after revocation.
 
 ## OAuth testing-mode warning
 

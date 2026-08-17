@@ -410,6 +410,9 @@ def prepare_application_plugins(snapshot: ApplicationConfigSnapshot) -> tuple[An
             roots=snapshot.plugin_roots,
             configurations=snapshot.plugin_settings(),
             credentials=snapshot.plugin_credentials(),
+            reference_catalogs={
+                "workspace-principal": snapshot.attribution_catalog.principal_ids
+            },
         )
     except (OSError, PluginLifecycleError, ValueError) as error:
         raise ApplicationConfigError(str(error)) from error

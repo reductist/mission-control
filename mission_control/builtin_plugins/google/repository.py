@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from importlib.resources import files
@@ -17,7 +17,10 @@ from mission_control.agenda import (
     SourceRef,
 )
 from mission_control.builtin_plugins.google.client import GoogleApiError, GoogleClient
-from mission_control.builtin_plugins.google.config import GoogleConfig
+from mission_control.builtin_plugins.google.config import (
+    GoogleConfig,
+    GoogleConnectionConfig,
+)
 from mission_control.builtin_plugins.google.domain import (
     GoogleCollection,
     GoogleEntry,
@@ -32,7 +35,11 @@ from mission_control.entity_details import (
     EntityDetail,
     EntityDetailSchemaVersion,
 )
-from mission_control.plugin_runtime import PluginHealth, PluginHealthState
+from mission_control.plugin_runtime import (
+    PluginHealth,
+    PluginHealthComponent,
+    PluginHealthState,
+)
 from mission_control.plugins import (
     EntityAffordance,
     EntityCapability,
@@ -89,6 +96,8 @@ class GoogleMigrationRunner:
 
 @dataclass(frozen=True, slots=True)
 class GoogleSyncStatus:
+    connection_id: str
+    connection_label: str
     last_attempt_at: datetime | None
     last_success_at: datetime | None
     error_code: str | None
@@ -102,7 +111,10 @@ class SQLiteGoogleRepository:
         self.database = database
 
     def reconcile_collections(
-        self, kind: str, collections: Iterable[GoogleCollection]
+        self,
+        connection_id: str,
+        kind: str,
+        collections: Iterable[GoogleCollection],
     ) -> None:
         snapshot = tuple(collections)
         with self.database.connect() as connection:
@@ -110,15 +122,19 @@ class SQLiteGoogleRepository:
             for item in snapshot:
                 connection.execute(
                     "INSERT INTO plugin__15__google_calendar__collections("
-                    "collection_key, kind, external_id, label, access_role"
-                    ") VALUES (?, ?, ?, ?, ?) "
+                    "collection_key, connection_id, kind, external_id, label, "
+                    "principal_ids_json, access_role"
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(collection_key) DO UPDATE SET "
-                    "label = excluded.label, access_role = excluded.access_role",
+                    "label = excluded.label, principal_ids_json = excluded.principal_ids_json, "
+                    "access_role = excluded.access_role",
                     (
                         item.collection_key,
+                        item.connection_id,
                         item.kind,
                         item.external_id,
                         item.label,
+                        json.dumps(item.principal_ids, separators=(",", ":")),
                         item.access_role,
                     ),
                 )
@@ -126,33 +142,70 @@ class SQLiteGoogleRepository:
             if keys:
                 placeholders = ",".join("?" for _ in keys)
                 connection.execute(
-                    f"DELETE FROM plugin__15__google_calendar__collections WHERE kind = ? "
+                    f"DELETE FROM plugin__15__google_calendar__collections WHERE connection_id = ? AND kind = ? "
                     f"AND collection_key NOT IN ({placeholders})",
-                    (kind, *keys),
+                    (connection_id, kind, *keys),
                 )
             else:
                 connection.execute(
-                    "DELETE FROM plugin__15__google_calendar__collections WHERE kind = ?", (kind,)
+                    "DELETE FROM plugin__15__google_calendar__collections "
+                    "WHERE connection_id = ? AND kind = ?",
+                    (connection_id, kind),
                 )
 
-    def prepare_source(self, mode: str, fingerprint: str) -> bool:
+    def reconcile_configured_connections(self, connection_ids: Iterable[str]) -> None:
+        configured = tuple(sorted(connection_ids))
+        with self.database.connect() as connection:
+            if not configured:
+                connection.execute("DELETE FROM plugin__15__google_calendar__connections")
+                return
+            placeholders = ",".join("?" for _ in configured)
+            connection.execute(
+                f"DELETE FROM plugin__15__google_calendar__connections "
+                f"WHERE connection_id NOT IN ({placeholders})",
+                configured,
+            )
+
+    def prepare_source(
+        self,
+        connection_id: str,
+        connection_label: str,
+        mode: str,
+        fingerprint: str,
+    ) -> bool:
         """Quarantine cache rows when fixture mode or OAuth identity changes."""
 
         with self.database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT source_mode, source_fingerprint FROM plugin__15__google_calendar__sync_status "
-                "WHERE singleton = 1"
+                "SELECT source_mode, source_fingerprint FROM "
+                "plugin__15__google_calendar__connections WHERE connection_id = ?",
+                (connection_id,),
             ).fetchone()
-            assert row is not None
+            if row is None:
+                connection.execute(
+                    "INSERT INTO plugin__15__google_calendar__connections("
+                    "connection_id, label, source_mode, source_fingerprint"
+                    ") VALUES (?, ?, ?, ?)",
+                    (connection_id, connection_label, mode, fingerprint),
+                )
+                return True
             if row["source_mode"] == mode and row["source_fingerprint"] == fingerprint:
+                connection.execute(
+                    "UPDATE plugin__15__google_calendar__connections SET label = ? "
+                    "WHERE connection_id = ?",
+                    (connection_label, connection_id),
+                )
                 return False
-            connection.execute("DELETE FROM plugin__15__google_calendar__collections")
             connection.execute(
-                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = NULL, "
+                "DELETE FROM plugin__15__google_calendar__collections WHERE connection_id = ?",
+                (connection_id,),
+            )
+            connection.execute(
+                "UPDATE plugin__15__google_calendar__connections SET label = ?, last_attempt_at = NULL, "
                 "last_success_at = NULL, error_code = NULL, error_detail = NULL, "
-                "source_mode = ?, source_fingerprint = ? WHERE singleton = 1",
-                (mode, fingerprint),
+                "source_mode = ?, source_fingerprint = ? WHERE connection_id = ?",
+                (connection_label, mode, fingerprint, connection_id),
             )
         return True
 
@@ -223,46 +276,53 @@ class SQLiteGoogleRepository:
                 (attempted_at.isoformat(), code, detail, collection.collection_key),
             )
 
-    def record_attempt(self, attempted_at: datetime) -> None:
+    def record_attempt(self, connection_id: str, attempted_at: datetime) -> None:
         with self.database.connect() as connection:
             connection.execute(
-                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = ? WHERE singleton = 1",
-                (attempted_at.isoformat(),),
+                "UPDATE plugin__15__google_calendar__connections SET last_attempt_at = ? "
+                "WHERE connection_id = ?",
+                (attempted_at.isoformat(), connection_id),
             )
 
-    def record_success(self, synced_at: datetime) -> None:
+    def record_success(self, connection_id: str, synced_at: datetime) -> None:
         with self.database.connect() as connection:
             connection.execute(
-                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = ?, last_success_at = ?, "
-                "error_code = NULL, error_detail = NULL WHERE singleton = 1",
-                (synced_at.isoformat(), synced_at.isoformat()),
+                "UPDATE plugin__15__google_calendar__connections SET last_attempt_at = ?, last_success_at = ?, "
+                "error_code = NULL, error_detail = NULL WHERE connection_id = ?",
+                (synced_at.isoformat(), synced_at.isoformat(), connection_id),
             )
 
     def record_failure(
-        self, attempted_at: datetime, *, code: str, detail: str
+        self, connection_id: str, attempted_at: datetime, *, code: str, detail: str
     ) -> None:
         with self.database.connect() as connection:
             connection.execute(
-                "UPDATE plugin__15__google_calendar__sync_status SET last_attempt_at = ?, error_code = ?, "
-                "error_detail = ? WHERE singleton = 1",
-                (attempted_at.isoformat(), code, detail),
+                "UPDATE plugin__15__google_calendar__connections SET last_attempt_at = ?, error_code = ?, "
+                "error_detail = ? WHERE connection_id = ?",
+                (attempted_at.isoformat(), code, detail, connection_id),
             )
 
-    def clear_cache(self) -> None:
+    def clear_cache(self, connection_id: str) -> None:
         """Erase imported private data after terminal authorization failure."""
 
         with self.database.connect() as connection:
-            connection.execute("DELETE FROM plugin__15__google_calendar__collections")
+            connection.execute(
+                "DELETE FROM plugin__15__google_calendar__collections WHERE connection_id = ?",
+                (connection_id,),
+            )
 
-    def status(self) -> GoogleSyncStatus:
+    def status(self, connection_id: str = "default") -> GoogleSyncStatus:
         with self.database.connect() as connection:
             row = connection.execute(
                 "SELECT last_attempt_at, last_success_at, error_code, error_detail, "
-                "source_mode, source_fingerprint "
-                "FROM plugin__15__google_calendar__sync_status WHERE singleton = 1"
+                "source_mode, source_fingerprint, connection_id, label "
+                "FROM plugin__15__google_calendar__connections WHERE connection_id = ?",
+                (connection_id,),
             ).fetchone()
         assert row is not None
         return GoogleSyncStatus(
+            row["connection_id"],
+            row["label"],
             _optional_datetime(row["last_attempt_at"]),
             _optional_datetime(row["last_success_at"]),
             row["error_code"],
@@ -271,17 +331,39 @@ class SQLiteGoogleRepository:
             row["source_fingerprint"],
         )
 
+    def statuses(self) -> tuple[GoogleSyncStatus, ...]:
+        with self.database.connect() as connection:
+            ids = tuple(
+                row["connection_id"]
+                for row in connection.execute(
+                    "SELECT connection_id FROM plugin__15__google_calendar__connections "
+                    "ORDER BY connection_id"
+                ).fetchall()
+            )
+        return tuple(self.status(connection_id) for connection_id in ids)
+
     def list_entries(self) -> tuple[GoogleEntry, ...]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM plugin__15__google_calendar__entries ORDER BY entity_type, entity_id"
+                "SELECT e.*, c.connection_id, c.label AS connection_label, "
+                "c.external_id AS collection_external_id, "
+                "c.kind AS collection_kind, c.principal_ids_json "
+                "FROM plugin__15__google_calendar__entries e JOIN "
+                "plugin__15__google_calendar__collections c USING(collection_key) "
+                "ORDER BY e.entity_type, e.entity_id"
             ).fetchall()
         return tuple(self._entry(row) for row in rows)
 
     def get_entry(self, entity_id: str) -> GoogleEntry:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM plugin__15__google_calendar__entries WHERE entity_id = ?", (entity_id,)
+                "SELECT e.*, c.connection_id, c.label AS connection_label, "
+                "c.external_id AS collection_external_id, "
+                "c.kind AS collection_kind, c.principal_ids_json "
+                "FROM plugin__15__google_calendar__entries e JOIN "
+                "plugin__15__google_calendar__collections c USING(collection_key) "
+                "WHERE e.entity_id = ?",
+                (entity_id,),
             ).fetchone()
         if row is None:
             raise KeyError(entity_id)
@@ -308,6 +390,11 @@ class SQLiteGoogleRepository:
             source_url=row["source_url"],
             revision=row["revision"],
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            connection_id=row["connection_id"],
+            connection_label=row["connection_label"],
+            collection_external_id=row["collection_external_id"],
+            collection_kind=row["collection_kind"],
+            principal_ids=tuple(json.loads(row["principal_ids_json"])),
         )
 
     def contribution(self, *, generated_at: datetime) -> AgendaContribution:
@@ -366,10 +453,12 @@ class GoogleSynchronizer:
         repository: SQLiteGoogleRepository,
         client: GoogleClient,
         config: GoogleConfig,
+        connection: GoogleConnectionConfig,
     ) -> None:
         self.repository = repository
         self.client = client
         self.config = config
+        self.connection = connection
         self._runtime_failure_at: datetime | None = None
 
     @property
@@ -381,6 +470,7 @@ class GoogleSynchronizer:
         self._runtime_failure_at = failed_at
         try:
             self.repository.record_failure(
+                self.connection.connection_id,
                 failed_at,
                 code="job-failed",
                 detail="Google refresh failed unexpectedly; cached data was retained.",
@@ -390,7 +480,7 @@ class GoogleSynchronizer:
 
     def sync_once(self) -> None:
         attempted_at = datetime.now(UTC)
-        self.repository.record_attempt(attempted_at)
+        self.repository.record_attempt(self.connection.connection_id, attempted_at)
         calendar_failures, calendar_discovery_error = self._sync_calendars(attempted_at)
         if (
             calendar_discovery_error is not None
@@ -410,8 +500,9 @@ class GoogleSynchronizer:
             None,
         )
         if reconnect is not None:
-            self.repository.clear_cache()
+            self.repository.clear_cache(self.connection.connection_id)
             self.repository.record_failure(
+                self.connection.connection_id,
                 attempted_at,
                 code=reconnect[0],
                 detail=reconnect[1],
@@ -419,32 +510,53 @@ class GoogleSynchronizer:
         if failures:
             if reconnect is None:
                 self.repository.record_failure(
+                    self.connection.connection_id,
                     attempted_at,
                     code="partial-sync",
                     detail=f"{failures} Google source{'s' if failures != 1 else ''} could not refresh; healthy sources remain available.",
                 )
         else:
-            self.repository.record_success(attempted_at)
+            self.repository.record_success(
+                self.connection.connection_id, attempted_at
+            )
         self._runtime_failure_at = None
 
     def _sync_calendars(
         self, attempted_at: datetime
     ) -> tuple[int, tuple[str, str] | None]:
+        if self.connection.calendars.mode == "disabled":
+            self.repository.reconcile_collections(
+                self.connection.connection_id, "calendar", ()
+            )
+            return 0, None
         try:
             discovered = self.client.calendars()
         except (GoogleApiError, GoogleResourceError, ValueError) as error:
             return 1, _safe_error(error)
         selected = []
-        configured = set(self.config.calendar_ids)
         for collection, document in discovered:
-            if configured:
-                include = collection.external_id in configured
-            else:
-                include = document.get("primary") is True or document.get("selected") is True
+            include = self.connection.calendars.includes(
+                collection.external_id,
+                default_selected=(
+                    document.get("primary") is True
+                    or document.get("selected") is True
+                ),
+            )
             if include:
-                selected.append(collection)
+                selected.append(
+                    collection.for_connection(
+                        self.connection.connection_id,
+                        self.connection.label,
+                        self.connection.principals_for(
+                            "calendar", collection.external_id
+                        ),
+                    )
+                )
+        configured = set(self.connection.calendars.ids)
         missing = configured - {item.external_id for item in selected}
-        self.repository.reconcile_collections("calendar", selected)
+        self.repository.reconcile_collections(
+            self.connection.connection_id, "calendar", selected
+        )
         failures = len(missing)
         starts_at = attempted_at - timedelta(days=self.config.lookback_days)
         ends_at = attempted_at + timedelta(days=self.config.lookahead_days)
@@ -466,6 +578,8 @@ class GoogleSynchronizer:
             except (GoogleApiError, GoogleResourceError, ValueError) as error:
                 failures += 1
                 code, detail = _safe_error(error)
+                if code == "reconnect-required":
+                    return failures, (code, detail)
                 self.repository.mark_collection_failure(
                     collection,
                     attempted_at=attempted_at,
@@ -477,18 +591,31 @@ class GoogleSynchronizer:
     def _sync_tasks(
         self, attempted_at: datetime
     ) -> tuple[int, tuple[str, str] | None]:
+        if self.connection.tasks.mode == "disabled":
+            self.repository.reconcile_collections(
+                self.connection.connection_id, "task-list", ()
+            )
+            return 0, None
         try:
             discovered = self.client.task_lists()
         except (GoogleApiError, GoogleResourceError, ValueError) as error:
             return 1, _safe_error(error)
-        configured = set(self.config.task_list_ids)
+        configured = set(self.connection.tasks.ids)
         selected = [
-            item
+            item.for_connection(
+                self.connection.connection_id,
+                self.connection.label,
+                self.connection.principals_for("task-list", item.external_id),
+            )
             for item in discovered
-            if not configured or item.external_id in configured
+            if self.connection.tasks.includes(
+                item.external_id, default_selected=True
+            )
         ]
         missing = configured - {item.external_id for item in selected}
-        self.repository.reconcile_collections("task-list", selected)
+        self.repository.reconcile_collections(
+            self.connection.connection_id, "task-list", selected
+        )
         failures = len(missing)
         for collection in selected:
             try:
@@ -506,6 +633,8 @@ class GoogleSynchronizer:
             except (GoogleApiError, GoogleResourceError, ValueError) as error:
                 failures += 1
                 code, detail = _safe_error(error)
+                if code == "reconnect-required":
+                    return failures, (code, detail)
                 self.repository.mark_collection_failure(
                     collection,
                     attempted_at=attempted_at,
@@ -518,32 +647,90 @@ class GoogleSynchronizer:
 def plugin_health(
     repository: SQLiteGoogleRepository,
     *,
-    source_mode: str = "live",
-    runtime_failure_at: datetime | None = None,
+    runtime_failures: Mapping[str, datetime] | None = None,
 ) -> PluginHealth:
     now = datetime.now(UTC)
-    status = repository.status()
-    if runtime_failure_at is not None:
-        state = PluginHealthState.FAILED
-        code = "job-failed"
-        detail = "Google refresh failed unexpectedly; cached data was retained."
-    elif status.error_code is not None:
+    statuses = repository.statuses()
+    failures = runtime_failures or {}
+    if not statuses:
+        return PluginHealth(
+            PLUGIN_ID,
+            PluginHealthState.READY,
+            "not-configured",
+            "No Google Calendar connections are configured.",
+            now,
+        )
+    failed_ids = {
+        status.connection_id
+        for status in statuses
+        if status.connection_id in failures or status.error_code is not None
+    }
+    failed_labels = [
+        status.connection_label
+        for status in statuses
+        if status.connection_id in failed_ids
+    ]
+    starting_labels = [
+        status.connection_label
+        for status in statuses
+        if status.last_success_at is None and status.connection_id not in failed_ids
+    ]
+    if failed_labels:
         state = PluginHealthState.DEGRADED
-        code = status.error_code
-        detail = status.error_detail or "Google refresh is degraded."
-    elif status.last_success_at is None:
-        state = PluginHealthState.STARTING
+        code = "connection-degraded"
+        detail = "Google connection needs attention: " + ", ".join(failed_labels)
+    elif starting_labels:
+        state = (
+            PluginHealthState.STARTING
+            if len(starting_labels) == len(statuses)
+            else PluginHealthState.DEGRADED
+        )
         code = "awaiting-first-sync"
-        detail = "Waiting for the first Google refresh."
+        detail = "Waiting for Google refresh: " + ", ".join(starting_labels)
     else:
         state = PluginHealthState.READY
         code = "synchronized"
-        detail = (
-            "Synthetic Calendar and Tasks fixture is ready."
-            if source_mode == "demo"
-            else "Calendar and task cache is current."
-        )
-    return PluginHealth(PLUGIN_ID, state, code, detail, now, status.last_success_at)
+        detail = f"{len(statuses)} Google connection{'s are' if len(statuses) != 1 else ' is'} current."
+    last_success = max(
+        (status.last_success_at for status in statuses if status.last_success_at),
+        default=None,
+    )
+    components = tuple(
+        _connection_health_component(status, status.connection_id in failures)
+        for status in statuses
+    )
+    return PluginHealth(
+        PLUGIN_ID, state, code, detail, now, last_success, components
+    )
+
+
+def _connection_health_component(
+    status: GoogleSyncStatus, runtime_failed: bool
+) -> PluginHealthComponent:
+    if runtime_failed:
+        state = PluginHealthState.DEGRADED
+        code = "runtime-failure"
+        detail = "The most recent scheduled refresh failed."
+    elif status.error_code is not None:
+        state = PluginHealthState.DEGRADED
+        code = status.error_code
+        detail = status.error_detail or "The Google connection needs attention."
+    elif status.last_success_at is None:
+        state = PluginHealthState.STARTING
+        code = "awaiting-first-sync"
+        detail = "Waiting for the first successful refresh."
+    else:
+        state = PluginHealthState.READY
+        code = "synchronized"
+        detail = "The connection is current."
+    return PluginHealthComponent(
+        status.connection_id,
+        status.connection_label,
+        state,
+        code,
+        detail,
+        status.last_success_at,
+    )
 
 
 def _timing_label(item: GoogleEntry) -> str:

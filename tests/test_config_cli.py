@@ -12,9 +12,14 @@ def test_config_validate_and_effective_use_the_same_preflight(tmp_path, capsys) 
 schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
-[plugins.google-calendar.settings]
+[plugins.google-calendar.settings.connections.demo]
+label = "Google demo"
 mode = "demo"
 demo_anchor_date = "2026-08-14"
+[plugins.google-calendar.settings.connections.demo.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.demo.tasks]
+mode = "all"
 """,
         encoding="utf-8",
     )

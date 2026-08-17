@@ -187,6 +187,17 @@ Until the versioned workspace snapshot lands, `/api/dashboard` carries the catal
 as a transitional envelope field; that ad-hoc dashboard response is not the public
 TUI contract.
 
+Plugin configuration schemas may mark a string field with the generated JSON
+Schema extension `x-mission-control-reference`. Core currently defines
+`credential` and `workspace-principal` reference kinds. Credential references
+resolve against names configured for that plugin and require its `credentials`
+permission; workspace-principal references resolve against the core workspace
+catalog. Unknown kinds, non-string annotations, and missing references fail
+before database creation, migrations, or plugin import. The extension belongs in
+the plugin's CUE-owned schema overlay. `mcctl plugin conformance --workspace
+WORKSPACE.json` supplies the principal catalog to plugin-author tests without
+exposing Mission Control's internal models to the plugin.
+
 ## Closed-item contribution interface
 
 Plugins declaring the `closed-items` capability may project entities that are currently completed or otherwise closed through `mission-control.closed-items/v1`. Activation rejects a provider whose implementation and registration disagree. This current-state projection remains separate from the active agenda and from immutable owner-domain event history. Each item carries its stable source reference, owner-defined display state, closure timestamp, optional context, opaque revision, and current affordances.

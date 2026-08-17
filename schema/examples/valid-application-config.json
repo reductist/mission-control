@@ -7,7 +7,17 @@
   "plugins": {
     "google-calendar": {
       "enabled": true,
-      "settings": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+      "settings": {
+        "connections": {
+          "demo": {
+            "label": "Google demo",
+            "mode": "demo",
+            "demo_anchor_date": "2026-08-14",
+            "calendars": {"mode": "defaults"},
+            "tasks": {"mode": "all"}
+          }
+        }
+      }
     },
     "landscape": {"enabled": false}
   }

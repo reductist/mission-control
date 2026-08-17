@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.google-mapping-cases/v2",
+  "schema_version": "mission-control.google-mapping-cases/v3",
   "cases": [
     {
       "name": "calendar mappings cannot claim a task source type",
@@ -14,7 +14,7 @@
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v2",
+        "schema_version": "mission-control.google-mapping/v3",
         "status": "mapped",
         "entry": {
           "attribution": {"principal_ids": []},

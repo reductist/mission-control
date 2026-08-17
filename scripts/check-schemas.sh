@@ -409,6 +409,10 @@ expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED"
   ./schema/google/examples/invalid-live-demo-anchor.json
 expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
   ./schema/google/examples/invalid-demo-date.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-duplicate-selection.json
+expect_failure '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
+  ./schema/google/examples/invalid-duplicate-principal.json
 
 expect_cue_failure() {
   local definition="$1"

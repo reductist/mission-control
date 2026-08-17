@@ -1,8 +1,15 @@
 # Mission Control
 
-Mission Control is a portable, self-hosted source of truth for projects, tasks, decisions, and durable operational history.
+Mission Control brings the work scattered across calendars, task lists, and
+special-purpose tools into one calm place. Its job is to absorb the sharp edges
+of those integrations, check what they send, and present consistent controls
+that ask for less attention. The technology should serve the people using it:
+lighten cognitive load, preserve context, and free up focus for the things that
+actually matter.
 
-A NixOS host is the first deployment target and proving ground, not an application dependency. Mission Control remains usable independently of NixOS and any particular host configuration.
+It is portable and self-hosted. NixOS is the first convenient deployment target
+and proving ground, not an application dependency; the application and its
+configuration do not assume Nix, systemd, or any particular host.
 
 ## Naming
 
@@ -36,7 +43,7 @@ The executable implementation provides:
 - browser task creation, completion, and reopening through authoritative owners
 - responsive Overview, completed History, focused entity notes with collapsible activity, and synthetic House demo workspaces
 - an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, agenda projections, and owner-routed completion
-- an explicitly selected read-only Google provider with Calendar events, appointments, Tasks, and migrated Reminders projected into a generic Schedule view
+- an explicitly selected read-only Google Calendar provider with independently isolated account connections; Calendar events, appointments, Tasks, and migrated Reminders project into a generic Schedule view
 - validated per-plugin settings, named runtime credentials, background refresh jobs, stale-cache retention, and safe provider health
 - deterministic Markdown task rendering
 - pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
@@ -73,7 +80,7 @@ mcctl --database ./mission-control.db agenda list --format table
 mcctl --database ./mission-control.db render markdown
 mcctl config validate ./mission-control.toml
 mcctl config effective ./mission-control.toml
-mcctl config explain ./mission-control.toml /plugins/google-calendar/settings/mode
+mcctl config explain ./mission-control.toml /plugins/google-calendar/settings/connections/demo/mode
 mcctl plugin validate ./plugins/reference/registration.json
 mcctl plugin list --root ./plugins
 mcctl plugin list --root ./plugins --format table
@@ -101,9 +108,14 @@ path = "mission-control-demo.db"
 [plugins.google-calendar]
 enabled = true
 
-[plugins.google-calendar.settings]
+[plugins.google-calendar.settings.connections.demo]
+label = "Google demo"
 mode = "demo"
 demo_anchor_date = "2026-08-14"
+[plugins.google-calendar.settings.connections.demo.calendars]
+mode = "defaults"
+[plugins.google-calendar.settings.connections.demo.tasks]
+mode = "all"
 
 [plugins.landscape]
 enabled = true

@@ -1,28 +1,23 @@
 {
     "schema_version": "mission-control.plugin-config-presentation/v1",
-    "configuration_schema": "mission-control.google-calendar.config/v1",
+    "configuration_schema": "mission-control.google-calendar.config/v2",
     "fields": [
         {
-            "path": "/settings/mode",
-            "label": "Connection mode",
-            "order": 10,
-            "widget": "select"
+            "path": "/settings/connections",
+            "label": "Google connections",
+            "order": 10
         },
         {
-            "path": "/credentials/oauth/file",
-            "label": "Google authorization",
+            "path": "/settings/lookback_days",
+            "label": "Past calendar window",
             "order": 20,
-            "widget": "credential-file"
+            "widget": "number"
         },
         {
-            "path": "/settings/calendar_ids",
-            "label": "Calendars",
-            "order": 30
-        },
-        {
-            "path": "/settings/task_list_ids",
-            "label": "Task lists",
-            "order": 40
+            "path": "/settings/lookahead_days",
+            "label": "Future calendar window",
+            "order": 30,
+            "widget": "number"
         }
     ]
 }

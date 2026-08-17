@@ -48,20 +48,63 @@ def test_reference_bundle_materializes_defaults_without_overwriting_values() -> 
     ("settings", "credentials", "expected"),
     [
         (
-            {"mode": "demo", "demo_anchor_date": "2026-02-31"},
+            {
+                "connections": {
+                    "demo": {
+                        "label": "Demo",
+                        "mode": "demo",
+                        "demo_anchor_date": "2026-02-31",
+                        "calendars": {"mode": "defaults"},
+                        "tasks": {"mode": "disabled"},
+                    }
+                }
+            },
             {},
             "date format",
         ),
-        ({"mode": "live"}, {}, r"credentials/oauth.*required"),
         (
-            {"mode": "demo"},
-            {"oauth": "/private/oauth.json"},
-            r"/credentials.*allowed value",
+            {
+                "connections": {
+                    "live": {
+                        "label": "Live",
+                        "mode": "live",
+                        "credential": "missing",
+                        "calendars": {"mode": "defaults"},
+                        "tasks": {"mode": "disabled"},
+                    }
+                }
+            },
+            {},
+            "unknown credential reference",
         ),
         (
-            {"mode": "live", "demo_anchor_date": "2026-08-14"},
+            {
+                "connections": {
+                    "demo": {
+                        "label": "Demo",
+                        "mode": "demo",
+                        "credential": "oauth",
+                        "calendars": {"mode": "defaults"},
+                        "tasks": {"mode": "disabled"},
+                    }
+                }
+            },
             {"oauth": "/private/oauth.json"},
-            "demo_anchor_date.*unknown field",
+            "credential.*unknown field",
+        ),
+        (
+            {
+                "connections": {
+                    "demo": {
+                        "label": "Demo",
+                        "mode": "demo",
+                        "calendars": {"mode": "selected", "ids": []},
+                        "tasks": {"mode": "disabled"},
+                    }
+                }
+            },
+            {},
+            "configuration violates",
         ),
     ],
 )
@@ -81,27 +124,125 @@ def test_google_valid_date_and_credentials_materialize_effective_defaults() -> N
     demo = validate_plugin_configuration(
         google_registration(),
         resource_reader(GOOGLE_ROOT),
-        {"mode": "demo", "demo_anchor_date": "2026-08-14"},
+        {
+            "connections": {
+                "demo": {
+                    "label": "Demo",
+                    "mode": "demo",
+                    "demo_anchor_date": "2026-08-14",
+                    "calendars": {"mode": "defaults"},
+                    "tasks": {"mode": "all"},
+                }
+            }
+        },
         {},
     )
     live = validate_plugin_configuration(
         google_registration(),
         resource_reader(GOOGLE_ROOT),
-        {"mode": "live"},
+        {
+            "connections": {
+                "personal": {
+                    "label": "Personal Google",
+                    "mode": "live",
+                    "credential": "oauth",
+                    "calendars": {"mode": "selected", "ids": ["primary"]},
+                    "tasks": {"mode": "disabled"},
+                }
+            }
+        },
         {"oauth": "/private/oauth.json"},
     )
 
     assert demo.settings.to_dict() == {
-        "calendar_ids": [],
-        "demo_anchor_date": "2026-08-14",
+        "connections": {
+            "demo": {
+                "label": "Demo",
+                "mode": "demo",
+                "demo_anchor_date": "2026-08-14",
+                "calendars": {"mode": "defaults"},
+                "tasks": {"mode": "all"},
+            }
+        },
         "lookahead_days": 42,
         "lookback_days": 42,
-        "mode": "demo",
         "request_timeout_seconds": 15,
         "sync_interval_seconds": 300,
-        "task_list_ids": [],
     }
     assert live.credentials == (("oauth", "/private/oauth.json"),)
+
+
+def test_google_attribution_uses_core_workspace_principal_catalog() -> None:
+    settings = {
+        "connections": {
+            "family": {
+                "label": "Family Google",
+                "mode": "demo",
+                "calendars": {"mode": "defaults"},
+                "tasks": {"mode": "disabled"},
+                "attribution": {
+                    "calendars": {
+                        "primary": {"principal_ids": ["pat"]},
+                    }
+                },
+            }
+        }
+    }
+
+    validated = validate_plugin_configuration(
+        google_registration(),
+        resource_reader(GOOGLE_ROOT),
+        settings,
+        {},
+        reference_catalogs={"workspace-principal": frozenset({"pat"})},
+    )
+    assert validated.settings.to_dict()["connections"]["family"]["attribution"] == {
+        "calendars": {"primary": {"principal_ids": ["pat"]}}
+    }
+
+    with pytest.raises(
+        PluginConfigurationError,
+        match=r"/settings/connections/family/attribution/calendars/primary/principal_ids/0: unknown workspace-principal reference",
+    ):
+        validate_plugin_configuration(
+            google_registration(),
+            resource_reader(GOOGLE_ROOT),
+            settings,
+            {},
+            reference_catalogs={"workspace-principal": frozenset()},
+        )
+
+
+def test_semantic_references_follow_only_the_matching_union_branch() -> None:
+    documents = {
+        name: json.loads((REFERENCE_ROOT / name).read_text(encoding="utf-8"))
+        for name in (
+            "config.schema.json",
+            "config.defaults.json",
+            "config.presentation.json",
+        )
+    }
+    documents["config.schema.json"]["properties"]["settings"]["properties"][
+        "message"
+    ] = {
+        "oneOf": [
+            {"const": "ordinary"},
+            {
+                "type": "string",
+                "const": "person-reference",
+                "x-mission-control-reference": "workspace-principal",
+            },
+        ]
+    }
+
+    validated = validate_plugin_configuration(
+        load_registration(REFERENCE_ROOT / "registration.json"),
+        documents.__getitem__,
+        {"message": "ordinary"},
+        {},
+    )
+
+    assert validated.settings.to_dict()["message"] == "ordinary"
 
 
 @pytest.mark.parametrize(
@@ -128,6 +269,27 @@ def test_google_valid_date_and_credentials_materialize_effective_defaults() -> N
                 {"$id": "https://example.test/nested"}
             ),
             "identity and dialect only at its root",
+        ),
+        (
+            "config.schema.json",
+            lambda value: value["properties"]["settings"]["properties"][
+                "message"
+            ].update({"x-mission-control-reference": "credential"}),
+            "credential references require credentials permission",
+        ),
+        (
+            "config.schema.json",
+            lambda value: value["properties"]["settings"].update(
+                {"x-mission-control-reference": "workspace-principal"}
+            ),
+            "semantic references must annotate a string",
+        ),
+        (
+            "config.schema.json",
+            lambda value: value["properties"]["settings"]["properties"][
+                "message"
+            ].update({"x-mission-control-reference": "invented-catalog"}),
+            "unsupported semantic reference",
         ),
         (
             "config.defaults.json",

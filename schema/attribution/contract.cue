@@ -5,6 +5,7 @@ package attribution
 import common "mission-control.dev/schema/common"
 
 #Identifier: string & =~"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+#CollectionID: string & !~"^\\s*$"
 
 #Connection: close({
 	id!:    #Identifier
@@ -12,7 +13,7 @@ import common "mission-control.dev/schema/common"
 })
 
 #Collection: close({
-	id!:    #Identifier
+	id!:    #CollectionID
 	kind!:  #Identifier
 	label!: string & !~"^\\s*$"
 })
@@ -49,7 +50,7 @@ import common "mission-control.dev/schema/common"
 	kind!:          "collection"
 	plugin_id!:     common.#PluginID
 	connection_id!: #Identifier
-	collection_id!: #Identifier
+	collection_id!: #CollectionID
 })
 
 #AccentTarget: #PrincipalTarget | #PluginTarget | #ConnectionTarget | #CollectionTarget

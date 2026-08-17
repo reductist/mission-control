@@ -12,12 +12,13 @@ def activate(context: PluginContext) -> CapabilityRouter:
 
     def health(_inputs):
         return {
-            "schema_version": "mission-control.plugin-health/v1",
+            "schema_version": "mission-control.plugin-health/v2",
             "plugin_id": context.plugin_id,
             "state": "ready",
             "code": "reference-ready",
             "detail": message,
             "checked_at": datetime.now(UTC).isoformat(),
+            "components": [],
         }
 
     return CapabilityRouter(context.plugin_id, {"health.get": health})

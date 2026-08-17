@@ -6,7 +6,7 @@ import hashlib
 import html
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from html.parser import HTMLParser
 from typing import Any
@@ -22,10 +22,28 @@ class GoogleCollection:
     external_id: str
     label: str
     access_role: str | None = None
+    connection_id: str = "default"
+    connection_label: str = "Google Calendar"
+    principal_ids: tuple[str, ...] = ()
 
     @property
     def collection_key(self) -> str:
-        return _stable_id(f"{self.kind}\0{self.external_id}", prefix="gsrc")
+        return _stable_id(
+            f"{self.connection_id}\0{self.kind}\0{self.external_id}", prefix="gsrc"
+        )
+
+    def for_connection(
+        self,
+        connection_id: str,
+        connection_label: str,
+        principal_ids: tuple[str, ...],
+    ) -> GoogleCollection:
+        return replace(
+            self,
+            connection_id=connection_id,
+            connection_label=connection_label,
+            principal_ids=principal_ids,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +66,11 @@ class GoogleEntry:
     source_url: str | None
     revision: str
     updated_at: datetime
+    connection_id: str
+    connection_label: str
+    collection_external_id: str
+    collection_kind: str
+    principal_ids: tuple[str, ...]
 
 
 class _PlainTextParser(HTMLParser):
@@ -96,7 +119,9 @@ def calendar_event(
     occurrence = ""
     if isinstance(original, Mapping):
         occurrence = str(original.get("dateTime") or original.get("date") or "")
-    identity = f"{collection.external_id}\0{remote_id}\0{occurrence}"
+    identity = (
+        f"{collection.connection_id}\0{collection.external_id}\0{remote_id}\0{occurrence}"
+    )
     free_busy_only = collection.access_role == "freeBusyReader"
     title = (
         "Busy" if free_busy_only else _optional_text(document.get("summary")) or "Busy"
@@ -146,6 +171,11 @@ def calendar_event(
         source_url=source_url,
         revision=revision,
         updated_at=updated_at,
+        connection_id=collection.connection_id,
+        connection_label=collection.connection_label,
+        collection_external_id=collection.external_id,
+        collection_kind=collection.kind,
+        principal_ids=collection.principal_ids,
     )
 
 
@@ -161,7 +191,8 @@ def google_task(
     notes = _optional_text(document.get("notes"))
     return GoogleEntry(
         entity_id=_stable_id(
-            f"{collection.external_id}\0{remote_id}", prefix="gtask"
+            f"{collection.connection_id}\0{collection.external_id}\0{remote_id}",
+            prefix="gtask",
         ),
         collection_key=collection.collection_key,
         remote_id=remote_id,
@@ -180,6 +211,11 @@ def google_task(
         source_url=_safe_url(document.get("webViewLink")),
         revision=_revision(document),
         updated_at=_updated_at(document),
+        connection_id=collection.connection_id,
+        connection_label=collection.connection_label,
+        collection_external_id=collection.external_id,
+        collection_kind=collection.kind,
+        principal_ids=collection.principal_ids,
     )
 
 

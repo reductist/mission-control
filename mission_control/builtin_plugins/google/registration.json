@@ -11,7 +11,7 @@
   },
   "permissions": ["database", "network", "credentials"],
   "configuration": {
-    "document_version": "mission-control.google-calendar.config/v1",
+    "document_version": "mission-control.google-calendar.config/v2",
     "schema_resource": "config.schema.json",
     "defaults_resource": "config.defaults.json",
     "presentation_resource": "config.presentation.json"

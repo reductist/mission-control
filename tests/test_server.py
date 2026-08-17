@@ -178,7 +178,17 @@ def test_failed_plugin_activation_is_isolated_from_other_plugins(
     prepared = prepare_builtin_agenda_plugins(
         ("google-calendar", "landscape"),
         configurations={
-            "google-calendar": {"mode": "demo", "demo_anchor_date": "2026-08-14"}
+            "google-calendar": {
+                "connections": {
+                    "demo": {
+                        "label": "Google demo",
+                        "mode": "demo",
+                        "demo_anchor_date": "2026-08-14",
+                        "calendars": {"mode": "defaults"},
+                        "tasks": {"mode": "all"},
+                    }
+                }
+            }
         },
     )
     activate_one = plugin_lifecycle._activate_one
@@ -213,8 +223,15 @@ def test_failed_plugin_job_discovery_does_not_abort_startup_or_leak_details(
         ("google-calendar", "landscape"),
         configurations={
             "google-calendar": {
-                "mode": "demo",
-                "demo_anchor_date": "2026-08-14",
+                "connections": {
+                    "demo": {
+                        "label": "Google demo",
+                        "mode": "demo",
+                        "demo_anchor_date": "2026-08-14",
+                        "calendars": {"mode": "defaults"},
+                        "tasks": {"mode": "all"},
+                    }
+                },
             }
         },
     )
