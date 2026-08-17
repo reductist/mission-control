@@ -198,12 +198,21 @@ Health reports include a stable code, safe operator-facing detail, and optional 
 
 ## Compatibility policy
 
-Before the interfaces become stable, changes may be made directly but must update the contract tests and reference plugin. After stabilization:
+Closed CUE document shapes are immutable once published. Field additions—including
+optional fields—removals, renames, type or constraint changes, discriminator
+changes, and meaning changes require a new `schema_version`. The runtime/plugin API
+version is a separate compatibility dimension and does not negotiate document
+shape.
 
-- additive optional fields are compatible
-- required-field additions require a new interface version
-- meaning changes require a new interface version
-- removals require deprecation and a declared support window
-- migrations never run until compatibility checks succeed
+Before 1.0, Mission Control supports only the current document version and rejects
+unsupported versions explicitly. Breaking transitions update every built-in and
+reference plugin together and migrate persisted data when required; the project
+does not retain speculative dual readers for external consumers that do not exist.
+
+After external plugins or clients require a compatibility window, version adapters
+will be isolated at validation/parsing/serialization boundaries, target one current
+internal model, and have a declared removal release. Migrations never run until
+both runtime and document compatibility checks succeed. See
+[`docs/configuration-and-schema-evolution.md`](docs/configuration-and-schema-evolution.md).
 
 Generated schemas and documentation must be reproducible. CI will eventually fail when checked-in generated artifacts drift from their source schema.

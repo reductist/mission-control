@@ -51,6 +51,10 @@ Every plugin, including built-in plugins, runs the same reusable contract tests.
 - no plugin writes to private core or another plugin's tables
 - no plugin imports private core implementation modules
 - no built-in plugin receives capabilities unavailable to the reference plugin
+- the reference plugin imports only the public adapter and its own implementation
+- configuration has one CUE-derived validator rather than a manifest/runtime duplicate
+- capability inputs and outputs validate as JSON before core converts them internally
+- plugin persistence and event append use only its assigned namespaced transaction adapter
 
 A minimal reference plugin should exist solely to exercise the complete extension surface.
 

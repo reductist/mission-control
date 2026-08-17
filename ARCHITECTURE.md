@@ -50,6 +50,13 @@ Each plugin owns:
 
 Plugins may use only documented core interfaces. They must not import private core modules, mutate core projections directly, modify another plugin's tables, bypass authorization, or emit unvalidated events.
 
+The target authoring boundary is versioned JSON validated from CUE, with a small
+public language adapter. In-process Python is an initial runtime mechanism, not a
+license for plugins to exchange core-private classes. Core supplies a narrow,
+plugin-namespaced storage and event adapter inside one transaction so domain
+mutation and event append remain atomic. See
+[`docs/configuration-and-schema-evolution.md`](docs/configuration-and-schema-evolution.md).
+
 ## Public plugin lifecycle
 
 All plugins, including built-in plugins, follow the same lifecycle:
@@ -101,6 +108,10 @@ The architecture should preserve these properties:
 10. Public interface compatibility is testable before startup and upgrade.
 
 ## Configuration
+
+The detailed source, merge, identity, setup-write, and pre-1.0 schema-evolution
+decisions are recorded in
+[`docs/configuration-and-schema-evolution.md`](docs/configuration-and-schema-evolution.md).
 
 Mission Control accepts one application-level configuration format with:
 
