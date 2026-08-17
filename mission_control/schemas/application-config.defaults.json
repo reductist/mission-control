@@ -1,5 +1,5 @@
 {
-    "schema_version": "mission-control.config/v1",
+    "schema_version": "mission-control.config/v2",
     "database": {
         "path": "mission-control.db"
     },
@@ -9,5 +9,9 @@
     },
     "demo": false,
     "plugin_roots": [],
+    "workspace": {
+        "principals": {},
+        "accents": []
+    },
     "plugins": {}
 }

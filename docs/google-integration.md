@@ -46,7 +46,7 @@ translates Mission Control changes into Google API writes.
 No Google account or secret is needed. Create `mission-control-demo.toml`:
 
 ```toml
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 demo = true
 [database]
 path = "mission-control-demo.db"
@@ -92,7 +92,7 @@ On POSIX systems, Mission Control rejects files accessible by group or other use
    `mission-control.toml`:
 
 ```toml
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [database]
 path = "mission-control.db"
 [plugins.google-calendar]

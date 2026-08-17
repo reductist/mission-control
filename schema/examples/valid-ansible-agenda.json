@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.agenda/v1",
+  "schema_version": "mission-control.agenda/v2",
   "provider": {"plugin_id": "ansible-automation"},
   "revision": "ansible-22",
   "generated_at": "2026-07-29T13:00:00-04:00",
@@ -12,6 +12,7 @@
         "entity_id": "nightly-backup-2026-07-30t020000z"
       },
       "title": "Run nightly backup playbook",
+      "attribution": {"principal_ids": []},
       "kind": "event",
       "timing": {
         "kind": "timed",
@@ -27,6 +28,7 @@
         "entity_id": "restore-test-188"
       },
       "title": "Review failed restore test",
+      "attribution": {"principal_ids": []},
       "kind": "action",
       "state": "blocked",
       "timing": {"kind": "anytime"}

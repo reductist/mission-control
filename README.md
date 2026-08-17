@@ -92,7 +92,7 @@ validation do not initialize the database or import plugin implementation code.
 Create `mission-control-demo.toml`:
 
 ```toml
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 demo = true
 
 [database]

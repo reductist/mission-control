@@ -3,7 +3,7 @@
 The flake exports `nixosModules.default` and `nixosModules.mission-control`. The module installs and supervises the same `mctrld` application provided by the portable package.
 
 The module's Nix options are an adapter: they generate
-`mission-control.config/v1` TOML and start `mctrld --config` with that document.
+`mission-control.config/v2` TOML and start `mctrld --config` with that document.
 They do not implement alternate plugin, default, credential, or validation
 semantics.
 
@@ -73,6 +73,10 @@ manifest resources may live outside the bundled package, but the Python module
 declared by each runtime entrypoint must already be installed in the service's
 package closure.
 
+The optional `workspace` attribute set passes the renderer-neutral principal and
+accent catalog through to the same canonical application document used by direct
+installs. The adapter does not reinterpret or separately validate those semantics.
+
 The settings file may enter the Nix store and must not contain OAuth values. The module decodes it into the plugin's namespaced settings in the generated canonical TOML. The credential source is loaded by PID 1 into the service's private `/run/credentials` directory; only that runtime file reference appears in configuration, and secret contents are not copied into the store or passed as process arguments. See [`../../docs/google-integration.md`](../../docs/google-integration.md) for the settings and OAuth contract.
 
 Do not point demo mode at a production database.
@@ -103,6 +107,7 @@ services.mission-control.databasePath
 services.mission-control.host
 services.mission-control.port
 services.mission-control.demo
+services.mission-control.workspace
 services.mission-control.plugins
 services.mission-control.pluginRoots
 services.mission-control.pluginSettings

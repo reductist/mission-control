@@ -32,7 +32,7 @@ const context = {
 context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(
-  `${source}\n;globalThis.scheduleTest = { calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, escapeHtml, shiftCivilDate };`,
+  `${source}\n;globalThis.scheduleTest = { calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, entryAccentToken, entryProvenance, escapeHtml, setDashboard(value) { dashboard = value; }, shiftCivilDate };`,
   context,
 );
 
@@ -100,6 +100,98 @@ test("provider text remains literal when rendered", () => {
     scheduleTest.escapeHtml('<img src=x onerror="alert(1)">'),
     "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;",
   );
+});
+
+test("typed attribution resolves people and source without relying on color", () => {
+  scheduleTest.setDashboard({
+    attribution_catalog: {
+      principals: [
+        { id: "patrik", label: "Patrik", kind: "person" },
+        { id: "elizabeth", label: "Elizabeth", kind: "person" },
+      ],
+      accents: [
+        { token: "accent-2", target: { kind: "principal", principal_id: "elizabeth" } },
+      ],
+    },
+    providers: [{ id: "google-calendar", name: "Google Calendar" }],
+  });
+  const entry = {
+    source: { plugin_id: "google-calendar" },
+    attribution: {
+      principal_ids: ["patrik", "elizabeth"],
+      integration: {
+        connection: { id: "family", label: "Family Google" },
+        collection: { id: "shared", kind: "calendar", label: "Family calendar" },
+      },
+    },
+  };
+
+  assert.equal(
+    scheduleTest.entryProvenance(entry),
+    "Patrik & Elizabeth — Family calendar · Family Google",
+  );
+  assert.equal(scheduleTest.entryAccentToken(entry), "accent-2");
+});
+
+test("conflicting shared-owner accents are order-independent", () => {
+  scheduleTest.setDashboard({
+    attribution_catalog: {
+      principals: [
+        { id: "a", label: "Alex", kind: "person" },
+        { id: "b", label: "Alex", kind: "person" },
+      ],
+      accents: [
+        { token: "accent-1", target: { kind: "principal", principal_id: "a" } },
+        { token: "accent-2", target: { kind: "principal", principal_id: "b" } },
+        { token: "accent-5", target: { kind: "plugin", plugin_id: "google-calendar" } },
+      ],
+    },
+    providers: [{ id: "google-calendar", name: "Google Calendar" }],
+  });
+  const entry = (principalIds) => ({
+    source: { plugin_id: "google-calendar" },
+    attribution: { principal_ids: principalIds },
+  });
+
+  assert.equal(scheduleTest.entryAccentToken(entry(["a", "b"])), "accent-5");
+  assert.equal(scheduleTest.entryAccentToken(entry(["b", "a"])), "accent-5");
+  assert.equal(
+    scheduleTest.entryProvenance(entry(["a", "b"])),
+    "Alex & Alex — Google Calendar",
+  );
+});
+
+test("collection accents are scoped by plugin and connection", () => {
+  scheduleTest.setDashboard({
+    attribution_catalog: {
+      principals: [],
+      accents: [
+        {
+          token: "accent-5",
+          target: {
+            kind: "collection",
+            plugin_id: "google-calendar",
+            connection_id: "home",
+            collection_id: "shared",
+          },
+        },
+      ],
+    },
+    providers: [{ id: "google-calendar", name: "Google Calendar" }],
+  });
+  const entry = (connection) => ({
+    source: { plugin_id: "google-calendar" },
+    attribution: {
+      principal_ids: [],
+      integration: {
+        connection: { id: connection, label: `${connection} Google` },
+        collection: { id: "shared", kind: "calendar", label: "Shared" },
+      },
+    },
+  });
+
+  assert.equal(scheduleTest.entryAccentToken(entry("home")), "accent-5");
+  assert.equal(scheduleTest.entryAccentToken(entry("work")), "");
 });
 
 test("calendar ranges use civil dates across leap years and DST", () => {

@@ -11,6 +11,10 @@ pkgs.testers.nixosTest {
       demo = true;
       plugins = [ "google-calendar" "landscape" ];
       pluginSettings."google-calendar" = ../../mission_control/builtin_plugins/google/demo-settings.json;
+      workspace.principals.patrik = {
+        label = "Patrik";
+        kind = "person";
+      };
     };
 
     environment.systemPackages = [ pkgs.curl ];
@@ -46,6 +50,9 @@ pkgs.testers.nixosTest {
     )
     machine.succeed(
       "curl --fail --silent http://127.0.0.1:8000/api/dashboard | grep -q 'Download offline maps'"
+    )
+    machine.succeed(
+      "curl --fail --silent http://127.0.0.1:8000/api/dashboard | grep -q '\"label\": \"Patrik\"'"
     )
     machine.succeed(
       "curl --fail --silent http://127.0.0.1:8000/ | grep -q 'Schedule'"

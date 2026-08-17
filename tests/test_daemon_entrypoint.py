@@ -24,7 +24,7 @@ def test_invalid_enabled_plugin_configuration_aborts_before_database_or_import(
     config = tmp_path / "config.toml"
     config.write_text(
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [database]
 path = "{database}"
 [plugins.google-calendar]
@@ -61,7 +61,7 @@ def test_daemon_consumes_effective_config_and_starts_valid_plugins(
     config = tmp_path / "config.toml"
     config.write_text(
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 demo = true
 [database]
 path = "{database}"

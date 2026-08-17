@@ -17,18 +17,25 @@ pieces:
   calendar, or person; and
 - closed CUE document shapes had no precise pre-1.0 evolution rule.
 
-The first two delivery slices below established canonical configuration and one
-CUE-owned plugin configuration boundary. Attribution remains the next prerequisite
-for browser setup, multiple Google accounts, and owner/source filters.
+The first four delivery slices below established canonical configuration, one
+CUE-owned plugin configuration boundary, and transport-neutral JSON capability
+calls. Typed attribution is the current prerequisite for browser setup, multiple
+Google accounts, and owner/source filters.
 
 ## Decision
 
 ### One canonical application configuration
 
-Mission Control will define `mission-control.config/v1` in CUE and generate the
+Mission Control will define `mission-control.config/v2` in CUE and generate the
 runtime JSON Schema from it. Direct execution, NixOS, containers, appliances, and
 the setup wizard are configuration producers; none may define different merge,
 validation, default, credential, or plugin semantics.
+
+NixOS is a convenient current release and integration-test target, not the
+reference application environment. Core code and public contracts may not assume
+Nix, the Nix store, systemd, immutable hosts, or NixOS credential mechanics.
+Those belong only to deployment adapters that translate into the portable
+application document and credential-file boundary.
 
 The operator model is:
 
@@ -101,7 +108,7 @@ The identities have distinct meanings:
   command routing, URLs, package metadata, and database namespaces.
 - **Connection ID** is a stable plugin-owned configuration key for one external
   account, workspace, controller, or endpoint.
-- **Source ID** identifies a collection within a connection, such as a calendar,
+- **Collection ID** identifies a collection within a connection, such as a calendar,
   task list, repository, or channel.
 - **Principal ID** identifies a person or group in the core-owned workspace catalog
   so the same principal can group entries from Google, Tasks, and future plugins.
@@ -110,14 +117,18 @@ The identities have distinct meanings:
 Source references continue to route authoritative reads and commands by plugin.
 Their `entity_id` is unique within the plugin across every connection; Google must
 derive it from connection, collection, and upstream entity identity. Connection,
-source, and principal attribution are separate typed read metadata. A contribution
+collection, and principal attribution are separate typed read metadata. A contribution
 may name zero or more principals because shared ownership is real; each principal
 reference points to the workspace catalog. Connection IDs are scoped by plugin,
-and source IDs are scoped by plugin plus connection, so filter keys always include
+and collection IDs are scoped by plugin plus connection, so filter keys always include
 that scope. Plugin configuration stores principal IDs, not duplicate person
-records. Core validates principal references against the workspace catalog during
-whole-configuration semantic validation, before plugin import or database open; a
-missing principal is an explicit configuration error. Color is a workspace
+records. Agenda output references are validated against the workspace catalog at
+the provider read boundary. Plugin-configuration principal references must also be
+validated before import or database open, but static JSON Schema cannot join a
+plugin document to the workspace catalog by itself. The Google-connection slice
+must therefore add a generic typed-reference annotation to configuration bundles
+or an equivalent whole-document semantic validator; this guarantee must not be
+implemented as a Google-specific core check. Color is a workspace
 presentation preference keyed to typed identity, not identity itself, and every
 view retains a textual owner/source indication.
 
@@ -166,9 +177,7 @@ presentation-metadata artifacts. The manifest names and version-binds those
 resources. Runtime and CUE parity fixtures must produce the same effective values
 and failures; a CUE feature is not allowed in a public plugin configuration until
 the packaged runtime evaluator preserves its semantics. JSON Schema validation
-alone does not apply CUE defaults. Versioned JSON capability calls remain the next
-author-facing simplification because Python plugins still import core domain
-classes and return in-process objects.
+alone does not apply CUE defaults.
 
 Capability calls exchange versioned JSON documents. Core owns validation and
 conversion into internal immutable values. A small public Python adapter may make
@@ -206,7 +215,7 @@ evidence shows it should be split further.
 4. **Complete:** introduce versioned JSON capability calls, a small public adapter, and a
    conformance command/reference plugin. Preserve the existing namespaced shared
    transaction boundary; built-ins use the same adapter.
-5. Introduce the next agenda version with scoped connection/source/principal
+5. Introduce the next agenda version with scoped connection/collection/principal
    attribution, independent of presentation colors and authoritative `SourceRef`.
 6. Add Google-owned multiple connections, explicit calendar/task enablement and
    selection policies, partitioned cache/sync, attribution mapping, and a versioned

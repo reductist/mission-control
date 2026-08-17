@@ -62,6 +62,7 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Plugin configuration presentation | `schema/plugin/configuration.cue` | `mission_control/schemas/plugin-config-presentation.schema.json` |
 | Application configuration | `schema/config/application.cue` | `mission_control/schemas/application-config.schema.json` |
 | Agenda contribution | `schema/agenda/contribution.cue` | `mission_control/schemas/agenda-contribution.schema.json` |
+| Attribution catalog | `schema/attribution/contract.cue` | `mission_control/schemas/attribution-catalog.schema.json` |
 | Agenda query | `schema/agenda/query.cue` | `mission_control/schemas/agenda-query.schema.json` |
 | Closed-item contribution | `schema/closed-items/contribution.cue` | `mission_control/schemas/closed-items-contribution.schema.json` |
 | Entity detail and activity | `schema/entity-detail/contract.cue` | `mission_control/schemas/entity-detail.schema.json` |

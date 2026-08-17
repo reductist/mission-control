@@ -25,6 +25,8 @@ PLUGIN_RUNTIME_GENERATED="$GENERATED_DIR/plugin-runtime.runtime-check.schema.jso
 PLUGIN_RUNTIME_RUNTIME="$ROOT_DIR/mission_control/schemas/plugin-runtime.schema.json"
 AGENDA_GENERATED="$GENERATED_DIR/agenda-contribution.runtime-check.schema.json"
 AGENDA_RUNTIME="./mission_control/schemas/agenda-contribution.schema.json"
+ATTRIBUTION_GENERATED="$GENERATED_DIR/attribution-catalog.runtime-check.schema.json"
+ATTRIBUTION_RUNTIME="./mission_control/schemas/attribution-catalog.schema.json"
 AGENDA_QUERY_GENERATED="$GENERATED_DIR/agenda-query.runtime-check.schema.json"
 AGENDA_QUERY_RUNTIME="./mission_control/schemas/agenda-query.schema.json"
 COMMAND_GENERATED="$GENERATED_DIR/command-envelope.runtime-check.schema.json"
@@ -101,12 +103,15 @@ python ./scripts/merge-json.py "$PLUGIN_RAW" "$PLUGIN_OVERLAY" "$PLUGIN_GENERATE
   cue def --force --out jsonschema -e '#PluginRuntimeDocument' \
     -o "$PLUGIN_RUNTIME_GENERATED" ./plugin
 )
-cue def --force --out jsonschema -e '#AgendaContribution' \
-  -o "$AGENDA_GENERATED" \
-  ./schema/agenda
-cue def --force --out jsonschema -e '#AgendaQuery' \
-  -o "$AGENDA_QUERY_GENERATED" \
-  ./schema/agenda
+(
+  cd ./schema
+  cue def --force --out jsonschema -e '#AgendaContribution' \
+    -o "$AGENDA_GENERATED" ./agenda
+  cue def --force --out jsonschema -e '#AttributionCatalog' \
+    -o "$ATTRIBUTION_GENERATED" ./attribution
+  cue def --force --out jsonschema -e '#AgendaQuery' \
+    -o "$AGENDA_QUERY_GENERATED" ./agenda
+)
 cue def --force --out jsonschema -e '#CommandEnvelope' \
   -o "$COMMAND_GENERATED" \
   ./schema/command
@@ -223,6 +228,7 @@ compare_schema "$PLUGIN_HEALTH_GENERATED" "$PLUGIN_HEALTH_RUNTIME" "plugin healt
 compare_schema "$PLUGIN_JOBS_GENERATED" "$PLUGIN_JOBS_RUNTIME" "plugin jobs"
 compare_schema "$PLUGIN_RUNTIME_GENERATED" "$PLUGIN_RUNTIME_RUNTIME" "plugin runtime"
 compare_schema "$AGENDA_GENERATED" "$AGENDA_RUNTIME" "agenda contribution"
+compare_schema "$ATTRIBUTION_GENERATED" "$ATTRIBUTION_RUNTIME" "attribution catalog"
 compare_schema "$AGENDA_QUERY_GENERATED" "$AGENDA_QUERY_RUNTIME" "agenda query"
 compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
 compare_schema "$COMMAND_RESULT_GENERATED" "$COMMAND_RESULT_RUNTIME" "command result"

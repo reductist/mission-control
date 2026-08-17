@@ -320,7 +320,7 @@ class SQLiteGoogleRepository:
             ).encode("utf-8")
         ).hexdigest()
         return AgendaContribution(
-            schema_version=AgendaSchemaVersion.V1,
+            schema_version=AgendaSchemaVersion.V2,
             provider=ProviderRef(PLUGIN_ID),
             revision=revision,
             generated_at=generated_at,

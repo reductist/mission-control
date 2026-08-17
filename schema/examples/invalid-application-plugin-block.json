@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.config/v1",
+  "schema_version": "mission-control.config/v2",
   "plugins": {
     "google-calendar": {
       "enabled": true,

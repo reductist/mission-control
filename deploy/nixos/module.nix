@@ -25,7 +25,7 @@ let
     }
   );
   applicationConfig = toml.generate "mission-control.toml" {
-    schema_version = "mission-control.config/v1";
+    schema_version = "mission-control.config/v2";
     database.path = cfg.databasePath;
     http = {
       host = cfg.host;
@@ -33,8 +33,9 @@ let
     };
     demo = cfg.demo;
     plugin_roots = map toString cfg.pluginRoots;
-     plugins = pluginConfiguration;
-   };
+    workspace = cfg.workspace;
+    plugins = pluginConfiguration;
+  };
   loadedCredentials = lib.concatMap (
     plugin:
     map (
@@ -99,6 +100,16 @@ in
         Opt in to the synthetic House showcase data. Provider fixture modes
         are configured independently through pluginSettings. This is disabled
         by default and is not intended for a production data store.
+      '';
+    };
+
+    workspace = lib.mkOption {
+      type = lib.types.attrs;
+      default = { };
+      description = ''
+        Renderer-neutral workspace configuration passed through to the canonical
+        application document. Mission Control, not this NixOS adapter, validates
+        principal and accent semantics.
       '';
     };
 

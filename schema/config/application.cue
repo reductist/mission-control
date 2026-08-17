@@ -2,7 +2,10 @@
 
 package config
 
-import common "mission-control.dev/schema/common"
+import (
+	attribution "mission-control.dev/schema/attribution"
+	common "mission-control.dev/schema/common"
+)
 
 #JSONValue: bool | number | string | [...#JSONValue] | {
 	[string]: #JSONValue
@@ -18,8 +21,22 @@ import common "mission-control.dev/schema/common"
 	}
 })
 
+#Workspace: close({
+	principals?: {
+		[string]: close({
+			label!: string & !~"^\\s*$"
+			kind!:  "person" | "group"
+		})
+		[!~common.#PrincipalIDPattern]: _|_("invalid principal ID")
+	}
+	accents?: [...close({
+		token!:  attribution.#AccentToken
+		target!: attribution.#AccentTarget
+	})]
+})
+
 #ApplicationConfig: close({
-	schema_version: "mission-control.config/v1"
+	schema_version: "mission-control.config/v2"
 	database?: close({
 		path?: string & !~"^\\s*$"
 	})
@@ -29,6 +46,7 @@ import common "mission-control.dev/schema/common"
 	})
 	demo?: bool
 	plugin_roots?: [...string & !~"^\\s*$"]
+	workspace?: #Workspace
 	plugins?: {
 		[string]:                    #PluginConfiguration
 		[!~common.#PluginIDPattern]: _|_("invalid plugin ID")
@@ -38,7 +56,7 @@ import common "mission-control.dev/schema/common"
 // ApplicationDefaults is exported as a separate runtime artifact because JSON
 // Schema validates defaults but does not materialize them.
 #ApplicationDefaults: #ApplicationConfig & {
-	schema_version: "mission-control.config/v1"
+	schema_version: "mission-control.config/v2"
 	database: path: "mission-control.db"
 	http: {
 		host: "127.0.0.1"
@@ -46,6 +64,10 @@ import common "mission-control.dev/schema/common"
 	}
 	demo: false
 	plugin_roots: []
+	workspace: {
+		principals: {}
+		accents:    []
+	}
 	plugins: {}
 }
 
@@ -56,6 +78,10 @@ import common "mission-control.dev/schema/common"
 	properties: plugins: propertyNames: {
 		type:    "string"
 		pattern: common.#PluginIDPattern
+	}
+	"$defs": "#Workspace": properties: principals: propertyNames: {
+		type:    "string"
+		pattern: common.#PrincipalIDPattern
 	}
 	"$defs": "#PluginConfiguration": properties: credentials: propertyNames: {
 		type:    "string"

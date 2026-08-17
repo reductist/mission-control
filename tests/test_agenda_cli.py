@@ -28,7 +28,7 @@ def render_text(renderable, *, width: int = 72) -> str:
 def test_agenda_table_is_readable_without_color_at_narrow_width():
     contribution = parse_agenda_contribution(
         {
-            "schema_version": "mission-control.agenda/v1",
+            "schema_version": "mission-control.agenda/v2",
             "provider": {"plugin_id": "landscape"},
             "revision": "1",
             "generated_at": "2026-07-29T13:00:00-04:00",
@@ -41,6 +41,7 @@ def test_agenda_table_is_readable_without_color_at_narrow_width():
                         "entity_id": "equipment-access",
                     },
                     "title": "Improve backyard equipment access",
+                    "attribution": {"principal_ids": []},
                     "context": "Backyard",
                     "kind": "initiative",
                     "state": "open",
@@ -53,6 +54,7 @@ def test_agenda_table_is_readable_without_color_at_narrow_width():
                         "entity_id": "measure-dropoff",
                     },
                     "title": "Measure driveway drop-off",
+                    "attribution": {"principal_ids": []},
                     "kind": "action",
                     "state": "ready",
                     "timing": {"kind": "anytime"},
@@ -94,8 +96,9 @@ def test_cli_projects_core_tasks_to_json_and_table(tmp_path, capsys):
     assert main(["--database", str(database), "agenda", "list"]) == 0
     machine_output = json.loads(capsys.readouterr().out)
     assert machine_output == [
-        {
-            "context": "Core tasks",
+            {
+                "attribution": {"principal_ids": []},
+                "context": "Core tasks",
             "id": task["id"],
             "kind": "action",
             "revision": task["updated_at"],
@@ -146,7 +149,7 @@ def test_cli_includes_explicit_landscape_provider(tmp_path, capsys):
     config = tmp_path / "config.toml"
     config.write_text(
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [database]
 path = "{database}"
 [plugins.landscape]
@@ -171,7 +174,7 @@ def test_cli_accepts_explicit_google_demo_settings(tmp_path, capsys):
     config = tmp_path / "config.toml"
     config.write_text(
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [database]
 path = "{database}"
 [plugins.google-calendar]
@@ -198,7 +201,7 @@ def test_invalid_enabled_provider_does_not_initialize_database(tmp_path, capsys)
     config = tmp_path / "config.toml"
     config.write_text(
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [database]
 path = "{database}"
 [plugins.unavailable]

@@ -1,6 +1,78 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$defs": {
+        "#AccentTarget": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/%23PrincipalTarget"
+                },
+                {
+                    "$ref": "#/$defs/%23PluginTarget"
+                },
+                {
+                    "$ref": "#/$defs/%23ConnectionTarget"
+                },
+                {
+                    "$ref": "#/$defs/%23CollectionTarget"
+                }
+            ]
+        },
+        "#AccentToken": {
+            "enum": [
+                "accent-1",
+                "accent-2",
+                "accent-3",
+                "accent-4",
+                "accent-5",
+                "accent-6",
+                "accent-7",
+                "accent-8"
+            ]
+        },
+        "#CollectionTarget": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "collection_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "connection_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "kind": {
+                    "const": "collection"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                }
+            },
+            "required": [
+                "collection_id",
+                "connection_id",
+                "kind",
+                "plugin_id"
+            ]
+        },
+        "#ConnectionTarget": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "connection_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "kind": {
+                    "const": "connection"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                }
+            },
+            "required": [
+                "connection_id",
+                "kind",
+                "plugin_id"
+            ]
+        },
         "#CredentialReference": {
             "type": "object",
             "additionalProperties": false,
@@ -15,6 +87,10 @@
             "required": [
                 "file"
             ]
+        },
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
         },
         "#JSONValue": {
             "anyOf": [
@@ -68,6 +144,100 @@
             "required": [
                 "enabled"
             ]
+        },
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#PluginTarget": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "kind": {
+                    "const": "plugin"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                }
+            },
+            "required": [
+                "kind",
+                "plugin_id"
+            ]
+        },
+        "#PrincipalID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#PrincipalTarget": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "kind": {
+                    "const": "principal"
+                },
+                "principal_id": {
+                    "$ref": "#/$defs/%23PrincipalID"
+                }
+            },
+            "required": [
+                "kind",
+                "principal_id"
+            ]
+        },
+        "#Workspace": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "accents": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "target": {
+                                "$ref": "#/$defs/%23AccentTarget"
+                            },
+                            "token": {
+                                "$ref": "#/$defs/%23AccentToken"
+                            }
+                        },
+                        "required": [
+                            "target",
+                            "token"
+                        ]
+                    }
+                },
+                "principals": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "kind": {
+                                "enum": [
+                                    "person",
+                                    "group"
+                                ]
+                            },
+                            "label": {
+                                "type": "string",
+                                "not": {
+                                    "pattern": "^\\s*$"
+                                }
+                            }
+                        },
+                        "required": [
+                            "kind",
+                            "label"
+                        ]
+                    },
+                    "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9-]*$"
+                    }
+                }
+            }
         }
     },
     "type": "object",
@@ -132,7 +302,10 @@
             }
         },
         "schema_version": {
-            "const": "mission-control.config/v1"
+            "const": "mission-control.config/v2"
+        },
+        "workspace": {
+            "$ref": "#/$defs/%23Workspace"
         }
     }
 }

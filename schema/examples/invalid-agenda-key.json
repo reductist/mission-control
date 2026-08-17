@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.agenda/v1",
+  "schema_version": "mission-control.agenda/v2",
   "provider": {"plugin_id": "financial-planning"},
   "revision": "invalid-3",
   "generated_at": "2026-07-29T13:00:00-04:00",
@@ -12,6 +12,7 @@
         "entity_id": "misspelled-state"
       },
       "title": "Invalid key",
+      "attribution": {"principal_ids": []},
       "kind": "action",
       "status": "ready",
       "timing": {"kind": "anytime"}

@@ -168,6 +168,25 @@ Affordances describe currently available behavior; renderers must not infer
 operations from an entry kind or state string. An empty affordance list is
 valid. Every non-empty affordance list carries the owner's opaque revision.
 
+Agenda v2 also carries renderer-neutral attribution. This metadata is not command
+ownership: `source` remains the sole authoritative routing reference. Each entry
+has zero or more principal references into the core-owned workspace catalog and
+may identify one plugin-scoped connection and a collection within it. Collection
+identity is the tuple `(plugin_id, connection_id, collection_id)`; renderers must
+not compare a bare collection ID across integrations.
+
+Plugins provide human-readable connection and collection labels, never presentation
+colors or CSS values. Core-owned accent preferences target typed principal, plugin,
+connection, or collection identities with a closed semantic token palette. Textual
+people/source provenance remains visible even when a renderer uses those accents.
+The catalog and agenda documents contain no browser-specific concepts. The web UI
+and `mcctl` table renderer currently consume both; the legacy `mcctl agenda list`
+JSON output remains an entry list without an embedded catalog. A future TUI will
+consume the versioned workspace snapshot rather than infer people from that list.
+Until the versioned workspace snapshot lands, `/api/dashboard` carries the catalog
+as a transitional envelope field; that ad-hoc dashboard response is not the public
+TUI contract.
+
 ## Closed-item contribution interface
 
 Plugins declaring the `closed-items` capability may project entities that are currently completed or otherwise closed through `mission-control.closed-items/v1`. Activation rejects a provider whose implementation and registration disagree. This current-state projection remains separate from the active agenda and from immutable owner-domain event history. Each item carries its stable source reference, owner-defined display state, closure timestamp, optional context, opaque revision, and current affordances.

@@ -24,17 +24,113 @@ def test_defaults_are_packaged_and_snapshot_is_detached() -> None:
     assert snapshot.host == "127.0.0.1"
     assert snapshot.port == 8000
     assert snapshot.enabled_plugin_ids == ()
+    assert snapshot.attribution_catalog.principals == ()
+    assert snapshot.attribution_catalog.accents == ()
 
     mutable = snapshot.to_dict()
     mutable["database"] = {"path": "changed.db"}
     assert snapshot.database_path == "mission-control.db"
 
 
+def test_workspace_principals_and_typed_accents_form_a_renderer_neutral_catalog(
+    tmp_path,
+) -> None:
+    path = _write(
+        tmp_path / "config.toml",
+        """
+schema_version = "mission-control.config/v2"
+
+[workspace.principals.patrik]
+label = "Patrik"
+kind = "person"
+
+[workspace.principals.family]
+label = "Family"
+kind = "group"
+
+[[workspace.accents]]
+token = "accent-2"
+target = { kind = "principal", principal_id = "patrik" }
+
+[[workspace.accents]]
+token = "accent-5"
+target = { kind = "collection", plugin_id = "google-calendar", connection_id = "family-google", collection_id = "family" }
+""",
+    )
+
+    catalog = load_application_config(base_path=path).attribution_catalog
+
+    assert [(item.principal_id, item.label, item.kind) for item in catalog.principals] == [
+        ("family", "Family", "group"),
+        ("patrik", "Patrik", "person"),
+    ]
+    assert catalog.to_dict()["accents"] == [
+        {
+            "token": "accent-2",
+            "target": {"kind": "principal", "principal_id": "patrik"},
+        },
+        {
+            "token": "accent-5",
+            "target": {
+                "kind": "collection",
+                "plugin_id": "google-calendar",
+                "connection_id": "family-google",
+                "collection_id": "family",
+            },
+        },
+    ]
+
+
+def test_workspace_rejects_unknown_principal_and_duplicate_accent_targets(
+    tmp_path,
+) -> None:
+    unknown = _write(
+        tmp_path / "unknown.toml",
+        """
+schema_version = "mission-control.config/v2"
+[[workspace.accents]]
+token = "accent-1"
+target = { kind = "principal", principal_id = "missing" }
+""",
+    )
+    with pytest.raises(ApplicationConfigError, match="principal target is not"):
+        load_application_config(base_path=unknown)
+
+    duplicate = _write(
+        tmp_path / "duplicate.toml",
+        """
+schema_version = "mission-control.config/v2"
+[[workspace.accents]]
+token = "accent-1"
+target = { kind = "connection", plugin_id = "google-calendar", connection_id = "home" }
+[[workspace.accents]]
+token = "accent-2"
+target = { kind = "connection", plugin_id = "google-calendar", connection_id = "home" }
+""",
+    )
+    with pytest.raises(ApplicationConfigError, match="configured more than once"):
+        load_application_config(base_path=duplicate)
+
+
+def test_workspace_principal_kind_is_schema_owned_and_required(tmp_path) -> None:
+    path = _write(
+        tmp_path / "config.toml",
+        """
+schema_version = "mission-control.config/v2"
+[workspace.principals.patrik]
+label = "Patrik"
+""",
+    )
+
+    with pytest.raises(ApplicationConfigError, match="'kind' is a required property"):
+        load_application_config(base_path=path)
+
+
 def test_base_and_lexical_fragments_deep_merge_with_source_chains(tmp_path) -> None:
     base = _write(
         tmp_path / "config.toml",
         """
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 plugin_roots = ["base"]
 
 [http]
@@ -107,7 +203,7 @@ def test_explain_rejects_invalid_json_pointer_escapes() -> None:
 def test_incompatible_layer_types_name_both_sources(tmp_path) -> None:
     base = _write(
         tmp_path / "config.toml",
-        'schema_version = "mission-control.config/v1"\n[http]\nport = 8001\n',
+        'schema_version = "mission-control.config/v2"\n[http]\nport = 8001\n',
     )
     fragments = tmp_path / "conf.d"
     fragments.mkdir()
@@ -152,7 +248,7 @@ def test_invalid_outer_configuration_is_rejected(
 ) -> None:
     path = _write(
         tmp_path / "config.toml",
-        'schema_version = "mission-control.config/v1"\n' + body,
+        'schema_version = "mission-control.config/v2"\n' + body,
     )
 
     with pytest.raises(ApplicationConfigError, match=expected):
@@ -163,7 +259,7 @@ def test_disabled_unavailable_plugin_is_preserved_but_not_prepared(tmp_path) -> 
     path = _write(
         tmp_path / "config.toml",
         """
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.unavailable]
 enabled = false
 [plugins.unavailable.settings]
@@ -187,7 +283,7 @@ def test_enabled_non_agenda_plugin_uses_capability_neutral_preflight(tmp_path) -
     path = _write(
         tmp_path / "config.toml",
         f'''
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 plugin_roots = ["{reference_root}"]
 [plugins.reference]
 enabled = true
@@ -222,7 +318,7 @@ def test_enabled_plugin_configuration_is_validated_before_activation(tmp_path) -
     path = _write(
         tmp_path / "config.toml",
         """
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
 [plugins.google-calendar.settings]
@@ -241,7 +337,7 @@ def test_credential_references_and_sensitive_settings_are_redacted(tmp_path) -> 
     path = _write(
         tmp_path / "config.toml",
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = false
 [plugins.google-calendar.credentials.oauth]
@@ -269,7 +365,7 @@ def test_all_opaque_plugin_settings_are_redacted_not_just_secret_like_names(
     path = _write(
         tmp_path / "config.toml",
         """
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.unavailable]
 enabled = false
 [plugins.unavailable.settings]
@@ -292,7 +388,7 @@ def test_enabled_credential_reference_must_be_available(tmp_path) -> None:
     path = _write(
         tmp_path / "config.toml",
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
 [plugins.google-calendar.settings]
@@ -314,7 +410,7 @@ def test_enabled_credential_reference_must_not_be_broadly_readable(tmp_path) -> 
     path = _write(
         tmp_path / "config.toml",
         f"""
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
 [plugins.google-calendar.settings]

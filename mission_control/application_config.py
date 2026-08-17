@@ -17,6 +17,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from mission_control.attribution import AttributionCatalog, AttributionCatalogError
+
 
 class ApplicationConfigError(ValueError):
     """The application configuration cannot be loaded or validated safely."""
@@ -73,6 +75,11 @@ class ApplicationConfigSnapshot:
         roots = self.to_dict()["plugin_roots"]
         assert isinstance(roots, list)
         return tuple(str(root) for root in roots)
+
+    @property
+    def attribution_catalog(self) -> AttributionCatalog:
+        workspace = self.to_dict()["workspace"]
+        return AttributionCatalog.from_workspace(workspace)
 
     @property
     def enabled_plugin_ids(self) -> tuple[str, ...]:
@@ -341,6 +348,10 @@ def load_application_config(
     )
     if errors:
         raise ApplicationConfigError(_format_validation_error(errors[0]))
+    try:
+        AttributionCatalog.from_workspace(document["workspace"])
+    except AttributionCatalogError as error:
+        raise ApplicationConfigError(str(error)) from error
 
     serialized = json.dumps(document, sort_keys=True, separators=(",", ":"))
     frozen_provenance = tuple(

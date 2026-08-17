@@ -1,5 +1,5 @@
 {
-  "schema_version": "mission-control.google-mapping-cases/v1",
+  "schema_version": "mission-control.google-mapping-cases/v2",
   "cases": [
     {
       "name": "free-busy output must not leak detail",
@@ -20,9 +20,10 @@
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "mapped",
         "entry": {
+          "attribution": {"principal_ids": []},
           "id": "gcal-secret",
           "kind": "event",
           "source": {

@@ -9,7 +9,7 @@ def test_config_validate_and_effective_use_the_same_preflight(tmp_path, capsys) 
     config = tmp_path / "config.toml"
     config.write_text(
         """
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = true
 [plugins.google-calendar.settings]
@@ -21,7 +21,7 @@ demo_anchor_date = "2026-08-14"
 
     assert main(["config", "validate", str(config)]) == 0
     assert json.loads(capsys.readouterr().out) == {
-        "schema_version": "mission-control.config/v1",
+        "schema_version": "mission-control.config/v2",
         "valid": True,
     }
 
@@ -35,7 +35,7 @@ def test_config_explain_reports_ordered_sources_and_redacts(tmp_path, capsys) ->
     config = tmp_path / "config.toml"
     config.write_text(
         """
-schema_version = "mission-control.config/v1"
+schema_version = "mission-control.config/v2"
 [plugins.google-calendar]
 enabled = false
 [plugins.google-calendar.settings]

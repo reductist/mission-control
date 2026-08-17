@@ -1,26 +1,48 @@
 {
-  "schema_version": "mission-control.google-mapping-cases/v1",
+  "schema_version": "mission-control.google-mapping-cases/v2",
   "cases": [
     {
       "name": "all-day event keeps Google's exclusive end date",
       "resource_kind": "calendar-event",
       "input": {
-        "collection": {"id": "travel", "summary": "Travel", "accessRole": "owner"},
+        "collection": {
+          "id": "travel",
+          "summary": "Travel",
+          "accessRole": "owner"
+        },
         "resource": {
           "id": "trip",
           "summary": "Switzerland trip",
           "description": "<b>Travel</b> together",
           "status": "confirmed",
-          "start": {"date": "2026-08-14"},
-          "end": {"date": "2026-08-23"},
+          "start": {
+            "date": "2026-08-14"
+          },
+          "end": {
+            "date": "2026-08-23"
+          },
           "updated": "2026-08-13T18:00:00Z",
           "etag": "trip-v1"
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "mapped",
         "entry": {
+          "attribution": {
+            "principal_ids": [],
+            "integration": {
+              "connection": {
+                "id": "default",
+                "label": "Google Calendar"
+              },
+              "collection": {
+                "id": "gsrc-07eba93bcefa5e43d34a2eb04d01d072a8723cdf1c46a58c0c3fd5ef5926ae65",
+                "kind": "calendar",
+                "label": "Travel"
+              }
+            }
+          },
           "id": "gcal-96dfbcff9655b9f4dcadbd7f74e9c91ab52b9142604583a3ce0f57f7212c55d3",
           "kind": "event",
           "source": {
@@ -32,8 +54,17 @@
           "context": "Travel",
           "detail": "Travel together",
           "revision": "trip-v1",
-          "affordances": [{"capability": "entity.annotate", "command": "add-note"}],
-          "timing": {"kind": "all-day", "occurs_on": "2026-08-14", "ends_before": "2026-08-23"}
+          "affordances": [
+            {
+              "capability": "entity.annotate",
+              "command": "add-note"
+            }
+          ],
+          "timing": {
+            "kind": "all-day",
+            "occurs_on": "2026-08-14",
+            "ends_before": "2026-08-23"
+          }
         }
       }
     },
@@ -54,16 +85,34 @@
           "location": "Secret place",
           "htmlLink": "https://calendar.google.com/secret",
           "status": "confirmed",
-          "start": {"dateTime": "2026-08-14T10:00:00-04:00"},
-          "end": {"dateTime": "2026-08-14T11:00:00-04:00"},
+          "start": {
+            "dateTime": "2026-08-14T10:00:00-04:00"
+          },
+          "end": {
+            "dateTime": "2026-08-14T11:00:00-04:00"
+          },
           "updated": "2026-08-13T18:00:00Z",
           "etag": "secret-v1"
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "mapped",
         "entry": {
+          "attribution": {
+            "principal_ids": [],
+            "integration": {
+              "connection": {
+                "id": "default",
+                "label": "Google Calendar"
+              },
+              "collection": {
+                "id": "gsrc-d66ab7ec945491e143343886a60d5413989fff9fdb31e3f438caf88f6d9ddcf4",
+                "kind": "calendar",
+                "label": "Confidential availability"
+              }
+            }
+          },
           "id": "gcal-6527e9678027c327829e549c07563a4d04c92999fdff6b6377e2ef0192628d6c",
           "kind": "event",
           "source": {
@@ -74,7 +123,12 @@
           "title": "Busy",
           "context": "Confidential availability",
           "revision": "secret-v1",
-          "affordances": [{"capability": "entity.annotate", "command": "add-note"}],
+          "affordances": [
+            {
+              "capability": "entity.annotate",
+              "command": "add-note"
+            }
+          ],
           "timing": {
             "kind": "timed",
             "starts_at": "2026-08-14T10:00:00-04:00",
@@ -87,22 +141,45 @@
       "name": "public timed event uses location as agenda detail fallback",
       "resource_kind": "calendar-event",
       "input": {
-        "collection": {"id": "family", "summaryOverride": "Family"},
+        "collection": {
+          "id": "family",
+          "summaryOverride": "Family"
+        },
         "resource": {
           "id": "appointment",
           "summary": "Museum appointment",
           "location": "Main entrance",
           "status": "confirmed",
-          "start": {"dateTime": "2026-08-18T10:30:00+02:00", "timeZone": "Europe/Zurich"},
-          "end": {"dateTime": "2026-08-18T12:00:00+02:00", "timeZone": "Europe/Zurich"},
+          "start": {
+            "dateTime": "2026-08-18T10:30:00+02:00",
+            "timeZone": "Europe/Zurich"
+          },
+          "end": {
+            "dateTime": "2026-08-18T12:00:00+02:00",
+            "timeZone": "Europe/Zurich"
+          },
           "updated": "2026-08-13T18:00:00Z",
           "etag": "appointment-v1"
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "mapped",
         "entry": {
+          "attribution": {
+            "principal_ids": [],
+            "integration": {
+              "connection": {
+                "id": "default",
+                "label": "Google Calendar"
+              },
+              "collection": {
+                "id": "gsrc-d4296cc059284d1ade9ac06656db21d3aa7375060a7d23a45f16877ec02ddec5",
+                "kind": "calendar",
+                "label": "Family"
+              }
+            }
+          },
           "id": "gcal-705e7a1d6958976ad0e0a76c4915dc0dbdec645d4467745ec9e1a8be7cf15ba8",
           "kind": "event",
           "source": {
@@ -114,7 +191,12 @@
           "context": "Family",
           "detail": "Main entrance",
           "revision": "appointment-v1",
-          "affordances": [{"capability": "entity.annotate", "command": "add-note"}],
+          "affordances": [
+            {
+              "capability": "entity.annotate",
+              "command": "add-note"
+            }
+          ],
           "timing": {
             "kind": "timed",
             "starts_at": "2026-08-18T10:30:00+02:00",
@@ -127,17 +209,29 @@
       "name": "self-declined calendar event is filtered",
       "resource_kind": "calendar-event",
       "input": {
-        "collection": {"id": "shared", "summary": "Shared"},
+        "collection": {
+          "id": "shared",
+          "summary": "Shared"
+        },
         "resource": {
           "id": "declined",
           "status": "confirmed",
-          "attendees": [{"self": true, "responseStatus": "declined"}],
-          "start": {"dateTime": "2026-08-14T10:00:00Z"},
-          "end": {"dateTime": "2026-08-14T11:00:00Z"}
+          "attendees": [
+            {
+              "self": true,
+              "responseStatus": "declined"
+            }
+          ],
+          "start": {
+            "dateTime": "2026-08-14T10:00:00Z"
+          },
+          "end": {
+            "dateTime": "2026-08-14T11:00:00Z"
+          }
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "filtered",
         "reason": "self-declined"
       }
@@ -146,15 +240,20 @@
       "name": "malformed calendar event is rejected",
       "resource_kind": "calendar-event",
       "input": {
-        "collection": {"id": "shared", "summary": "Shared"},
+        "collection": {
+          "id": "shared",
+          "summary": "Shared"
+        },
         "resource": {
           "id": "missing-end",
           "status": "confirmed",
-          "start": {"dateTime": "2026-08-14T10:00:00Z"}
+          "start": {
+            "dateTime": "2026-08-14T10:00:00Z"
+          }
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "rejected",
         "code": "invalid-upstream-resource"
       }
@@ -163,7 +262,10 @@
       "name": "Google task due timestamp maps to a date-only action",
       "resource_kind": "task",
       "input": {
-        "collection": {"id": "travel", "title": "Travel tasks"},
+        "collection": {
+          "id": "travel",
+          "title": "Travel tasks"
+        },
         "resource": {
           "id": "maps",
           "title": "Download offline maps",
@@ -174,9 +276,23 @@
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "mapped",
         "entry": {
+          "attribution": {
+            "principal_ids": [],
+            "integration": {
+              "connection": {
+                "id": "default",
+                "label": "Google Calendar"
+              },
+              "collection": {
+                "id": "gsrc-55817029f3ee49140dd3133c03e3c078b3af032dbbce17d7367fd7bdeca444ea",
+                "kind": "task-list",
+                "label": "Travel tasks"
+              }
+            }
+          },
           "id": "gtask-250cfa8f41c08b691c764647911cfa9d466a39cf42a23678db2b44a227c7fe86",
           "kind": "action",
           "source": {
@@ -187,9 +303,17 @@
           "title": "Download offline maps",
           "context": "Travel tasks",
           "revision": "maps-v1",
-          "affordances": [{"capability": "entity.annotate", "command": "add-note"}],
+          "affordances": [
+            {
+              "capability": "entity.annotate",
+              "command": "add-note"
+            }
+          ],
           "state": "ready",
-          "timing": {"kind": "due-on", "due_on": "2026-08-15"}
+          "timing": {
+            "kind": "due-on",
+            "due_on": "2026-08-15"
+          }
         }
       }
     },
@@ -197,7 +321,10 @@
       "name": "task without a due date stays anytime",
       "resource_kind": "task",
       "input": {
-        "collection": {"id": "travel", "title": "Travel tasks"},
+        "collection": {
+          "id": "travel",
+          "title": "Travel tasks"
+        },
         "resource": {
           "id": "share",
           "title": "Share itinerary",
@@ -208,9 +335,23 @@
         }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "mapped",
         "entry": {
+          "attribution": {
+            "principal_ids": [],
+            "integration": {
+              "connection": {
+                "id": "default",
+                "label": "Google Calendar"
+              },
+              "collection": {
+                "id": "gsrc-55817029f3ee49140dd3133c03e3c078b3af032dbbce17d7367fd7bdeca444ea",
+                "kind": "task-list",
+                "label": "Travel tasks"
+              }
+            }
+          },
           "id": "gtask-3b521a05122f23e6bc78236ab1d6d6de4a6b2d3c1675e7125d41e66c0a5619fe",
           "kind": "action",
           "source": {
@@ -222,9 +363,16 @@
           "context": "Travel tasks",
           "detail": "Send the current plan.",
           "revision": "share-v1",
-          "affordances": [{"capability": "entity.annotate", "command": "add-note"}],
+          "affordances": [
+            {
+              "capability": "entity.annotate",
+              "command": "add-note"
+            }
+          ],
           "state": "ready",
-          "timing": {"kind": "anytime"}
+          "timing": {
+            "kind": "anytime"
+          }
         }
       }
     },
@@ -232,11 +380,18 @@
       "name": "completed Google task is filtered",
       "resource_kind": "task",
       "input": {
-        "collection": {"id": "travel", "title": "Travel tasks"},
-        "resource": {"id": "done", "title": "Done", "status": "completed"}
+        "collection": {
+          "id": "travel",
+          "title": "Travel tasks"
+        },
+        "resource": {
+          "id": "done",
+          "title": "Done",
+          "status": "completed"
+        }
       },
       "outcome": {
-        "schema_version": "mission-control.google-mapping/v1",
+        "schema_version": "mission-control.google-mapping/v2",
         "status": "filtered",
         "reason": "completed"
       }

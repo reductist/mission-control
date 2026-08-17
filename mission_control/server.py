@@ -24,8 +24,10 @@ from mission_control.agenda import (
     agenda_to_list,
     aggregate_agenda,
     project_core_tasks,
+    validate_agenda_attribution,
     validate_agenda_capabilities,
 )
+from mission_control.attribution import AttributionCatalog
 from mission_control.annotations import (
     AnnotationCommandHandler,
     AnnotationLifecycleCommandHandler,
@@ -113,6 +115,7 @@ class MissionControlApplication:
         agenda_contributions: Iterable[AgendaContribution] = (),
         builtin_plugins: Iterable[PreparedPlugin] = (),
         plugin_failures: Mapping[str, tuple[str, str]] | None = None,
+        attribution_catalog: AttributionCatalog | None = None,
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
@@ -120,6 +123,9 @@ class MissionControlApplication:
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
         self.agenda_contributions = tuple(agenda_contributions)
+        self.attribution_catalog = attribution_catalog or AttributionCatalog()
+        for contribution in self.agenda_contributions:
+            validate_agenda_attribution(contribution, self.attribution_catalog)
         self.builtin_plugins = tuple(builtin_plugins)
         self.plugin_activations = activate_agenda_plugins_isolated(
             database, self.builtin_plugins
@@ -283,6 +289,7 @@ class MissionControlApplication:
             "agenda": agenda_to_list(agenda),
             "closed_items": closed_items_to_list(closed_items),
             "providers": self._provider_documents(),
+            "attribution_catalog": self.attribution_catalog.to_dict(),
             "demo": self._demo_fixture,
         }
 
@@ -295,6 +302,7 @@ class MissionControlApplication:
             try:
                 contribution = provider.contribution(generated_at=generated_at)
                 validate_agenda_capabilities(plugin.registration, contribution)
+                validate_agenda_attribution(contribution, self.attribution_catalog)
             except Exception:
                 self._set_provider_failure(
                     plugin_id,
@@ -872,6 +880,7 @@ def main(argv: list[str] | None = None) -> int:
         Database(Path(snapshot.database_path)),
         demo=snapshot.demo,
         builtin_plugins=builtin_plugins,
+        attribution_catalog=snapshot.attribution_catalog,
     )
     server = build_server(application, snapshot.host, snapshot.port)
     host, port = server.server_address[:2]

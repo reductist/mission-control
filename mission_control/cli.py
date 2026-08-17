@@ -13,7 +13,12 @@ from pathlib import Path
 from rich.console import Console
 
 from mission_control import __version__
-from mission_control.agenda import aggregate_agenda, agenda_to_list, project_core_tasks
+from mission_control.agenda import (
+    aggregate_agenda,
+    agenda_to_list,
+    project_core_tasks,
+    validate_agenda_attribution,
+)
 from mission_control.application_config import (
     ApplicationConfigError,
     load_application_config,
@@ -400,17 +405,25 @@ def main(argv: list[str] | None = None) -> int:
             contribution = project_core_tasks(
                 repository.list(), generated_at=generated_at
             )
+            plugin_contributions = []
+            for provider in providers:
+                plugin_contribution = provider.contribution(
+                    generated_at=generated_at
+                )
+                validate_agenda_attribution(
+                    plugin_contribution, snapshot.attribution_catalog
+                )
+                plugin_contributions.append(plugin_contribution)
             agenda_snapshot = aggregate_agenda(
                 (
                     contribution,
-                    *(
-                        provider.contribution(generated_at=generated_at)
-                        for provider in providers
-                    ),
+                    *plugin_contributions,
                 )
             )
             if args.format == "table":
-                stdout.print(agenda_table(agenda_snapshot))
+                stdout.print(
+                    agenda_table(agenda_snapshot, snapshot.attribution_catalog)
+                )
             else:
                 print(json.dumps(agenda_to_list(agenda_snapshot), sort_keys=True))
         except Exception as error:

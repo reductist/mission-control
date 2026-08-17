@@ -222,6 +222,7 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   align-items: start;
   border-bottom: 1px solid var(--border);
 }
+.schedule-row[data-accent] { border-left: 3px solid var(--entry-accent); padding-left: 12px; }
 .schedule-row:last-child { border-bottom: 0; }
 .schedule-time {
   color: var(--accent);
@@ -307,6 +308,15 @@ button.calendar-item { cursor: pointer; }
 button.calendar-item:hover { border-color: var(--accent); background: var(--accent-soft); }
 button.calendar-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .calendar-item.is-task { border-left-color: var(--warning); }
+.schedule-row[data-accent="accent-1"], .calendar-item[data-accent="accent-1"] { --entry-accent: #3f6f9f; }
+.schedule-row[data-accent="accent-2"], .calendar-item[data-accent="accent-2"] { --entry-accent: #8c4d8f; }
+.schedule-row[data-accent="accent-3"], .calendar-item[data-accent="accent-3"] { --entry-accent: #a75b3b; }
+.schedule-row[data-accent="accent-4"], .calendar-item[data-accent="accent-4"] { --entry-accent: #4e7b52; }
+.schedule-row[data-accent="accent-5"], .calendar-item[data-accent="accent-5"] { --entry-accent: #9a6a19; }
+.schedule-row[data-accent="accent-6"], .calendar-item[data-accent="accent-6"] { --entry-accent: #467a82; }
+.schedule-row[data-accent="accent-7"], .calendar-item[data-accent="accent-7"] { --entry-accent: #80604d; }
+.schedule-row[data-accent="accent-8"], .calendar-item[data-accent="accent-8"] { --entry-accent: #65708c; }
+.calendar-item[data-accent] { border-left-color: var(--entry-accent); }
 .calendar-item strong {
   overflow-wrap: anywhere;
   font: 600 12px/1.3 var(--sans);

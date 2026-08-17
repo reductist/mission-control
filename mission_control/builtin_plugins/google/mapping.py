@@ -17,6 +17,12 @@ from mission_control.agenda import (
     TimedTiming,
     agenda_entry_to_dict,
 )
+from mission_control.attribution import (
+    CollectionRef,
+    ConnectionRef,
+    EntryAttribution,
+    IntegrationAttribution,
+)
 from mission_control.builtin_plugins.google.domain import (
     GoogleCollection,
     GoogleEntry,
@@ -33,7 +39,7 @@ from mission_control.plugins import (
     StandardEntityCapability,
 )
 
-MAPPING_SCHEMA_VERSION = "mission-control.google-mapping/v1"
+MAPPING_SCHEMA_VERSION = "mission-control.google-mapping/v2"
 PLUGIN_ID = PluginId("google-calendar")
 ANNOTATE = EntityAffordance(
     EntityCapability(StandardEntityCapability.ENTITY_ANNOTATE.value), "add-note"
@@ -46,6 +52,16 @@ def agenda_entry(item: GoogleEntry) -> Event | Action:
     """Project one validated Google cache entry onto the public agenda contract."""
 
     source = SourceRef(PLUGIN_ID, item.entity_type, item.entity_id)
+    connection = ConnectionRef(PLUGIN_ID, "default")
+    attribution = EntryAttribution(
+        integration=IntegrationAttribution(
+            connection,
+            "Google Calendar",
+            CollectionRef(connection, item.collection_key),
+            "calendar" if item.entity_type == "calendar-event" else "task-list",
+            item.context,
+        )
+    )
     common = {
         "entry_id": item.entity_id,
         "source": source,
@@ -54,6 +70,7 @@ def agenda_entry(item: GoogleEntry) -> Event | Action:
         "detail": item.detail or item.location,
         "revision": item.revision,
         "affordances": (ANNOTATE,),
+        "attribution": attribution,
     }
     if item.entity_type == "calendar-event":
         timing = (

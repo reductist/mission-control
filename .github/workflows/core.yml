@@ -85,6 +85,7 @@ jobs:
               "mission_control/builtin_plugins/google/registration.json",
               "mission_control/builtin_plugins/google/mapping.py",
               "mission_control/schemas/agenda-contribution.schema.json",
+              "mission_control/schemas/attribution-catalog.schema.json",
               "mission_control/schemas/agenda-query.schema.json",
               "mission_control/schemas/application-config.defaults.json",
               "mission_control/schemas/application-config.schema.json",
