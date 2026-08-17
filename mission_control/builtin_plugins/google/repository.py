@@ -345,11 +345,13 @@ class SQLiteGoogleRepository:
     def list_entries(self) -> tuple[GoogleEntry, ...]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT e.*, c.connection_id, c.label AS connection_label, "
+                "SELECT e.*, c.connection_id, source.label AS connection_label, "
                 "c.external_id AS collection_external_id, "
                 "c.kind AS collection_kind, c.principal_ids_json "
                 "FROM plugin__15__google_calendar__entries e JOIN "
                 "plugin__15__google_calendar__collections c USING(collection_key) "
+                "JOIN plugin__15__google_calendar__connections source "
+                "USING(connection_id) "
                 "ORDER BY e.entity_type, e.entity_id"
             ).fetchall()
         return tuple(self._entry(row) for row in rows)
@@ -357,11 +359,13 @@ class SQLiteGoogleRepository:
     def get_entry(self, entity_id: str) -> GoogleEntry:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT e.*, c.connection_id, c.label AS connection_label, "
+                "SELECT e.*, c.connection_id, source.label AS connection_label, "
                 "c.external_id AS collection_external_id, "
                 "c.kind AS collection_kind, c.principal_ids_json "
                 "FROM plugin__15__google_calendar__entries e JOIN "
                 "plugin__15__google_calendar__collections c USING(collection_key) "
+                "JOIN plugin__15__google_calendar__connections source "
+                "USING(connection_id) "
                 "WHERE e.entity_id = ?",
                 (entity_id,),
             ).fetchone()
