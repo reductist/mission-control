@@ -10,63 +10,70 @@
     <script defer src="/assets/app.js"></script>
   </head>
   <body>
-    <div class="shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-mark">MC</span>
-          <div>
-            <strong>Mission Control</strong>
-            <small>Household workspace</small>
-          </div>
+    <div class="console-shell">
+      <header class="console-statusbar">
+        <div class="console-brand">
+          <span class="brand-mark" aria-hidden="true">MC</span>
+          <div><strong>Mission Control</strong><small>Household workspace</small></div>
         </div>
-
-        <nav aria-label="Primary navigation">
-          <button class="nav-item is-active" data-view="overview" type="button">
-            <span>01</span> Overview
-          </button>
-          <button class="nav-item" data-view="schedule" type="button">
-            <span>02</span> Schedule
-          </button>
-          <button class="nav-item" data-view="house" type="button">
-            <span>03</span> House
-          </button>
-          <button class="nav-item" data-view="maintenance" type="button">
-            <span>04</span> Maintenance
-          </button>
-          <button class="nav-item" data-view="yard" type="button">
-            <span>05</span> Yard
-          </button>
-          <button class="nav-item" data-view="history" type="button">
-            <span>06</span> History
-          </button>
-        </nav>
-
-        <div class="sidebar-status">
-          <span class="status-dot" aria-hidden="true"></span>
-          <div>
-            <strong id="connection-label">Connecting</strong>
-            <small id="mode-label">Loading workspace</small>
-          </div>
+        <div class="system-state" aria-label="Workspace status">
+          <span><i class="status-dot" aria-hidden="true"></i><strong id="connection-label">Connecting</strong></span>
+          <span id="mode-label">Loading workspace</span>
+          <span id="today-label"></span>
+          <span id="version-label"></span>
         </div>
-      </aside>
+      </header>
 
-      <main class="main">
-        <header class="page-header">
-          <div>
-            <p class="eyebrow" id="page-eyebrow">Household overview</p>
-            <h1 id="page-title">The next right things</h1>
-            <p id="page-description">A shared view of active work, decisions, and longer-term plans.</p>
-          </div>
-          <div class="header-meta">
-            <span id="today-label"></span>
-            <span id="version-label"></span>
-          </div>
-        </header>
+      <div class="keybar" aria-label="Keyboard shortcuts">
+        <span><kbd>S</kbd> Navigator</span><span><kbd>D</kbd> Queue</span><span><kbd>F</kbd> Inspector</span>
+        <span><kbd>H J K L</kbd> or arrows</span><span><kbd>G</kbd> Jump</span>
+        <button class="keybar-help" id="help-button" type="button"><kbd>?</kbd> Help</button>
+      </div>
 
-        <section id="app" aria-live="polite" aria-busy="true">
-          <div class="loading">Loading Mission Control…</div>
+      <main class="workspace" id="workspace">
+        <aside class="workspace-pane navigator-pane is-keyboard-active" data-pane="navigator" tabindex="-1" aria-label="Navigator">
+          <div class="pane-heading"><span>Navigator</span><kbd>S</kbd></div>
+          <nav class="primary-nav" aria-label="Primary navigation">
+            <button class="nav-item is-active" data-view="overview" type="button"><span>01</span><strong>Overview</strong><small>Daily attention</small></button>
+            <button class="nav-item" data-view="schedule" type="button"><span>02</span><strong>Schedule</strong><small>Events and tasks</small></button>
+            <button class="nav-item" data-view="house" type="button"><span>03</span><strong>House</strong><small>Candidate review</small></button>
+            <button class="nav-item" data-view="maintenance" type="button"><span>04</span><strong>Maintenance</strong><small>Cases and visits</small></button>
+            <button class="nav-item" data-view="yard" type="button"><span>05</span><strong>Yard</strong><small>Seasonal work</small></button>
+            <button class="nav-item" data-view="history" type="button"><span>06</span><strong>History</strong><small>Closed work</small></button>
+          </nav>
+          <section class="source-health" aria-labelledby="source-health-title">
+            <div class="source-health-heading"><h2 id="source-health-title">Sources</h2><span>live</span></div>
+            <div id="source-health-list"><p class="muted-copy">Waiting for providers…</p></div>
+          </section>
+        </aside>
+
+        <section class="workspace-pane queue-pane" data-pane="queue" tabindex="-1" aria-labelledby="page-title">
+          <header class="queue-header">
+            <div><p class="eyebrow" id="page-eyebrow">Household overview</p><h1 id="page-title">Overview</h1><p id="page-description">Decisions, schedule, and active work.</p></div>
+            <kbd>D</kbd>
+          </header>
+          <section id="app" aria-live="polite" aria-busy="true"><div class="loading">Loading Mission Control…</div></section>
         </section>
+
+        <aside class="workspace-pane inspector-pane" data-pane="inspector" tabindex="-1" aria-label="Inspector">
+          <div class="pane-heading"><span>Inspector</span><kbd>F</kbd></div>
+          <div id="inspector-content">
+            <div class="inspector-empty"><span class="inspector-glyph" aria-hidden="true">⌁</span><h2>Nothing selected</h2><p>Move through the queue to inspect context and available commands.</p></div>
+          </div>
+        </aside>
       </main>
+
+      <footer class="console-footer"><span>Reference client</span><span id="keyboard-mode-label">NAV</span><span>Tab cycles panes · Esc goes back</span></footer>
     </div>
+
+    <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-title">
+      <form method="dialog">
+        <div class="dialog-heading"><h2 id="help-title">Keyboard map</h2><button value="close" aria-label="Close keyboard help">×</button></div>
+        <div id="help-commands"></div>
+        <p class="help-note">Shortcuts pause while you type in a field. Tab and Shift+Tab stay native inside dialogs and forms.</p>
+      </form>
+    </dialog>
+    <div id="jump-layer" aria-hidden="true"></div>
+    <div class="sr-only" id="keyboard-announcer" aria-live="polite" aria-atomic="true"></div>
   </body>
 </html>
