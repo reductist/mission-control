@@ -32,7 +32,7 @@ const context = {
 context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(
-  `${source}\n;globalThis.scheduleTest = { calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, entryAccentToken, entryProvenance, escapeHtml, setDashboard(value) { dashboard = value; }, shiftCivilDate };`,
+  `${source}\n;globalThis.scheduleTest = { calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, entryAccentToken, entryProvenance, escapeHtml, safeDetailHref, setDashboard(value) { dashboard = value; }, shiftCivilDate };`,
   context,
 );
 
@@ -100,6 +100,14 @@ test("provider text remains literal when rendered", () => {
     scheduleTest.escapeHtml('<img src=x onerror="alert(1)">'),
     "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;",
   );
+});
+
+test("detail links accept only explicit safe schemes", () => {
+  assert.equal(scheduleTest.safeDetailHref("https://example.com/photo.jpg"), "https://example.com/photo.jpg");
+  assert.equal(scheduleTest.safeDetailHref("mailto:plumber@example.com"), "mailto:plumber@example.com");
+  assert.equal(scheduleTest.safeDetailHref("tel:+15551234567"), "tel:+15551234567");
+  assert.equal(scheduleTest.safeDetailHref("javascript:alert(1)"), "");
+  assert.equal(scheduleTest.safeDetailHref("data:text/html,unsafe"), "");
 });
 
 test("typed attribution resolves people and source without relying on color", () => {

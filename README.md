@@ -65,6 +65,9 @@ Mission Control is pre-release software. The current version includes:
 - guided Google setup through a private, loopback-only setup process
 - a Landscape plugin that demonstrates plugin-owned data, actions, migrations,
   history, and agenda contributions
+- a configuration-backed Household plugin for maintenance cases, contractor
+  contacts, related task IDs, reference links, investigation notes, and
+  scheduled visits
 - a command-line interface for administration, configuration inspection, and
   machine-readable queries
 - SQLite storage with ordered migrations
@@ -123,6 +126,9 @@ data and does not contact Google.
 To connect a real Google account, follow
 [`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
 are stored separately from application configuration.
+
+To record household maintenance cases and scheduled contractor visits, see
+[`docs/household.md`](docs/household.md).
 
 ## Command-line tools
 

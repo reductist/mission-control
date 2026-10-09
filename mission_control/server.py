@@ -43,8 +43,10 @@ from mission_control.commands import (
     CommandContractError,
     CommandRouter,
     CommandStatus,
+    CommandTargetState,
     CoreTaskCommandOwner,
     EntityTypeCommandOwner,
+    StateOnlyCommandOwner,
     outcome_to_dict,
     parse_command,
 )
@@ -91,6 +93,18 @@ _DEMO_TASKS = (
         "in-progress",
     ),
 )
+
+
+def _entity_detail_command_state(
+    provider: object, target: SourceRef
+) -> CommandTargetState | None:
+    """Project plugin detail state for commands implemented by core."""
+
+    project = getattr(provider, "entity_detail")
+    detail = project(target)
+    if detail is None or detail.revision is None:
+        return None
+    return CommandTargetState(detail.revision, detail.affordances)
 
 
 class ApiError(Exception):
@@ -168,6 +182,14 @@ class MissionControlApplication:
                 if provider.command_owner is not None
             }
         )
+        for plugin_id, provider in self.entity_detail_providers.items():
+            if plugin_id in command_owners:
+                continue
+            command_owners[plugin_id] = StateOnlyCommandOwner(
+                lambda target, provider=provider: _entity_detail_command_state(
+                    provider, target
+                )
+            )
         self.command_router = CommandRouter(
             command_owners,
             registrations=self.registrations,

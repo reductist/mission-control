@@ -1,0 +1,25 @@
+{
+  "schema_version": "mission-control.plugin/v3",
+  "id": "household",
+  "name": "Household",
+  "version": "0.1.0",
+  "plugin_api": ">=1.0.0 <2.0.0",
+  "capabilities": ["agenda", "entity-details"],
+  "runtime": {
+    "entrypoint": "mission_control.builtin_plugins.household:activate"
+  },
+  "configuration": {
+    "document_version": "mission-control.household.config/v1",
+    "schema_resource": "config.schema.json",
+    "defaults_resource": "config.defaults.json",
+    "presentation_resource": "config.presentation.json"
+  },
+  "entity_types": {
+    "case": {
+      "capabilities": ["entity.annotate", "activity.read"]
+    },
+    "appointment": {
+      "capabilities": ["entity.annotate", "activity.read"]
+    }
+  }
+}

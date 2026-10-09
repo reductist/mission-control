@@ -1,0 +1,11 @@
+{
+    "schema_version": "mission-control.plugin-config-presentation/v1",
+    "configuration_schema": "mission-control.household.config/v1",
+    "fields": [
+        {
+            "path": "/settings/cases",
+            "label": "Household maintenance cases",
+            "order": 10
+        }
+    ]
+}

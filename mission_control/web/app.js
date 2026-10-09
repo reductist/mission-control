@@ -1004,7 +1004,18 @@ function entityLink(item) {
 }
 
 function detailAttribute(attribute) {
-  return `<div><dt>${escapeHtml(attribute.label)}</dt><dd>${escapeHtml(attribute.value)}</dd></div>`;
+  const href = safeDetailHref(attribute.value);
+  const display = href.startsWith("mailto:") || href.startsWith("tel:")
+    ? attribute.value.slice(attribute.value.indexOf(":") + 1)
+    : attribute.value;
+  const value = href
+    ? `<a href="${escapeHtml(href)}"${/^https?:\/\//i.test(href) ? ' target="_blank" rel="noreferrer"' : ""}>${escapeHtml(display)}</a>`
+    : escapeHtml(display);
+  return `<div><dt>${escapeHtml(attribute.label)}</dt><dd>${value}</dd></div>`;
+}
+
+function safeDetailHref(value) {
+  return /^(https?:\/\/|mailto:|tel:)/i.test(value) ? value : "";
 }
 
 function noteRow(entry) {
