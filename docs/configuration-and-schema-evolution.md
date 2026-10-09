@@ -17,10 +17,10 @@ pieces:
   calendar, or person; and
 - closed CUE document shapes had no precise pre-1.0 evolution rule.
 
-The first four delivery slices below established canonical configuration, one
-CUE-owned plugin configuration boundary, and transport-neutral JSON capability
-calls. Typed attribution is the current prerequisite for browser setup, multiple
-Google accounts, and owner/source filters.
+The completed delivery slices below established canonical configuration, one
+CUE-owned plugin configuration boundary, transport-neutral JSON capability
+calls, typed attribution, multiple Google connections, and guided browser
+setup.
 
 ## Decision
 
@@ -95,12 +95,12 @@ actions remain usable by `mcctl` or a future terminal UI.
 Credential handles are random, single-session references available only to the
 one setup provider being driven. The accepted draft binds each handle to a
 plugin-owned credential name, and normal final validation checks every reference
-before commit. Configuration contains only the resulting file reference. In a directly managed install,
-the bootstrap process stores newly acquired credentials atomically in a dedicated
-mode-0700 managed directory with mode-0600 credential files and returns only the
-handle to the browser. In a declarative deployment, setup validates or exports the
-required references and instructions but does not write secrets or operator-owned
-configuration.
+before commit. Configuration contains only the resulting file reference. In a
+directly managed install, the bootstrap process stores newly acquired credentials
+atomically in a dedicated mode-0700 managed directory with mode-0600 credential
+files and returns only the handle to the browser. In a declarative deployment,
+setup validates or exports the required references and instructions but does not
+write secrets or operator-owned configuration.
 
 ### Keep authoritative ownership separate from integration attribution
 
@@ -226,14 +226,14 @@ evidence shows it should be split further.
 6. **Complete:** add Google-owned multiple connections, explicit calendar/task enablement and
    selection policies, partitioned cache/sync, attribution mapping, and a versioned
    connection-health projection whose aggregate defines plugin health.
-7. **Provider boundary complete; setup host next:** add the generic setup-action
-   contract and Google provider flow for credential reference, test, discovery,
-   selection, principal assignment, review, and normal-validator handoff. Then
-   add the contract-driven loopback web host for secure acquisition, atomic
-   managed-fragment write/export, and explicit restart reporting.
-8. Make direct and NixOS adapters consume the same configuration fixtures, deploy
-   feature parity to the canonical service, and remove the separate port-8001
-   showcase service.
+7. **Complete:** add the generic setup-action contract and Google provider flow
+   for credential reference, testing, discovery, selection, principal
+   assignment, review, and normal configuration validation. Add the loopback web
+   setup host, secure credential acquisition, atomic managed-fragment
+   write/export, and explicit restart reporting.
+8. **Complete:** make direct and NixOS adapters consume the same configuration,
+   deploy the Google integration through the canonical service, and remove the
+   separate port-8001 showcase service.
 9. Define a versioned workspace snapshot and generic dashboard contributions;
    remove raw task duplication and hard-coded House/Yard aggregation from core.
 10. Move Tasks through the public plugin lifecycle and add a typed creation/form
