@@ -25,6 +25,11 @@ const viewCopy = {
     title: "Move only for a clear upgrade",
     description: "Keep the life goal, financial assumptions, and decision record in the same place.",
   },
+  maintenance: {
+    eyebrow: "Household maintenance",
+    title: "Keep the history with the work",
+    description: "Track problems, testing, contractors, reference material, and scheduled visits together.",
+  },
   yard: {
     eyebrow: "Landscape and yard",
     title: "Maintain now, design deliberately",
@@ -177,6 +182,8 @@ function render() {
     renderSchedule();
   } else if (activeView === "house") {
     renderHouse();
+  } else if (activeView === "maintenance") {
+    renderMaintenance();
   } else if (activeView === "yard") {
     renderYard();
   } else if (activeView === "history") {
@@ -192,14 +199,18 @@ function renderOverview() {
   const visibleTasks = activeTasks.slice(0, 7);
   const house = dashboard.demo?.house;
   const scheduled = scheduleEntries().filter((entry) => entry.timing?.kind !== "anytime");
+  const maintenanceCases = householdEntries().filter((entry) => entry.kind === "initiative");
+  const openMaintenanceCases = maintenanceCases.filter((entry) => !["done", "closed", "completed"].includes(entry.state));
   const yardEntries = landscapeEntries();
   const yardInitiative = yardEntries.find((entry) => entry.kind === "initiative");
   const yardActions = yardEntries.filter((entry) => entry.kind === "action");
   const visibleYardActions = yardActions.slice(0, 4);
   const visibleCoreTasks = visibleTasks.slice(0, Math.max(0, 7 - visibleYardActions.length));
   const visibleCount = visibleYardActions.length + visibleCoreTasks.length;
-  const openWork = summary.open + yardActions.length;
-  const blockedWork = summary.blocked + yardActions.filter((entry) => entry.state === "blocked").length;
+  const openWork = summary.open + yardActions.length + openMaintenanceCases.length;
+  const blockedWork = summary.blocked
+    + yardActions.filter((entry) => entry.state === "blocked").length
+    + openMaintenanceCases.filter((entry) => entry.state === "blocked").length;
 
   app.innerHTML = `
     <div class="metric-grid">
@@ -225,6 +236,7 @@ function renderOverview() {
       </section>
 
       <div class="stack">
+        ${maintenanceCases.length ? previewCard("Maintenance", maintenanceCases[0].title, maintenanceCases[0].detail || "Open the case record.", "maintenance") : livePlaceholder("Household maintenance")}
         ${scheduled.length ? previewCard("Schedule", scheduled[0].title, scheduleTimingLabel(scheduled[0]), "schedule") : livePlaceholder("Household schedule")}
         ${house ? previewCard("House", house.status, house.summary, "house") : livePlaceholder("House planning")}
         ${yardInitiative ? previewCard("Yard", yardInitiative.title, yardInitiative.detail, "yard") : livePlaceholder("Yard planning")}
@@ -809,6 +821,52 @@ function renderHouse() {
   `;
 }
 
+function renderMaintenance() {
+  const entries = householdEntries();
+  if (!entries.length) {
+    renderNoDemo("Household maintenance", "Enable the household plugin and configure a maintenance case to use this workspace.");
+    return;
+  }
+  const cases = entries.filter((entry) => entry.kind === "initiative");
+  const appointments = entries.filter((entry) => entry.kind === "event");
+  const openCases = cases.filter((entry) => !["done", "closed", "completed"].includes(entry.state));
+  const blockedCases = openCases.filter((entry) => entry.state === "blocked");
+  app.innerHTML = `
+    <div class="section-intro">
+      <div>
+        <h2>Maintenance records that keep their context</h2>
+        <p>Open a case to record tests and decisions, find contractor details and reference links, or review related task IDs.</p>
+      </div>
+      <div class="status-note">
+        <strong>Household-owned records</strong>
+        <span>Cases and visits come from the household plugin. Notes are saved in Mission Control and remain available after restarts.</span>
+      </div>
+    </div>
+
+    <div class="metric-grid history-metrics">
+      ${metric("Open cases", openCases.length, "Problems still being tracked")}
+      ${metric("Blocked", blockedCases.length, "Waiting for a decision or dependency")}
+      ${metric("Scheduled visits", appointments.length, "Also shown in Schedule")}
+    </div>
+
+    <div class="detail-grid">
+      <section class="panel">
+        <div class="panel-header"><h2>Maintenance cases</h2><span>${cases.length} ${cases.length === 1 ? "case" : "cases"}</span></div>
+        <div class="task-list">
+          ${cases.length ? cases.map(householdCaseRow).join("") : '<div class="empty">No maintenance cases configured.</div>'}
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-header"><h2>Visits and appointments</h2><span>Household provider</span></div>
+        <div class="schedule-list">
+          ${appointments.length ? appointments.map(scheduleRow).join("") : '<div class="empty">No visits scheduled.</div>'}
+        </div>
+      </section>
+    </div>
+  `;
+  wireEntityLinks();
+}
+
 function renderYard() {
   const entries = landscapeEntries();
   if (!entries.length) {
@@ -950,6 +1008,24 @@ function taskRow(task) {
 
 function landscapeEntries() {
   return (dashboard.agenda || []).filter((entry) => entry.source?.plugin_id === "landscape");
+}
+
+function householdEntries() {
+  return (dashboard.agenda || []).filter((entry) => entry.source?.plugin_id === "household");
+}
+
+function householdCaseRow(entry) {
+  const badgeClass = entry.state === "blocked" ? "is-blocked" : entry.state === "in-progress" ? "is-active" : "";
+  return `
+    <article class="task-row">
+      <span class="task-toggle is-read-only" aria-hidden="true">·</span>
+      <div>
+        <h3 class="task-title">${entityLink(entry)}</h3>
+        <p class="task-description">${escapeHtml(entry.detail || "Open the case for contacts, links, related tasks, and notes.")}</p>
+      </div>
+      <span class="state-badge ${badgeClass}">${escapeHtml(entry.state || "open")}</span>
+    </article>
+  `;
 }
 
 function landscapeActionRow(entry) {
