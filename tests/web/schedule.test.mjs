@@ -32,11 +32,26 @@ const context = {
 context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(
-  `${source}\n;globalThis.scheduleTest = { calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, entryAccentToken, entryProvenance, escapeHtml, safeDetailHref, setDashboard(value) { dashboard = value; }, shiftCivilDate };`,
+  `${source}\n;globalThis.scheduleTest = { calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, entryAccentToken, entryProvenance, escapeHtml, householdEntries, safeDetailHref, setDashboard(value) { dashboard = value; }, shiftCivilDate };`,
   context,
 );
 
 const { scheduleTest } = context;
+
+test("household entries are available to the maintenance view", () => {
+  scheduleTest.setDashboard({
+    agenda: [
+      { id: "shower", source: { plugin_id: "household" } },
+      { id: "yard", source: { plugin_id: "landscape" } },
+      { id: "inspection", source: { plugin_id: "household" } },
+    ],
+  });
+
+  assert.deepEqual(
+    Array.from(scheduleTest.householdEntries(), (entry) => entry.id),
+    ["shower", "inspection"],
+  );
+});
 
 test("civil dates remain stable west of UTC", () => {
   assert.equal(
