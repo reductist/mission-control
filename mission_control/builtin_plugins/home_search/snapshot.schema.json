@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mission-control.home-search-snapshot/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "revision", "checked_at", "sources", "candidates"],
+  "properties": {
+    "schema_version": {"const": "mission-control.home-search-snapshot/v1"},
+    "revision": {"type": "string", "minLength": 1, "maxLength": 128},
+    "checked_at": {"type": "string", "format": "date-time"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "uniqueItems": true,
+      "items": {"type": "string", "format": "uri", "maxLength": 2048}
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/candidate"}
+    }
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "texts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/text"},
+      "maxItems": 30
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "address", "location", "verification_status", "listing_status",
+        "source_url", "why_fit", "tradeoffs", "unknowns", "estimated_all_in"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$", "maxLength": 128},
+        "address": {"type": "string", "minLength": 1, "maxLength": 256},
+        "location": {"const": "Reading, MA 01867"},
+        "verification_status": {"enum": ["verified", "unverified"]},
+        "listing_status": {"type": "string", "minLength": 1, "maxLength": 128},
+        "source_url": {"type": "string", "format": "uri", "maxLength": 2048},
+        "source_label": {"type": "string", "minLength": 1, "maxLength": 128},
+        "indoor_sqft": {"type": ["integer", "null"], "minimum": 1},
+        "list_price": {"type": ["integer", "null"], "minimum": 0},
+        "why_fit": {"$ref": "#/$defs/texts", "minItems": 1},
+        "tradeoffs": {"$ref": "#/$defs/texts"},
+        "unknowns": {"$ref": "#/$defs/texts"},
+        "estimated_all_in": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["amount", "currency", "confidence", "assumptions"],
+          "properties": {
+            "amount": {"type": ["integer", "null"], "minimum": 1},
+            "currency": {"const": "USD"},
+            "confidence": {"enum": ["unknown", "low", "medium", "high"]},
+            "assumptions": {"$ref": "#/$defs/texts", "minItems": 1}
+          }
+        }
+      }
+    }
+  }
+}

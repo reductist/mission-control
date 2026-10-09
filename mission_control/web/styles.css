@@ -419,6 +419,25 @@ button.calendar-item:focus-visible { outline: 2px solid var(--accent); outline-o
 .status-note { padding: 16px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--radius) var(--radius) 0; }
 .status-note strong { display: block; margin-bottom: 6px; font-size: 13px; }
 .status-note span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.house-search-status { margin-bottom: 16px; }
+.house-criteria, .house-candidates, .import-disclosure { margin-top: 16px; }
+.house-criteria-grid { margin: 0; padding: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+.house-criteria-grid div, .candidate-facts div { min-width: 0; }
+.house-criteria-grid dt, .candidate-facts dt { color: var(--muted); font: 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+.house-criteria-grid dd, .candidate-facts dd { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+.candidate-list { display: grid; gap: 0; }
+.candidate-card { padding: 20px; border-bottom: 1px solid var(--border); }
+.candidate-card:last-child { border-bottom: 0; }
+.candidate-head, .candidate-actions, .review-controls { display: flex; align-items: center; gap: 12px; }
+.candidate-head { justify-content: space-between; align-items: flex-start; }
+.candidate-head h3 { margin: 3px 0 6px; font-size: 17px; }
+.candidate-facts { margin: 18px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+.candidate-actions { justify-content: space-between; flex-wrap: wrap; }
+.review-controls { flex-wrap: wrap; }
+.snapshot-form { padding: 20px; display: grid; gap: 12px; }
+.snapshot-form label { font-size: 13px; font-weight: 600; }
+.snapshot-form textarea { width: 100%; resize: vertical; font: 12px/1.5 var(--mono); }
+.snapshot-form .primary-button { justify-self: start; }
 
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .list { margin: 0; padding: 0; list-style: none; display: grid; }
@@ -577,7 +596,7 @@ button.calendar-item:focus-visible { outline: 2px solid var(--accent); outline-o
 
 @media (max-width: 900px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .content-grid, .section-intro, .detail-grid, .entity-layout { grid-template-columns: 1fr; }
+  .content-grid, .section-intro, .detail-grid, .entity-layout, .house-criteria-grid, .candidate-facts { grid-template-columns: 1fr; }
   .entity-summary { position: static; }
 }
 

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mission-control.home-search.config/v1",
+  "const": {"settings": {}, "credentials": {}}
+}
