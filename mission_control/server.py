@@ -83,7 +83,15 @@ MAX_REQUEST_BYTES = 64 * 1024
 _TASK_PATH = re.compile(r"^/api/tasks/([^/]+)$")
 _ENTITY_PATH = re.compile(r"^/api/entities/([^/]+)/([^/]+)/([^/]+)$")
 _STATIC_ASSETS = {
+    "/app.webmanifest": (
+        "app.webmanifest",
+        "application/manifest+json; charset=utf-8",
+    ),
     "/assets/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/assets/icon-192.png": ("icon-192.png", "image/png"),
+    "/assets/icon-512.png": ("icon-512.png", "image/png"),
+    "/assets/icon-maskable-192.png": ("icon-maskable-192.png", "image/png"),
+    "/assets/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
     "/assets/styles.css": ("styles.css", "text/css; charset=utf-8"),
 }
 _DEMO_TASKS = (

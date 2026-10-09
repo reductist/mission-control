@@ -126,6 +126,9 @@ mctrld --config ./mission-control-demo.toml
 Open <http://127.0.0.1:8000>. The demo uses synthetic Google and household
 data and does not contact Google.
 
+To install the existing private HTTPS deployment as an online-only Android app,
+follow [`docs/android-pwa.md`](docs/android-pwa.md).
+
 To connect a real Google account, follow
 [`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
 are stored separately from application configuration.

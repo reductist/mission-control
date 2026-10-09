@@ -97,8 +97,74 @@ def test_http_dashboard_assets_and_health(tmp_path):
             assert response.headers["Content-Security-Policy"].startswith(
                 "default-src 'self'"
             )
+            assert response.headers["Cache-Control"] == "no-store"
         assert 'content="known-token"' in index
         assert "Mission Control" in index
+        assert '<link rel="manifest" href="/app.webmanifest">' in index
+        assert '<meta name="theme-color" content="#111315">' in index
+        assert "serviceWorker" not in index
+
+        with urlopen(f"{base_url}/app.webmanifest") as response:
+            manifest = json.load(response)
+            assert response.headers["Content-Type"].startswith(
+                "application/manifest+json"
+            )
+            assert response.headers["Cache-Control"] == "no-store"
+        assert manifest == {
+            "id": "/",
+            "name": "Mission Control",
+            "short_name": "Mission Control",
+            "description": "Private household operations workspace.",
+            "start_url": "/",
+            "scope": "/",
+            "display": "standalone",
+            "background_color": "#111315",
+            "theme_color": "#111315",
+            "icons": [
+                {
+                    "src": "/assets/icon-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png",
+                    "purpose": "any",
+                },
+                {
+                    "src": "/assets/icon-512.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "any",
+                },
+                {
+                    "src": "/assets/icon-maskable-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png",
+                    "purpose": "maskable",
+                },
+                {
+                    "src": "/assets/icon-maskable-512.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "maskable",
+                },
+            ],
+        }
+
+        for icon_path, expected_size in (
+            ("icon-192.png", 192),
+            ("icon-512.png", 512),
+            ("icon-maskable-192.png", 192),
+            ("icon-maskable-512.png", 512),
+        ):
+            with urlopen(f"{base_url}/assets/{icon_path}") as response:
+                icon = response.read()
+                assert response.headers["Content-Type"] == "image/png"
+                assert response.headers["Cache-Control"] == "no-store"
+            assert icon.startswith(b"\x89PNG\r\n\x1a\n")
+            assert int.from_bytes(icon[16:20], "big") == expected_size
+            assert int.from_bytes(icon[20:24], "big") == expected_size
+
+        with pytest.raises(HTTPError) as missing_worker:
+            urlopen(f"{base_url}/service-worker.js")
+        assert missing_worker.value.code == 404
 
         with urlopen(f"{base_url}/assets/styles.css") as response:
             assert response.headers["Content-Type"].startswith("text/css")
