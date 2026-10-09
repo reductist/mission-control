@@ -24,6 +24,32 @@ a different approach:
 The goal is not to replace every specialized tool. It is to reduce the time and
 attention needed to keep track of them.
 
+## Why I built this
+
+As a neurodivergent developer, I have limited pools of attention, patience, and
+focus. Juggling an endless collection of apps is a constant drain on all three.
+Even when each app is useful on its own, remembering where everything lives and
+repeatedly switching context carries a real cost. Mission Control is meant to
+reduce that cost.
+
+I have also become frustrated by service providers increasingly siloing my data
+and artifacts in their private gardens. Too often, this is not done to provide
+value to me as the user, but to make it difficult to migrate to a competitor. I
+find this untenable. The systems I use should preserve my access to my own data,
+along with the context and portability needed to move it elsewhere.
+
+I use Ansible extensively in my day job and appreciate its modularity and
+flexibility. However, the interfaces between plays, plugins, and modules are
+largely stringly typed. Making their state robust and validating it correctly
+can be painfully manual and repetitive.
+
+Mission Control borrows that modular approach but uses CUE to define robust,
+typed data schemas for plugin interfaces. The application uses those schemas to
+validate that registered plugins meet their contracts. The same well-defined,
+machine-readable interfaces should make plugins easier to write, test, and
+generate—especially with AI, which can use the contracts to guide development
+instead of relying on undocumented conventions or guesswork.
+
 ## Current status
 
 Mission Control is pre-release software. The current version includes:
