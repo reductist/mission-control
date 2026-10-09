@@ -66,8 +66,9 @@ pkgs.testers.nixosTest {
       "curl --fail --silent http://127.0.0.1:8000/api/dashboard | grep -q '\"label\": \"Patrik\"'"
     )
     machine.succeed(
-      "curl --fail --silent http://127.0.0.1:8000/ | grep -q 'Schedule'"
+      "curl --fail --silent --output /tmp/mission-control-index.html http://127.0.0.1:8000/"
     )
+    machine.succeed("grep -q 'Schedule' /tmp/mission-control-index.html")
     machine.succeed(
       "systemctl show mission-control.service --property=DynamicUser --value | grep -qx yes"
     )
