@@ -8,37 +8,39 @@ const connectionLabel = document.querySelector("#connection-label");
 const modeLabel = document.querySelector("#mode-label");
 const versionLabel = document.querySelector("#version-label");
 const statusDot = document.querySelector(".status-dot");
+const inspectorContent = document.querySelector("#inspector-content");
+const sourceHealthList = document.querySelector("#source-health-list");
 
 const viewCopy = {
   overview: {
     eyebrow: "Household overview",
-    title: "The next right things",
-    description: "A shared view of active work, decisions, and longer-term plans.",
+    title: "Overview",
+    description: "Decisions, schedule, and active work.",
   },
   schedule: {
     eyebrow: "Household schedule",
-    title: "What is happening next",
-    description: "Events, appointments, tasks, and reminders from every enabled provider.",
+    title: "Schedule",
+    description: "Events, appointments, tasks, and reminders from enabled sources.",
   },
   house: {
     eyebrow: "House search",
-    title: "Reading purchase targets",
-    description: "Sourced candidates, fit, unknowns, costs, and review decisions.",
+    title: "House",
+    description: "Sourced candidates, unknowns, costs, and review decisions.",
   },
   maintenance: {
     eyebrow: "Household maintenance",
-    title: "Keep the history with the work",
-    description: "Track problems, testing, contractors, reference material, and scheduled visits together.",
+    title: "Maintenance",
+    description: "Cases, testing, references, and scheduled visits.",
   },
   yard: {
     eyebrow: "Landscape and yard",
-    title: "Maintain now, design deliberately",
-    description: "Balance seasonal maintenance with projects that make the property easier to use and care for.",
+    title: "Yard",
+    description: "Seasonal maintenance and longer-term projects.",
   },
   history: {
     eyebrow: "Completed work",
-    title: "Closed, not lost",
-    description: "Review completed work and use owner-declared actions when something needs to return.",
+    title: "History",
+    description: "Completed work and owner-declared reopen actions.",
   },
 };
 
@@ -114,6 +116,7 @@ async function refresh() {
     modeLabel.textContent = dashboard.mode === "demo" ? "House showcase enabled" : "Operational workspace";
     versionLabel.textContent = `v${dashboard.version}`;
     statusDot.classList.add("is-online");
+    renderSourceHealth();
     app.setAttribute("aria-busy", "false");
     render();
     restoreAppFocus(focus);
@@ -197,6 +200,7 @@ function render() {
   } else {
     renderOverview();
   }
+  resetInspector();
 }
 
 function renderOverview() {
@@ -218,36 +222,29 @@ function renderOverview() {
     + yardActions.filter((entry) => entry.state === "blocked").length
     + openMaintenanceCases.filter((entry) => entry.state === "blocked").length;
 
+  const attention = [
+    ...openMaintenanceCases.filter((entry) => entry.state === "blocked").map((entry) => ({ entry, area: "Maintenance" })),
+    ...yardActions.filter((entry) => entry.state === "blocked").map((entry) => ({ entry, area: "Yard" })),
+    ...activeTasks.filter((entry) => entry.blocked).map((entry) => ({ entry, area: "Core" })),
+  ].slice(0, 4);
+  const nextScheduled = scheduled.slice(0, 3);
+
   app.innerHTML = `
-    <div class="metric-grid">
-      ${metric("Open work", openWork, "Across core and enabled providers")}
-      ${metric("In progress", summary.in_progress, "Work currently being moved")}
-      ${metric("Blocked", blockedWork, blockedWork ? "Needs a decision or dependency" : "Nothing is stuck")}
-      ${metric("Completed", summary.completed, "Durable task history retained")}
+    ${attention.length ? `<div class="attention-strip" role="status"><span>${attention.length}</span><strong>Needs attention</strong><p>${escapeHtml(attention.map(({ entry }) => entry.title).join(" · "))}</p></div>` : ""}
+    <div class="ops-summary" aria-label="Workspace summary">
+      ${compactMetric("Open", openWork)}${compactMetric("Moving", summary.in_progress)}${compactMetric("Blocked", blockedWork)}${compactMetric("Done", summary.completed)}
     </div>
-
-    <div class="content-grid">
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Next up</h2>
-          <span>${visibleCount} visible</span>
-        </div>
-        <div class="task-list">
-          ${visibleCount ? `${visibleYardActions.map(landscapeActionRow).join("")}${visibleCoreTasks.map(taskRow).join("")}` : '<div class="empty">No tasks yet. Add the first shared task below.</div>'}
-        </div>
-        <form class="quick-add" id="quick-add-form">
-          <input id="quick-add-title" name="title" required maxlength="160" placeholder="Add a shared task…" aria-label="New task title">
-          <button class="primary-button" type="submit">Add task</button>
-        </form>
-      </section>
-
-      <div class="stack">
-        ${maintenanceCases.length ? previewCard("Maintenance", maintenanceCases[0].title, maintenanceCases[0].detail || "Open the case record.", "maintenance") : livePlaceholder("Household maintenance")}
-        ${scheduled.length ? previewCard("Schedule", scheduled[0].title, scheduleTimingLabel(scheduled[0]), "schedule") : livePlaceholder("Household schedule")}
-        ${house ? previewCard("House", house.title, house.detail, "house") : livePlaceholder("Home search is not enabled")}
-        ${yardInitiative ? previewCard("Yard", yardInitiative.title, yardInitiative.detail, "yard") : livePlaceholder("Yard planning")}
-      </div>
-    </div>
+    <section class="panel queue-section">
+      <div class="panel-header"><h2>Work queue</h2><span>${visibleCount} visible</span></div>
+      <div class="task-list">${visibleCount ? `${visibleYardActions.map(landscapeActionRow).join("")}${visibleCoreTasks.map(taskRow).join("")}` : '<div class="empty">No active work. Add a shared task below.</div>'}</div>
+      <form class="quick-add" id="quick-add-form"><input id="quick-add-title" name="title" required maxlength="160" placeholder="Add a shared task…" aria-label="New task title"><button class="primary-button" type="submit">Add</button></form>
+    </section>
+    <section class="overview-rooms" aria-label="Workspace rooms">
+      ${overviewRoom("Schedule", nextScheduled.length ? `${nextScheduled.length} upcoming` : "Clear", nextScheduled.map((entry) => `${scheduleTimingLabel(entry)} — ${entry.title}`), "schedule")}
+      ${overviewRoom("Maintenance", `${openMaintenanceCases.length} open`, openMaintenanceCases.slice(0, 2).map((entry) => entry.title), "maintenance")}
+      ${overviewRoom("House", house ? "Search active" : "Not enabled", house ? [house.detail || house.title] : [], "house")}
+      ${overviewRoom("Yard", `${yardActions.length} actions`, [yardInitiative?.title, ...yardActions.slice(0, 1).map((entry) => entry.title)].filter(Boolean), "yard")}
+    </section>
   `;
 
   wireCommandButtons();
@@ -256,6 +253,14 @@ function renderOverview() {
   document.querySelectorAll(".text-button[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
+}
+
+function compactMetric(label, value) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
+}
+
+function overviewRoom(label, status, lines, view) {
+  return `<article class="room-row"><div><p class="kicker">${escapeHtml(label)}</p><strong>${escapeHtml(status)}</strong></div><ul>${lines.length ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>No current items</li>"}</ul><button class="text-button" data-view="${view}" type="button" aria-label="Open ${escapeHtml(label)}">Open →</button></article>`;
 }
 
 function renderSchedule() {
@@ -1603,6 +1608,310 @@ function renderError(error) {
   app.innerHTML = `<div class="error-box"><strong>Mission Control could not complete that request.</strong><p>${escapeHtml(error.message || String(error))}</p><button class="secondary-button" id="retry-load" type="button">Retry</button></div>`;
   document.querySelector("#retry-load").addEventListener("click", refresh);
 }
+
+function renderSourceHealth() {
+  if (!sourceHealthList) return;
+  const providers = dashboard?.providers || [];
+  sourceHealthList.innerHTML = providers.length
+    ? providers.map((provider) => {
+      const state = provider.health?.state || "unknown";
+      return `<div class="source-row"><i class="health-dot is-${escapeHtml(state)}" aria-hidden="true"></i><span>${escapeHtml(provider.name)}</span><small>${escapeHtml(state)}</small></div>`;
+    }).join("")
+    : '<p class="muted-copy">No plugin sources enabled.</p>';
+}
+
+let inspectorActions = [];
+
+function resetInspector() {
+  if (!inspectorContent) return;
+  inspectorActions = [];
+  inspectorContent.innerHTML = `
+    <div class="inspector-empty">
+      <span class="inspector-glyph" aria-hidden="true">⌁</span>
+      <h2>${escapeHtml(viewCopy[activeView]?.title || "Nothing selected")}</h2>
+      <p>Move through the queue to inspect context and available commands.</p>
+    </div>`;
+}
+
+function inspectElement(element) {
+  if (!inspectorContent || !element) return;
+  const context = element.closest("article, .task-row, .schedule-row, .candidate-card, .panel, .attention-strip") || element;
+  document.querySelectorAll(".is-inspected").forEach((item) => item.classList.remove("is-inspected"));
+  context.classList.add("is-inspected");
+  const title = context.querySelector("h2, h3, .task-title, strong")?.textContent?.trim()
+    || element.getAttribute("aria-label") || element.textContent.trim() || "Selected item";
+  const detail = context.querySelector(".task-description, .entity-description, .activity-body, p")?.textContent?.trim();
+  const state = context.querySelector(".state-badge, .signal")?.textContent?.trim();
+  const sourceId = element.dataset.pluginId
+    || context.querySelector("[data-plugin-id]")?.dataset.pluginId;
+  const actionNodes = [...context.querySelectorAll("button:not([disabled]), a[href]")]
+    .filter((node) => !node.closest("#inspector-content"));
+  inspectorActions = actionNodes;
+  inspectorContent.innerHTML = `
+    <section class="inspector-detail">
+      <p class="kicker">${escapeHtml(sourceId ? pluginLabel(sourceId) : viewCopy[activeView]?.eyebrow || "Workspace")}</p>
+      <h2>${escapeHtml(title)}</h2>
+      <div class="inspector-badges">${state ? `<span class="state-badge">${escapeHtml(state)}</span>` : ""}${sourceId ? `<span class="state-badge">${escapeHtml(sourceId)}</span>` : ""}</div>
+      <p class="inspector-description">${escapeHtml(detail || "No additional detail is available for this item.")}</p>
+      <div class="inspector-section">
+        <h3>Commands</h3>
+        ${actionNodes.length ? `<div class="command-table">${actionNodes.map((node, index) => `<button type="button" data-inspector-action="${index}"><span>${escapeHtml(inspectorActionLabel(node))}</span><kbd>↵</kbd></button>`).join("")}</div>` : '<p class="muted-copy">This source exposes no command for the selected item.</p>'}
+      </div>
+      <div class="inspector-section"><h3>Provenance</h3><p class="muted-copy">${escapeHtml(sourceId ? `Owned by ${pluginLabel(sourceId)}. Commands return to the authoritative source.` : "Rendered from the current Mission Control projection.")}</p></div>
+    </section>`;
+}
+
+function inspectorActionLabel(node) {
+  return node.getAttribute("aria-label") || node.textContent.trim() || "Open";
+}
+
+inspectorContent?.addEventListener("click", (event) => {
+  const proxy = event.target.closest("[data-inspector-action]");
+  if (!proxy) return;
+  inspectorActions[Number(proxy.dataset.inspectorAction)]?.click();
+});
+
+document.addEventListener("focusin", (event) => {
+  const pane = event.target.closest?.("[data-pane]");
+  if (pane) setActivePane(pane.dataset.pane, false);
+  if (event.target.closest?.("#app")) inspectElement(event.target);
+});
+
+const paneOrder = ["navigator", "queue", "inspector"];
+let activePane = "navigator";
+let jumpState = null;
+const focusHistory = [];
+const helpDialog = document.querySelector("#help-dialog");
+const jumpLayer = document.querySelector("#jump-layer");
+const keyboardAnnouncer = document.querySelector("#keyboard-announcer");
+const keyboardModeLabel = document.querySelector("#keyboard-mode-label");
+const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
+
+function isTypingTarget(target) {
+  return Boolean(target?.matches?.("input, textarea, select, [contenteditable='true']"));
+}
+
+function paneForKey(key) {
+  return ({ s: "navigator", d: "queue", f: "inspector" })[key.toLowerCase()] || null;
+}
+
+function movementForKey(key) {
+  return ({ ArrowLeft: "left", h: "left", ArrowRight: "right", l: "right", ArrowUp: "up", k: "up", ArrowDown: "down", j: "down" })[key] || null;
+}
+
+function cycledPaneName(name, delta) {
+  const current = paneOrder.indexOf(name);
+  return paneOrder[(current + delta + paneOrder.length) % paneOrder.length];
+}
+
+function paneElement(name) {
+  return document.querySelector(`[data-pane="${name}"]`);
+}
+
+function visibleFocusable(pane) {
+  return [...pane.querySelectorAll(focusableSelector)].filter((item) => {
+    if (item.closest("[hidden]")) return false;
+    return !item.hasAttribute("disabled") && item.getAttribute("aria-hidden") !== "true";
+  });
+}
+
+function setActivePane(name, moveFocus = true) {
+  const pane = paneElement(name);
+  if (!pane) return;
+  activePane = name;
+  document.querySelectorAll("[data-pane]").forEach((item) => item.classList.toggle("is-keyboard-active", item === pane));
+  if (moveFocus) {
+    const target = pane.querySelector(".is-inspected")?.querySelector(focusableSelector) || visibleFocusable(pane)[0];
+    (target || pane).focus({ preventScroll: true });
+  }
+  announce(`${name} pane`);
+}
+
+function moveWithinPane(delta) {
+  const pane = paneElement(activePane);
+  const items = pane ? visibleFocusable(pane) : [];
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  const next = Math.max(0, Math.min(items.length - 1, current < 0 ? 0 : current + delta));
+  items[next].focus({ preventScroll: true });
+  items[next].scrollIntoView?.({ block: "nearest" });
+}
+
+function moveAcrossPanes(delta) {
+  const current = paneOrder.indexOf(activePane);
+  const next = Math.max(0, Math.min(paneOrder.length - 1, current + delta));
+  if (next === current) {
+    announce(`${activePane} pane boundary`);
+    return;
+  }
+  setActivePane(paneOrder[next]);
+}
+
+function cyclePane(delta) {
+  setActivePane(cycledPaneName(activePane, delta));
+}
+
+function announce(message) {
+  if (!keyboardAnnouncer) return;
+  keyboardAnnouncer.textContent = "";
+  window.setTimeout?.(() => { keyboardAnnouncer.textContent = message; }, 0);
+}
+
+function contextualCommands() {
+  const commands = [
+    ["S / D / F", "Focus Navigator, Queue, or Inspector"],
+    ["H J K L / arrows", "Move between panes or through the active pane"],
+    ["Tab / Shift+Tab", "Cycle top-level panes in navigation mode"],
+    ["G", "Jump: type two search characters, then a home-row hint"],
+    ["Enter", "Activate the focused control"],
+    ["Esc", "Cancel, close, or return"],
+  ];
+  if (document.querySelector("#entity-note-body")) commands.splice(5, 0, ["E", "Edit the current entity note"]);
+  return commands;
+}
+
+function openHelp() {
+  cancelJump();
+  const commands = contextualCommands();
+  document.querySelector("#help-commands").innerHTML = `<dl class="help-grid">${commands.map(([keys, description]) => `<div><dt>${escapeHtml(keys)}</dt><dd>${escapeHtml(description)}</dd></div>`).join("")}</dl>`;
+  if (typeof helpDialog.showModal === "function") helpDialog.showModal();
+  keyboardModeLabel.textContent = "HELP";
+}
+
+function startJump() {
+  const pane = paneElement(activePane);
+  const targets = pane ? visibleFocusable(pane) : [];
+  if (!targets.length) return;
+  jumpState = { query: "", targets, matches: [], hints: new Map() };
+  jumpLayer.replaceChildren();
+  keyboardModeLabel.textContent = "JUMP 0/2";
+  announce("Jump mode. Type two characters from the target text.");
+}
+
+function updateJump(character) {
+  if (!jumpState) return;
+  jumpState.query += character.toLowerCase();
+  keyboardModeLabel.textContent = `JUMP ${jumpState.query.length}/2`;
+  if (jumpState.query.length < 2) {
+    announce(`Jump search ${jumpState.query}. Type one more character.`);
+    return;
+  }
+  const query = jumpState.query.slice(0, 2);
+  jumpState.matches = jumpState.targets.filter((target) => jumpTargetText(target).includes(query));
+  if (jumpState.matches.length === 1) {
+    finishJump(jumpState.matches[0]);
+    return;
+  }
+  const hints = "asdfghjklqwertyuiopzxcvbnm";
+  jumpState.matches.slice(0, hints.length).forEach((target, index) => {
+    const hint = hints[index];
+    jumpState.hints.set(hint, target);
+    const rect = target.getBoundingClientRect();
+    const label = document.createElement("span");
+    label.className = "jump-label";
+    label.textContent = hint.toUpperCase();
+    label.style.left = `${Math.max(4, rect.left - 8)}px`;
+    label.style.top = `${Math.max(4, rect.top - 8)}px`;
+    jumpLayer.append(label);
+  });
+  announce(jumpState.matches.length ? `${jumpState.matches.length} matches. Type the adjacent hint.` : `No targets contain ${query}. Press Escape to cancel.`);
+}
+
+function jumpTargetText(target) {
+  return `${target.getAttribute("aria-label") || ""} ${target.textContent || ""}`.trim().toLowerCase();
+}
+
+function finishJump(target) {
+  cancelJump();
+  target.focus({ preventScroll: true });
+  target.scrollIntoView?.({ block: "nearest" });
+  announce(`Focused ${inspectorActionLabel(target)}`);
+}
+
+function cancelJump() {
+  jumpState = null;
+  jumpLayer?.replaceChildren();
+  if (keyboardModeLabel) keyboardModeLabel.textContent = "NAV";
+}
+
+function handleEscape() {
+  if (jumpState) return cancelJump();
+  if (helpDialog?.open) {
+    helpDialog.close();
+    keyboardModeLabel.textContent = "NAV";
+    return;
+  }
+  if (entityDetail) {
+    showView(detailReturnView);
+    return;
+  }
+  const prior = focusHistory.pop();
+  if (prior?.isConnected) prior.focus({ preventScroll: true });
+  else setActivePane("navigator");
+}
+
+document.querySelector("#help-button")?.addEventListener("click", openHelp);
+helpDialog?.addEventListener("close", () => { keyboardModeLabel.textContent = "NAV"; });
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    handleEscape();
+    return;
+  }
+  if (helpDialog?.open || isTypingTarget(event.target)) return;
+  if (jumpState) {
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      cancelJump();
+      startJump();
+      return;
+    }
+    const hintTarget = jumpState.hints.get(event.key.toLowerCase());
+    if (hintTarget) {
+      event.preventDefault();
+      finishJump(hintTarget);
+    } else if (/^[a-z0-9]$/i.test(event.key) && jumpState.query.length < 2) {
+      event.preventDefault();
+      updateJump(event.key);
+    }
+    return;
+  }
+  if (event.key === "?" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    openHelp();
+    return;
+  }
+  if (event.key.toLowerCase() === "g" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    startJump();
+    return;
+  }
+  if (event.key.toLowerCase() === "e" && document.querySelector("#entity-note-body")) {
+    event.preventDefault();
+    document.querySelector("#entity-note-body").focus();
+    return;
+  }
+  const pane = paneForKey(event.key);
+  if (pane && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    focusHistory.push(document.activeElement);
+    setActivePane(pane);
+    return;
+  }
+  const movement = movementForKey(event.key);
+  if (movement) {
+    event.preventDefault();
+    if (movement === "up" || movement === "down") moveWithinPane(movement === "up" ? -1 : 1);
+    else moveAcrossPanes(movement === "left" ? -1 : 1);
+    return;
+  }
+  if (event.key === "Tab" && event.target.closest?.("form")) return;
+  if (event.key === "Tab" && document.activeElement?.closest?.("[data-pane]")) {
+    event.preventDefault();
+    cyclePane(event.shiftKey ? -1 : 1);
+  }
+});
 
 function escapeHtml(value) {
   return String(value)
