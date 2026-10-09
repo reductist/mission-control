@@ -65,6 +65,14 @@ LANDSCAPE_PRESENTATION_GENERATED="$GENERATED_DIR/landscape-config.presentation.r
 LANDSCAPE_CONFIG_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.schema.json"
 LANDSCAPE_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.defaults.json"
 LANDSCAPE_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/landscape/config.presentation.json"
+HOUSEHOLD_CONFIG_GENERATED="$GENERATED_DIR/household-config.runtime-check.schema.json"
+HOUSEHOLD_CONFIG_RAW="$GENERATED_DIR/household-config.raw.schema.json"
+HOUSEHOLD_CONFIG_OVERLAY="$GENERATED_DIR/household-config.schema-overlay.json"
+HOUSEHOLD_DEFAULTS_GENERATED="$GENERATED_DIR/household-config.defaults.runtime-check.json"
+HOUSEHOLD_PRESENTATION_GENERATED="$GENERATED_DIR/household-config.presentation.runtime-check.json"
+HOUSEHOLD_CONFIG_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/household/config.schema.json"
+HOUSEHOLD_DEFAULTS_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/household/config.defaults.json"
+HOUSEHOLD_PRESENTATION_RUNTIME="$ROOT_DIR/mission_control/builtin_plugins/household/config.presentation.json"
 REFERENCE_CONFIG_GENERATED="$GENERATED_DIR/reference-config.runtime-check.schema.json"
 REFERENCE_CONFIG_RAW="$GENERATED_DIR/reference-config.raw.schema.json"
 REFERENCE_CONFIG_OVERLAY="$GENERATED_DIR/reference-config.schema-overlay.json"
@@ -187,6 +195,10 @@ generate_plugin_bundle ./schema/landscape '#LandscapeConfiguration' \
   '#LandscapeConfigurationJSONSchemaOverlay' '#LandscapeConfigurationDefaults' \
   '#LandscapeConfigurationPresentation' "$LANDSCAPE_CONFIG_RAW" "$LANDSCAPE_CONFIG_OVERLAY" \
   "$LANDSCAPE_CONFIG_GENERATED" "$LANDSCAPE_DEFAULTS_GENERATED" "$LANDSCAPE_PRESENTATION_GENERATED"
+generate_plugin_bundle ./schema/household '#HouseholdConfiguration' \
+  '#HouseholdConfigurationJSONSchemaOverlay' '#HouseholdConfigurationDefaults' \
+  '#HouseholdConfigurationPresentation' "$HOUSEHOLD_CONFIG_RAW" "$HOUSEHOLD_CONFIG_OVERLAY" \
+  "$HOUSEHOLD_CONFIG_GENERATED" "$HOUSEHOLD_DEFAULTS_GENERATED" "$HOUSEHOLD_PRESENTATION_GENERATED"
 generate_plugin_bundle ./plugins/reference '#ReferenceConfiguration' \
   '#ReferenceConfigurationJSONSchemaOverlay' '#ReferenceConfigurationDefaults' \
   '#ReferenceConfigurationPresentation' "$REFERENCE_CONFIG_RAW" "$REFERENCE_CONFIG_OVERLAY" \
@@ -257,6 +269,9 @@ compare_schema "$GOOGLE_PRESENTATION_GENERATED" "$GOOGLE_PRESENTATION_RUNTIME" "
 compare_schema "$LANDSCAPE_CONFIG_GENERATED" "$LANDSCAPE_CONFIG_RUNTIME" "Landscape configuration"
 compare_schema "$LANDSCAPE_DEFAULTS_GENERATED" "$LANDSCAPE_DEFAULTS_RUNTIME" "Landscape configuration defaults"
 compare_schema "$LANDSCAPE_PRESENTATION_GENERATED" "$LANDSCAPE_PRESENTATION_RUNTIME" "Landscape configuration presentation"
+compare_schema "$HOUSEHOLD_CONFIG_GENERATED" "$HOUSEHOLD_CONFIG_RUNTIME" "Household configuration"
+compare_schema "$HOUSEHOLD_DEFAULTS_GENERATED" "$HOUSEHOLD_DEFAULTS_RUNTIME" "Household configuration defaults"
+compare_schema "$HOUSEHOLD_PRESENTATION_GENERATED" "$HOUSEHOLD_PRESENTATION_RUNTIME" "Household configuration presentation"
 compare_schema "$REFERENCE_CONFIG_GENERATED" "$REFERENCE_CONFIG_RUNTIME" "reference configuration"
 compare_schema "$REFERENCE_DEFAULTS_GENERATED" "$REFERENCE_DEFAULTS_RUNTIME" "reference configuration defaults"
 compare_schema "$REFERENCE_PRESENTATION_GENERATED" "$REFERENCE_PRESENTATION_RUNTIME" "reference configuration presentation"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -570,6 +570,30 @@ class EntityTypeCommandOwner:
                 f"{command.target.entity_type!r}.",
             )
         return owner.handle(command, context)
+
+
+class StateOnlyCommandOwner:
+    """Expose command state for capabilities whose handler is owned by core."""
+
+    def __init__(
+        self,
+        resolver: Callable[[SourceRef], CommandTargetState | None],
+    ) -> None:
+        self._resolver = resolver
+
+    def command_state(self, target: SourceRef) -> CommandTargetState | None:
+        state = self._resolver(target)
+        return state if isinstance(state, CommandTargetState) else None
+
+    def handle(
+        self, command: CommandEnvelope, context: CommandContext
+    ) -> CommandOutcome:
+        del context
+        return _rejected(
+            command,
+            "unavailable-command",
+            "This target only supports commands handled by Mission Control core.",
+        )
 
 
 class CoreTaskCommandOwner:

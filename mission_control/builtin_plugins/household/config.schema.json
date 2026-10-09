@@ -1,0 +1,215 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#Appointment": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "detail": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 4096
+                },
+                "ends_at": {
+                    "$ref": "#/$defs/%23DateTime"
+                },
+                "kind": {
+                    "enum": [
+                        "inspection",
+                        "repair",
+                        "follow-up",
+                        "other"
+                    ]
+                },
+                "starts_at": {
+                    "$ref": "#/$defs/%23DateTime"
+                },
+                "title": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 256
+                }
+            },
+            "required": [
+                "ends_at",
+                "kind",
+                "starts_at",
+                "title"
+            ]
+        },
+        "#Case": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "appointments": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23Appointment"
+                    }
+                },
+                "area": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 256
+                },
+                "contacts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Contact"
+                    }
+                },
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Link"
+                    }
+                },
+                "related_task_ids": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Identifier"
+                    },
+                    "uniqueItems": true
+                },
+                "state": {
+                    "enum": [
+                        "open",
+                        "blocked",
+                        "waiting"
+                    ]
+                },
+                "summary": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 16384
+                },
+                "title": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 256
+                }
+            },
+            "required": [
+                "state",
+                "summary",
+                "title"
+            ]
+        },
+        "#Contact": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "company": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 256
+                },
+                "email": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 320
+                },
+                "name": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 256
+                },
+                "phone": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 64
+                },
+                "role": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 128
+                },
+                "website": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "pattern": "^https?://"
+                }
+            },
+            "required": [
+                "name"
+            ]
+        },
+        "#DateTime": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "#HouseholdSettings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "cases": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23Case"
+                    },
+                    "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                    }
+                }
+            },
+            "required": [
+                "cases"
+            ]
+        },
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#Link": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "kind": {
+                    "enum": [
+                        "photo",
+                        "document",
+                        "reference",
+                        "todo"
+                    ]
+                },
+                "label": {
+                    "type": "string",
+                    "$ref": "#/$defs/%23NonBlank",
+                    "maxLength": 256
+                },
+                "url": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "pattern": "^https?://"
+                }
+            },
+            "required": [
+                "kind",
+                "label",
+                "url"
+            ]
+        },
+        "#NonBlank": {
+            "type": "string",
+            "not": {
+                "pattern": "^\\s*$"
+            }
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "credentials": {
+            "const": {}
+        },
+        "settings": {
+            "$ref": "#/$defs/%23HouseholdSettings"
+        }
+    },
+    "required": [
+        "credentials",
+        "settings"
+    ],
+    "$id": "mission-control.household.config/v1"
+}

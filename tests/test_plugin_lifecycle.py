@@ -28,7 +28,7 @@ from mission_control.plugins import Permission, PluginId
 
 
 def test_bundled_manifest_identity_does_not_depend_on_directory_name() -> None:
-    assert bundled_plugin_ids() == ("google-calendar", "landscape")
+    assert bundled_plugin_ids() == ("google-calendar", "household", "landscape")
 
 
 def test_generic_preflight_accepts_external_non_agenda_bundle() -> None:
