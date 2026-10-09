@@ -112,6 +112,9 @@ mode = "all"
 
 [plugins.landscape]
 enabled = true
+
+[plugins.home-search]
+enabled = true
 ```
 
 Start the server:
@@ -129,6 +132,9 @@ are stored separately from application configuration.
 
 To record household maintenance cases and scheduled contractor visits, see
 [`docs/household.md`](docs/household.md).
+
+To import sourced house-purchase candidates without enabling a scraper or daily
+watcher, follow [`docs/home-search.md`](docs/home-search.md).
 
 ## Command-line tools
 

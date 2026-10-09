@@ -1,0 +1,5 @@
+{
+  "schema_version": "mission-control.plugin-config-defaults/v1",
+  "configuration_schema": "mission-control.home-search.config/v1",
+  "defaults": {"settings": {}, "credentials": {}}
+}

@@ -21,9 +21,9 @@ const viewCopy = {
     description: "Events, appointments, tasks, and reminders from every enabled provider.",
   },
   house: {
-    eyebrow: "House and finances",
-    title: "Move only for a clear upgrade",
-    description: "Keep the life goal, financial assumptions, and decision record in the same place.",
+    eyebrow: "House search",
+    title: "Reading purchase targets",
+    description: "Sourced candidates, fit, unknowns, costs, and review decisions.",
   },
   maintenance: {
     eyebrow: "Household maintenance",
@@ -43,6 +43,7 @@ const viewCopy = {
 };
 
 let dashboard = null;
+let homeSearchDetails = new Map();
 let activeView = "overview";
 let entityDetail = null;
 let detailReturnView = "overview";
@@ -101,11 +102,13 @@ async function refresh() {
     const focus = captureAppFocus();
     const detailTarget = entityDetail?.source;
     const nextDashboard = await request("/api/dashboard");
+    const homeSearchLoad = await loadHomeSearchDetails(nextDashboard);
     let nextDetail = entityDetail;
     if (detailTarget) {
       nextDetail = await request(entityDetailPath(detailTarget));
     }
     dashboard = nextDashboard;
+    homeSearchDetails = homeSearchLoad.details;
     entityDetail = nextDetail;
     connectionLabel.textContent = "Online";
     modeLabel.textContent = dashboard.mode === "demo" ? "House showcase enabled" : "Operational workspace";
@@ -114,6 +117,9 @@ async function refresh() {
     app.setAttribute("aria-busy", "false");
     render();
     restoreAppFocus(focus);
+    if (homeSearchLoad.failed) {
+      showNotice("Some home-search details could not be refreshed. Last-known details remain visible.", "warning");
+    }
   } catch (error) {
     connectionLabel.textContent = dashboard ? "Showing cached view" : "Unavailable";
     modeLabel.textContent = dashboard
@@ -197,7 +203,7 @@ function renderOverview() {
   const summary = dashboard.summary;
   const activeTasks = dashboard.tasks.filter((task) => task.state !== "done");
   const visibleTasks = activeTasks.slice(0, 7);
-  const house = dashboard.demo?.house;
+  const house = providerInitiative("home-search");
   const scheduled = scheduleEntries().filter((entry) => entry.timing?.kind !== "anytime");
   const maintenanceCases = householdEntries().filter((entry) => entry.kind === "initiative");
   const openMaintenanceCases = maintenanceCases.filter((entry) => !["done", "closed", "completed"].includes(entry.state));
@@ -238,7 +244,7 @@ function renderOverview() {
       <div class="stack">
         ${maintenanceCases.length ? previewCard("Maintenance", maintenanceCases[0].title, maintenanceCases[0].detail || "Open the case record.", "maintenance") : livePlaceholder("Household maintenance")}
         ${scheduled.length ? previewCard("Schedule", scheduled[0].title, scheduleTimingLabel(scheduled[0]), "schedule") : livePlaceholder("Household schedule")}
-        ${house ? previewCard("House", house.status, house.summary, "house") : livePlaceholder("House planning")}
+        ${house ? previewCard("House", house.title, house.detail, "house") : livePlaceholder("Home search is not enabled")}
         ${yardInitiative ? previewCard("Yard", yardInitiative.title, yardInitiative.detail, "yard") : livePlaceholder("Yard planning")}
       </div>
     </div>
@@ -777,48 +783,141 @@ function renderHistory() {
 }
 
 function renderHouse() {
-  const house = dashboard.demo?.house;
-  if (!house) {
-    renderNoDemo("House planning", "Start mctrld with --demo to load the synthetic showcase workspace.");
+  const enabled = (dashboard.providers || []).some((provider) => provider.id === "home-search");
+  const search = providerInitiative("home-search");
+  if (!enabled || !search) {
+    renderNoDemo(
+      "Home search is not enabled",
+      "Enable the home-search plugin to import sourced research. No listings are being watched or recommended by this empty workspace.",
+    );
     return;
   }
+  const searchDetail = homeSearchDetail(search);
+  const candidates = homeSearchCandidates();
+  const verified = candidates.filter(
+    (entry) => detailValue(homeSearchDetail(entry), "verification") === "verified",
+  );
+  const shortlisted = candidates.filter(
+    (entry) => detailValue(homeSearchDetail(entry), "review-status") === "shortlisted",
+  );
+  const freshness = detailValue(
+    searchDetail,
+    "freshness",
+    "No verified search snapshot imported yet",
+  );
   app.innerHTML = `
-    <div class="section-intro">
-      <div>
-        <h2>One decision model, many candidate homes</h2>
-        <p>${escapeHtml(house.summary)}</p>
+    <section class="panel house-search-status">
+      <div class="panel-header">
+        <h2>${entityLink(search)}</h2>
+        <span>Budget unset · watcher inactive</span>
       </div>
-      <div class="status-note">
-        <strong>${escapeHtml(house.status)}</strong>
-        <span>Candidate properties can change without losing the shared decision criteria.</span>
+      <div class="panel-body">
+        <p class="task-description">${escapeHtml(search.detail)}</p>
+        <p class="item-meta">Daily checks are approved after mortgage reconciliation; alert only for worthwhile matches. This interface does not run a feed.</p>
       </div>
-    </div>
+    </section>
 
     <div class="metric-grid">
-      ${house.metrics.map((item) => metric(item.label, item.value, "")).join("")}
+      ${metric("Current candidates", candidates.length, "Imported from sourced research")}
+      ${metric("Source-verified", verified.length, "Still requires independent diligence")}
+      ${metric("Shortlisted", shortlisted.length, "Explicit review decisions")}
+      ${metric("Last checked", freshness, "Source-reported time, not page refresh time")}
     </div>
 
-    <div class="detail-grid">
-      <section class="panel">
-        <div class="panel-header"><h2>Shared priorities</h2><span>Decision inputs</span></div>
-        <div class="panel-body"><ul class="list">${house.priorities.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
-      </section>
-      <section class="panel">
-        <div class="panel-header"><h2>Scenarios</h2><span>Compare, don't predict</span></div>
-        <div class="panel-body">${house.scenarios.map(scenarioRow).join("")}</div>
-      </section>
-      <section class="panel">
-        <div class="panel-header"><h2>Next steps</h2><span>Small and reversible</span></div>
-        <div class="panel-body"><ul class="list">${house.next_steps.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>
-      </section>
-      <section class="panel">
-        <div class="panel-header"><h2>Why this page matters</h2><span>Extension point</span></div>
-        <div class="panel-body">
-          <p class="task-description">A future financial-planning plugin can own assumptions and scenarios. A home-search plugin can own properties and visits. This page remains a consistent household view across both.</p>
-        </div>
-      </section>
-    </div>
+    <section class="panel house-criteria">
+      <div class="panel-header"><h2>Search criteria</h2><span>Renderer-neutral decision record</span></div>
+      <dl class="house-criteria-grid">
+        ${(searchDetail?.attributes || [])
+          .filter((attribute) => !["freshness", "candidate-counts"].includes(attribute.key))
+          .map(detailAttribute)
+          .join("")}
+      </dl>
+    </section>
+
+    <section class="panel house-candidates">
+      <div class="panel-header"><h2>Discovered purchase targets</h2><span>${candidates.length} current</span></div>
+      <div class="candidate-list">
+        ${candidates.length ? candidates.map(homeCandidateCard).join("") : homeSearchEmptyState(freshness)}
+      </div>
+    </section>
+
+    <details class="panel import-disclosure">
+      <summary class="activity-disclosure-summary">
+        <span class="activity-disclosure-title">Import research snapshot</span>
+        <span class="activity-disclosure-meta">Validated, revision-checked, full replacement</span>
+        <span class="activity-disclosure-icon" aria-hidden="true"></span>
+      </summary>
+      <form class="snapshot-form" id="home-search-import-form">
+        <label for="home-search-snapshot">Paste a <code>mission-control.home-search-snapshot/v1</code> JSON document</label>
+        <textarea id="home-search-snapshot" rows="10" required spellcheck="false" placeholder='{"schema_version":"mission-control.home-search-snapshot/v1", …}'></textarea>
+        <p class="item-meta">Imports must use actual checked time and source URLs. Invalid imports leave the last good snapshot unchanged. Review decisions survive later snapshots with the same candidate IDs.</p>
+        <button class="primary-button" type="submit">Validate and import</button>
+      </form>
+    </details>
   `;
+  wireEntityLinks();
+  wireHomeSearchReviewButtons();
+  document.querySelector("#home-search-import-form").addEventListener(
+    "submit",
+    (event) => importHomeSearchSnapshot(event, search),
+  );
+}
+
+function homeSearchEmptyState(freshness) {
+  const imported = freshness !== "No verified search snapshot imported yet";
+  return `<div class="empty">${escapeHtml(imported
+    ? `The imported snapshot was checked ${freshness} and included no worthwhile candidates. This does not imply an active or exhaustive listing feed.`
+    : "No verified research snapshot has been imported. Budget is still unset pending mortgage reconciliation, and the daily watcher is not active.")}</div>`;
+}
+
+function homeCandidateCard(entry) {
+  const detail = homeSearchDetail(entry);
+  const review = detailValue(detail, "review-status", "unreviewed");
+  const sourceUrl = safeHttpUrl(detailValue(detail, "source-url", ""));
+  const fields = [
+    ["Why it fits", detailValue(detail, "why-fit")],
+    ["Tradeoffs", detailValue(detail, "tradeoffs")],
+    ["Unknowns", detailValue(detail, "unknowns")],
+    ["Estimated all-in", detailValue(detail, "estimated-all-in")],
+    ["Estimate confidence", detailValue(detail, "cost-confidence")],
+    ["Assumptions", detailValue(detail, "cost-assumptions")],
+  ];
+  return `
+    <article class="candidate-card">
+      <div class="candidate-head">
+        <div>
+          <p class="kicker">${escapeHtml(detailValue(detail, "verification"))} · ${escapeHtml(detailValue(detail, "listing-status"))}</p>
+          <h3>${entityLink(entry)}</h3>
+          <p class="item-meta">${escapeHtml(detailValue(detail, "usable-indoor-space"))} · ${escapeHtml(detailValue(detail, "list-price"))} · checked ${escapeHtml(detailValue(detail, "last-checked"))}</p>
+        </div>
+        <span class="state-badge">${escapeHtml(review)}</span>
+      </div>
+      <dl class="candidate-facts">
+        ${fields.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+      </dl>
+      <div class="candidate-actions">
+        ${sourceUrl ? `<a class="text-button" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">Open source ↗</a>` : '<span class="read-only-label">No safe source URL</span>'}
+        <div class="review-controls" aria-label="Review decision">
+          ${reviewButton(entry, "shortlisted", "Shortlist", review)}
+          ${reviewButton(entry, "rejected", "Reject", review)}
+          ${reviewButton(entry, "unreviewed", "Reset", review)}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function reviewButton(entry, status, label, current) {
+  return `<button class="secondary-button" type="button" data-home-review data-plugin-id="home-search" data-entity-type="candidate" data-entity-id="${escapeHtml(entry.source.entity_id)}" data-revision="${escapeHtml(entry.revision)}" data-review-status="${status}"${status === current ? " disabled" : ""}>${label}</button>`;
+}
+
+function safeHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function renderMaintenance() {
@@ -1028,6 +1127,49 @@ function householdCaseRow(entry) {
   `;
 }
 
+function providerEntries(pluginId, source = dashboard) {
+  return (source?.agenda || []).filter((entry) => entry.source?.plugin_id === pluginId);
+}
+
+function providerInitiative(pluginId, source = dashboard) {
+  return providerEntries(pluginId, source).find((entry) => entry.kind === "initiative");
+}
+
+function homeSearchCandidates(source = dashboard) {
+  return providerEntries("home-search", source).filter(
+    (entry) => entry.source?.entity_type === "candidate",
+  );
+}
+
+async function loadHomeSearchDetails(source) {
+  const entries = providerEntries("home-search", source);
+  const activeKeys = new Set(entries.map(
+    (entry) => `${entry.source.entity_type}:${entry.source.entity_id}`,
+  ));
+  const details = new Map(
+    [...homeSearchDetails].filter(([key]) => activeKeys.has(key)),
+  );
+  const results = await Promise.allSettled(entries.map(async (entry) => [
+    `${entry.source.entity_type}:${entry.source.entity_id}`,
+    await request(entityDetailPath(entry.source)),
+  ]));
+  results.forEach((result) => {
+    if (result.status === "fulfilled") details.set(...result.value);
+  });
+  return {
+    details,
+    failed: results.some((result) => result.status === "rejected"),
+  };
+}
+
+function homeSearchDetail(entry) {
+  return homeSearchDetails.get(`${entry.source.entity_type}:${entry.source.entity_id}`);
+}
+
+function detailValue(detail, key, fallback = "Not recorded") {
+  return detail?.attributes?.find((attribute) => attribute.key === key)?.value || fallback;
+}
+
 function landscapeActionRow(entry) {
   const badgeClass = entry.state === "blocked" ? "is-blocked" : "";
   const detail = [entry.detail, timingLabel(entry.timing)].filter(Boolean).join(" · ");
@@ -1080,12 +1222,23 @@ function entityLink(item) {
 }
 
 function detailAttribute(attribute) {
-  const href = safeDetailHref(attribute.value);
+  const sourceUrls = attribute.key === "source-urls"
+    ? attribute.value.split(" • ").map(safeHttpUrl).filter(Boolean)
+    : [];
+  if (sourceUrls.length) {
+    const links = sourceUrls
+      .map((url) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)} ↗</a>`)
+      .join("<br>");
+    return `<div><dt>${escapeHtml(attribute.label)}</dt><dd>${links}</dd></div>`;
+  }
+  const href = attribute.key === "source-url"
+    ? safeHttpUrl(attribute.value) || ""
+    : safeDetailHref(attribute.value);
   const display = href.startsWith("mailto:") || href.startsWith("tel:")
     ? attribute.value.slice(attribute.value.indexOf(":") + 1)
     : attribute.value;
   const value = href
-    ? `<a href="${escapeHtml(href)}"${/^https?:\/\//i.test(href) ? ' target="_blank" rel="noreferrer"' : ""}>${escapeHtml(display)}</a>`
+    ? `<a href="${escapeHtml(href)}"${/^https?:\/\//i.test(href) ? ' target="_blank" rel="noreferrer"' : ""}>${escapeHtml(display)}${attribute.key === "source-url" ? " ↗" : ""}</a>`
     : escapeHtml(display);
   return `<div><dt>${escapeHtml(attribute.label)}</dt><dd>${value}</dd></div>`;
 }
@@ -1196,6 +1349,81 @@ function livePlaceholder(title) {
 function scenarioRow(item) {
   const className = item.signal.toLowerCase();
   return `<article class="scenario"><div class="scenario-head"><h3>${escapeHtml(item.name)}</h3><span class="signal is-${escapeHtml(className)}">${escapeHtml(item.signal)}</span></div><p>${escapeHtml(item.detail)}</p></article>`;
+}
+
+async function importHomeSearchSnapshot(event, search) {
+  event.preventDefault();
+  const textarea = document.querySelector("#home-search-snapshot");
+  const submit = event.currentTarget.querySelector("button[type='submit']");
+  let snapshot;
+  try {
+    snapshot = JSON.parse(textarea.value);
+  } catch (_error) {
+    showNotice("The snapshot is not valid JSON. Nothing was imported.", "warning");
+    return;
+  }
+  submit.disabled = true;
+  try {
+    await request("/api/commands", {
+      method: "POST",
+      body: JSON.stringify({
+        schema_version: "mission-control.command/v1",
+        command_id: `web-home-import-${Date.now()}-${++commandSequence}`,
+        target: search.source,
+        expected_revision: search.revision,
+        command: "import-snapshot",
+        arguments: { snapshot },
+      }),
+    });
+    textarea.value = "";
+    await refresh();
+    showNotice("The sourced home-search snapshot was imported.");
+  } catch (error) {
+    if (error.status === 409) {
+      await refresh();
+      showNotice("Home-search data changed while importing. The view was refreshed; review it before retrying.", "warning");
+    } else {
+      showNotice(error.message || String(error), "warning");
+    }
+  } finally {
+    if (document.body.contains(submit)) submit.disabled = false;
+  }
+}
+
+function wireHomeSearchReviewButtons() {
+  document.querySelectorAll("button[data-home-review]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await request("/api/commands", {
+          method: "POST",
+          body: JSON.stringify({
+            schema_version: "mission-control.command/v1",
+            command_id: `web-home-review-${Date.now()}-${++commandSequence}`,
+            target: {
+              plugin_id: button.dataset.pluginId,
+              entity_type: button.dataset.entityType,
+              entity_id: button.dataset.entityId,
+            },
+            expected_revision: button.dataset.revision,
+            command: "set-review-status",
+            arguments: { status: button.dataset.reviewStatus },
+          }),
+        });
+        await refresh();
+        showNotice("The candidate review decision was saved.");
+      } catch (error) {
+        if (error.status === 409) {
+          await refresh();
+          showNotice("That candidate changed after this view loaded. Review the refreshed details before retrying.", "warning");
+        } else {
+          showNotice(error.message || String(error), "warning");
+        }
+      } finally {
+        if (document.body.contains(button)) button.disabled = false;
+      }
+    });
+  });
 }
 
 function wireCommandButtons() {
