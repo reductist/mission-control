@@ -1,47 +1,62 @@
 # Product roadmap
 
-Mission Control is a plugin-oriented work and context system, not a global to-do application. Tasks and actions are only some of the entity types that plugins may own.
+Mission Control brings information and actions from separate tools into one
+workspace. It is not intended to replace those tools or become a universal task
+database.
 
-## Product and architecture guardrails
+## Product rules
 
-- A card is a projection of a richer plugin-owned entity, not the entity itself.
-- Plugins own domain meaning, legal state transitions, detailed state, and plugin-specific metadata.
-- Registration defines the maximum capability envelope for each plugin-owned entity type.
-- Each entity exposes a state-dependent subset of that envelope as its current affordances; renderers do not infer operations from state names or entry kinds.
-- Core may aggregate stable entity references, projections, shared annotations and artifacts, activity, and normalized organizational metadata without taking ownership of plugin domain models.
-- Completion is not universal. Different entities may be completable, reopenable, acknowledgeable, dismissible, editable, or read-only.
-- Notes and artifacts must remain associated with their underlying entity and may also be linked to the event that created or finalized them.
-- Agenda organization must preserve plugin provenance and support first-class filtering, sorting, and grouping; color alone must not carry plugin, priority, or state meaning.
-- Capability enforcement is distinct from operational permissions and is not a sandbox for trusted in-process plugin code.
+- The system that created an item remains its source of truth.
+- Plugins own their data, business rules, state changes, and detailed history.
+- Shared views use validated, read-only projections from each plugin.
+- Commands are sent to the plugin that owns the item.
+- The interface shows source and owner information in text, not only through
+  color.
+- Different item types may support different actions. Mission Control must not
+  assume that every item can be completed, edited, or reopened.
+- Notes and attachments stay linked to the item they describe.
+- The web interface is the reference client, but public view and form contracts
+  must also work for a future terminal client.
 
-## Near-term sequence
+## Completed foundation
 
-Capability envelopes, completed-item history, rich entity detail/activity, external
-plugin discovery, and the read-only Google Agenda/Calendar showcase are complete.
-That showcase exercises configuration, credentials, jobs, health, cache, and
-generic projections, and revealed the integration/configuration work below.
+The project now has:
 
-The canonical sequence is maintained in
+- versioned plugin registration, agenda, history, detail, activity, and command
+  contracts
+- plugin discovery and a public plugin adapter
+- one validated application configuration model for direct and packaged use
+- typed source, connection, collection, and person attribution
+- isolated Google connections with Calendar and Tasks selection
+- guided Google setup with secure credential handling
+- equivalent direct and NixOS deployment configuration
+- a single canonical service on `vectorsigma`; the temporary port-8001 showcase
+  has been removed
+
+## Next
+
+1. **Define the workspace response.** Replace the prototype dashboard response
+   with a versioned workspace snapshot and generic plugin contributions. Remove
+   duplicated core task data and hard-coded House and Yard assembly.
+2. **Move task creation onto public contracts.** Run Tasks through the normal
+   plugin lifecycle and add a typed form and creation contract.
+3. **Describe UI contributions as data.** Replace prototype-specific navigation
+   and rendering paths with renderer-independent view, action, and form
+   descriptions. Keep the web application as the first implementation.
+4. **Improve the main views.** Test designs with real typed data, then build a
+   compact Schedule and a useful summary Dashboard.
+5. **Add attachments.** Define artifact storage and secure image and document
+   uploads while preserving links to the owning item and activity event.
+6. **Add organization and richer editing.** Implement tags, saved filters, and a
+   richer task editor after the underlying contracts are stable.
+
+Operational work such as
+[event inspection](https://github.com/reductist/mission-control/issues/36) will
+be scheduled when it becomes a higher product priority.
+
+Each step should be reviewable on its own, pass contract and packaging tests,
+and receive an end-to-end check on `vectorsigma` before later work depends on
+it.
+
+The detailed configuration and schema decisions are recorded in
 [`configuration-and-schema-evolution.md`](configuration-and-schema-evolution.md).
-In summary:
-
-1. Establish canonical configuration and the simplified public plugin-authoring
-   boundary.
-2. Add scoped attribution and Google-owned multi-connection support.
-3. Add the generic setup-action contract and guided Google setup. The
-   storage-free provider flow, loopback browser host, and atomic managed
-   commit/export adapter are complete.
-4. Converge direct and NixOS configuration, move accepted showcase behavior into
-   the canonical service, and remove the port-8001 showcase service.
-5. Replace the ad-hoc dashboard response and core-specific task/UI paths with typed
-   workspace, creation-form, and declarative renderer-neutral UI contracts. The
-   web UI remains the reference renderer while fixtures prove future TUI use.
-6. Review real-data UX mockups and implement the compact Schedule and summary
-   Dashboard experience.
-7. Add artifact storage and attachment links, followed by tags, saved views, and
-   the rich task composer.
-8. Implement deferred operational improvements such as
-   [issue #36](https://github.com/reductist/mission-control/issues/36) event
-   inspection when they become the active product priority.
-
-Each slice should remain independently reviewable, preserve plugin ownership, pass contract and packaging validation, and be deployed to `vectorsigma` for an end-to-end acceptance check before the next slice depends on it.

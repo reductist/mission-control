@@ -1,103 +1,62 @@
 # Mission Control
 
-Mission Control brings the work scattered across calendars, task lists, and
-special-purpose tools into one calm place. Its job is to absorb the sharp edges
-of those integrations, check what they send, and present consistent controls
-that ask for less attention. The technology should serve the people using it:
-lighten cognitive load, preserve context, and free up focus for the things that
-actually matter.
+Mission Control gives you one place to see and act on work that lives in other
+tools. It currently brings together local tasks, Google Calendar and Google
+Tasks, and a household Landscape plugin.
 
-It is portable and self-hosted. NixOS is the first convenient deployment target
-and proving ground, not an application dependency; the application and its
-configuration do not assume Nix, systemd, or any particular host.
+Most dashboard projects display a collection of widgets. Mission Control takes
+a different approach:
 
-## Naming
+- **Source systems remain authoritative.** A calendar event stays a calendar
+  event. A plugin keeps its own data, rules, history, and available actions.
+- **The interface is consistent across tools.** Mission Control turns data from
+  each source into common schedule, detail, history, and action views.
+- **Actions go back to the owner.** The dashboard does not maintain a second,
+  conflicting copy of an item. Commands are validated and routed to the plugin
+  that owns it.
+- **Integrations are isolated.** Each plugin has its own configuration,
+  credentials, database migrations, health status, and background jobs. A
+  failing integration should not corrupt or block unrelated parts of the app.
+- **It is self-hosted and portable.** The application uses the same validated
+  configuration whether it runs directly, on NixOS, or through a future
+  container or appliance package.
 
-| Surface | Name |
-| --- | --- |
-| Product | Mission Control |
-| Application/package | `mission-control` |
-| Python package | `mission_control` |
-| Administrative CLI | `mcctl` |
-| Long-running daemon | `mctrld` |
-| systemd unit | `mission-control.service` |
-| NixOS module | `services.mission-control` |
+The goal is not to replace every specialized tool. It is to reduce the time and
+attention needed to keep track of them.
 
-`mcctl` is the canonical administrative command. The shorter `mc` name is deliberately avoided because it is already used by widely deployed tools. `mctrld` is the application server and long-running daemon; the former `mcd` name is not used because it collides with Mtools.
+## Current status
 
-## Implementation philosophy
+Mission Control is pre-release software. The current version includes:
 
-Every subsystem must earn its existence. Mission Control starts with the smallest implementation that satisfies a demonstrated requirement, preserves the documented boundaries, and can be tested end to end. Frameworks, abstractions, and infrastructure are introduced when a concrete limitation justifies them—not because they may be useful someday.
+- a responsive web interface with Dashboard, Schedule, History, and entity
+  detail views
+- local task creation, state changes, notes, and immutable activity history
+- a read-only Google integration for Calendar events, appointments, Tasks, and
+  migrated Reminders
+- support for multiple isolated Google connections
+- background refresh, cached data, connection-level health, and safe handling
+  of revoked credentials
+- guided Google setup through a private, loopback-only setup process
+- a Landscape plugin that demonstrates plugin-owned data, actions, migrations,
+  history, and agenda contributions
+- a command-line interface for administration, configuration inspection, and
+  machine-readable queries
+- SQLite storage with ordered migrations
+- CUE-defined public contracts and generated JSON Schema
 
-The application favors a functional core and imperative shell: external data is parsed into precise immutable values, pure functions build projections and state snapshots, and filesystem, SQLite, process, network, and console effects remain visible at the edges. This is a design preference rather than a prohibition on ordinary readable Python.
+The web application does not yet provide user authentication. It binds to
+loopback by default. Use an SSH tunnel or access-controlled Tailscale Serve for
+remote access, and do not expose it directly to an untrusted network.
 
-## Current thin slice
+## Quick start
 
-The executable implementation provides:
-
-- a small Python application core
-- the canonical `mcctl` executable
-- the minimal `mctrld` HTTP server and browser shell
-- ordered SQLite migrations
-- task creation, updates, listing, and immutable event history
-- browser task creation, completion, and reopening through authoritative owners
-- responsive Overview, completed History, focused entity notes with collapsible activity, and synthetic House demo workspaces
-- an explicitly selected Landscape/Yard provider with plugin-owned SQLite state, immutable history, agenda projections, and owner-routed completion
-- an explicitly selected read-only Google Calendar provider with independently isolated account connections; Calendar events, appointments, Tasks, and migrated Reminders project into a generic Schedule view
-- validated per-plugin settings, named runtime credentials, background refresh jobs, stale-cache retention, and safe provider health
-- a private `mcctl setup` browser flow that guides Google connection discovery and selection, validates the result, and writes only its dedicated configuration fragment
-- deterministic Markdown task rendering
-- pre-activation plugin registration parsing against a packaged CUE-derived JSON Schema
-- frozen registration domain values, enum-backed finite vocabularies, and an immutable discovery catalog
-- explicit available, rejected, and duplicate-ID conflict catalog outcomes
-- a CUE-defined read-only agenda query and contribution boundary
-- a CUE-defined closed-item contribution boundary kept separate from the active agenda
-- a CUE-defined entity detail and immutable activity boundary
-- CUE-defined command envelope and structured outcome contracts
-- single-owner command routing for core and Landscape with optimistic revision checks
-- frozen initiative, action, event, and timing variants
-- deterministic cross-provider agenda aggregation
-- core tasks projected through the same agenda contract intended for plugins
-- Rich-backed opt-in human tables with stable JSON remaining the default
-- `version`, `init`, and `doctor` commands
-- executable migration, repository, event-invariant, rendering, plugin-contract, discovery, agenda, presentation, CLI, and HTTP tests
-
-From the repository root:
+Mission Control requires Python 3.11 or later.
 
 ```sh
 python -m venv .venv
 . .venv/bin/activate
-pip install -e '.[test]'
-
-mcctl --database ./mission-control.db init
-mcctl --database ./mission-control.db doctor
-mcctl --database ./mission-control.db task add "Review the thin slice"
-mcctl --database ./mission-control.db task list
-mcctl --database ./mission-control.db task list --format table
-mcctl --database ./mission-control.db task update TASK_ID --state ready
-mcctl --database ./mission-control.db task history TASK_ID
-mcctl --database ./mission-control.db agenda list
-mcctl --database ./mission-control.db agenda list --format table
-mcctl --database ./mission-control.db render markdown
-mcctl config validate ./mission-control.toml
-mcctl config effective ./mission-control.toml
-mcctl config explain ./mission-control.toml /plugins/google-calendar/settings/connections/demo/mode
-mcctl plugin validate ./plugins/reference/registration.json
-mcctl plugin list --root ./plugins
-mcctl plugin list --root ./plugins --format table
-mkdir -p ./config.d
-mcctl --config-dir ./config.d setup google-calendar
-pytest
+python -m pip install -e '.[test]'
 ```
-
-`--database` is a narrow override for core-only administrative work. The daemon,
-enabled plugins, and repeatable operational commands should use the canonical TOML
-configuration through `--config`; optional `--config-dir` paths add lexically
-ordered `*.toml` fragments. `mcctl render markdown --output tasks.md` writes the
-rendered document directly to a file. Configuration and plugin registration
-validation do not initialize the database or import plugin implementation code.
-
-### MVP browser demo
 
 Create `mission-control-demo.toml`:
 
@@ -115,8 +74,10 @@ enabled = true
 label = "Google demo"
 mode = "demo"
 demo_anchor_date = "2026-08-14"
+
 [plugins.google-calendar.settings.connections.demo.calendars]
 mode = "defaults"
+
 [plugins.google-calendar.settings.connections.demo.tasks]
 mode = "all"
 
@@ -124,150 +85,127 @@ mode = "all"
 enabled = true
 ```
 
-Then run it against a disposable database:
+Start the server:
 
 ```sh
 mctrld --config ./mission-control-demo.toml
 ```
 
-Then open `http://127.0.0.1:8000`. `--demo` enables only the synthetic House showcase; Google fixture mode is selected independently through Google-owned settings. The evergreen Google fixture includes a trip, cross-timezone travel, an appointment, tasks, and reminders without contacting Google. The shared Schedule view can switch between its grouped Agenda and provider-neutral 3-day, weekday, week, and month calendars in the viewer's timezone. On first activation, Landscape imports its validated equipment-access seed into plugin-owned, namespaced SQLite tables; later starts read the durable state and never overwrite it from the package. Yard and Overview receive immutable agenda projections from that state. Open a Landscape item to review its plugin-owned details, see only current notes in the focused Notes panel, or add a durable measurement/observation note. The full event history is collapsed under Activity; removed notes can be restored there, and both transitions retain the original note and append audit state. Core task, annotation, and Landscape action controls send versioned requests through the same owner-routed command endpoint, then refresh those projections from authoritative state. Providers register only their declared public contributions while enabled.
+Open <http://127.0.0.1:8000>. The demo uses synthetic Google and household
+data and does not contact Google.
 
-For a live read-only Google connection, follow [`docs/google-integration.md`](docs/google-integration.md). OAuth authorization is an explicit operator step after deployment; secrets are never part of the demo fixture.
+To connect a real Google account, follow
+[`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
+are stored separately from application configuration.
 
-#### Upgrading an existing Yard demo
+## Command-line tools
 
-An existing demo database may retain the earlier core-owned `Measure the driveway drop-off for equipment access` and `Review low-voltage shade lighting options` tasks. Mission Control does not delete or reclassify stored tasks by title. Complete those two legacy demo tasks before enabling the `landscape` configuration block so they do not appear as duplicate active work. Use a fresh database only when the old demo state and history are confirmed disposable.
+`mcctl` is the administrative command. `mctrld` runs the application server.
 
-The current MVP has no user authentication. It binds to loopback by default. Keep it on loopback or reach it through an SSH tunnel or access-controlled Tailscale Serve; do not expose it directly to an untrusted or shared network. This is especially important when the Google provider contains private calendar details. Authentication and production deployment are separate follow-up slices.
+Common commands:
 
-## Agenda ownership boundary
-
-The agenda is an aggregated read model, not a shared mutable task database. Core tasks and future plugins project immutable values through one public contract:
-
-```text
-core/plugin domain state
-        |
-        | pure projection
-        v
-initiative | action | event
-        |
-        | validation and deterministic aggregation
-        v
-read-only JSON, CLI table, and web views
-```
-
-Providers retain authoritative ownership of their records, detailed state machines, recurrence rules, and transitions. The aggregate does not calculate plugin-specific recurrence, copy records into a second source of truth, or write directly to owner tables.
-
-Unscheduled work is explicit rather than represented by invented or nullable dates. Actions use `anytime`, `due-on`, `due-at`, or `window` timing; events use `all-day` or `timed` timing. Providers receiving an agenda query expand their own recurring definitions into concrete occurrences within that horizon and may separately include initiatives or unscheduled actions.
-
-The CLI and browser shell project core tasks plus explicitly selected provider state through the same pure aggregator. Landscape validates registration and seed data before importing its implementation or touching SQLite, then applies independently recorded migrations and performs an idempotent first-run import. Installable Python providers can be discovered from explicit plugin roots and use the same manifest lifecycle; package installation and out-of-process transports remain separate concerns. User operations such as complete, defer, approve, or run follow a separate command path back to the authoritative owner; renderers remain incapable of mutation.
-
-## CLI presentation boundary
-
-List commands default to deterministic JSON so scripts and other programs receive a stable machine-readable format. Passing `--format table` opts into Rich-backed terminal presentation.
-
-Rich is confined to the imperative CLI shell. Presentation functions construct tables from existing domain values but do not read files, access SQLite, mutate state, or print by themselves. The CLI owns stdout and stderr consoles and performs the final rendering effect.
-
-Rich may later provide trees for nested configuration, terminal Markdown previews,
-and progress displays for long-running backup, restore, migration, installation,
-synchronization, health-check, and automation commands. It does not define public
-contracts, replace CUE or JSON Schema, serialize JSON, generate durable Markdown
-artifacts, implement lifecycle decisions, or render the web UI. Textual remains
-deferred until a concrete full-screen interactive workflow requires it.
-
-## Product layers
-
-```text
-./
-├── mission_control/  Python package, bundled providers, and runtime resources
-├── plugins/          reference and filesystem-discovered plugin assets
-├── schema/           canonical language-neutral CUE contracts
-├── scripts/          schema and repository validation
-├── tests/            core, contract, integration, and CLI tests
-└── docs/             architecture and operator documentation
-
-deploy/
-├── nixos/         declarative NixOS deployment adapter
-├── container/     OCI image and Compose deployment adapter
-└── raspberry-pi/  appliance image and first-boot deployment adapter
-```
-
-This standalone repository owns application code, schemas, tests, plugins, packaging, and product planning. Deployment repositories consume released or pinned revisions and own only their host-specific integration.
-
-## Core model
-
-- SQLite is the default source of truth.
-- Schema changes use ordered, explicit migrations.
-- Landscape and Google migrations and tables are namespaced and recorded independently from core migrations.
-- Every material task mutation appends an immutable event.
-- Core-owned entity notes remain immutable records keyed by a stable plugin entity reference; active/inactive visibility is projected from separate append-only lifecycle events.
-- The `tasks` table is the current projection used for efficient reads.
-- Supported task states are `backlog`, `ready`, `in-progress`, and `done`.
-- Task metadata includes `blocked`, `waiting_on`, and `review_after`.
-- Core behavior must not depend on any plugin being installed.
-
-## Plugin model
-
-Plugins provide capabilities such as tasks, wiki, dashboards, GitHub, calendars, Docker, Home Assistant, notes, landscape planning, home maintenance, financial planning, property search, or Ansible automation. Built-in and third-party plugins use the same documented public interface and receive no private extension path.
-
-The core owns stable extension contracts. Each plugin owns its migrations, configuration, permissions, events, jobs, API/CLI/UI contributions, health reporting, and tests. A plugin must be installable, disabled, upgraded, and removed without modifying unrelated core or plugin code. Plugin failures must not corrupt the core event log or prevent the application from starting in a recoverable mode.
-
-The first language-agnostic CUE contract defines plugin registration data and generates the JSON Schema packaged with the application. Untyped JSON is accepted only at parser and filesystem boundaries, then converted into frozen `PluginRegistration` values. Discovery builds a new immutable catalog snapshot on each scan; malformed registrations are rejected explicitly and duplicate IDs become conflicts rather than allowing one source to win silently. No plugin implementation code is imported during this process.
-
-The agenda query and contribution contracts keep active provider snapshots read-only; the closed-item contract gives completed/history views a separate current-state projection. The entity-detail contract composes plugin-owned current state and domain history with core-owned annotations at read time, without copying the entity into core. Plugin-specific state and recurrence remain inside the owner. Optional opaque revisions let mutable owners support optimistic commands without exposing repository internals. Landscape demonstrates independently migrated authoritative plugin state, idempotent packaged-data import, immutable plugin history, active and closed projections, detail/activity projection, shared annotations, and complete/reopen operations through an ordinary plugin command handler. Google exercises the same registration and activation boundary with validated settings, named credentials, a plugin-owned read cache, periodic jobs, health, and generic agenda/detail projections. Durable command idempotency, richer authorization, and structured CLI command exposure remain tracked in #4. Broader application and event contracts remain tracked in #3.
-
-## CLI direction
-
-Implemented now:
-
-```text
+```sh
 mcctl version
-mcctl init
-mcctl doctor
-mcctl task add
-mcctl task update
-mcctl task list [--format json|table]
-mcctl task history
-mcctl agenda list [--format json|table]
-mcctl render markdown
-mcctl config validate|effective CONFIG.toml [--fragment-dir DIR]
-mcctl config explain CONFIG.toml /JSON/POINTER [--fragment-dir DIR]
-mcctl plugin validate
-mcctl plugin list [--format json|table]
-mcctl plugin conformance REGISTRATION [--settings SETTINGS.json]
-mcctl [--config CONFIG.toml] --config-dir CONFIG_DIR setup PLUGIN_ID
-mctrld [--config PATH] [--config-dir DIR]
-       [--database PATH] [--host HOST] [--port PORT] [--demo]
+mcctl --database ./mission-control.db init
+mcctl --database ./mission-control.db doctor
+mcctl --database ./mission-control.db task add "Review Mission Control"
+mcctl --database ./mission-control.db task list
+mcctl --database ./mission-control.db agenda list
+
+mcctl config validate ./mission-control.toml
+mcctl config effective ./mission-control.toml
+mcctl config explain ./mission-control.toml /plugins/google-calendar
+
+mcctl plugin list --root ./plugins
+mcctl plugin validate ./plugins/reference/registration.json
+mcctl plugin conformance ./plugins/reference/registration.json
+
+mkdir -p ./config.d
+mcctl --config ./mission-control.toml --config-dir ./config.d \
+  setup google-calendar --credential-dir ./mission-control.credentials
 ```
 
-Planned additions:
+List commands return stable JSON by default. Use `--format table` for
+human-readable terminal output where supported.
+
+## How the plugin model works
+
+Mission Control combines data without claiming ownership of it.
 
 ```text
-mcctl plugin enable
-mcctl plugin disable
-mcctl backup create
+plugin or core data
+        |
+        | validated projection
+        v
+shared workspace and schedule views
+        |
+        | validated command
+        v
+authoritative owner
 ```
 
-## Deployment direction
+A plugin owns its domain data, rules, migrations, configuration, credentials,
+jobs, and actions. It publishes validated read models for shared views and
+handles commands for the entities it owns. Built-in plugins use the same public
+interfaces as external plugins.
 
-The same application should support:
+This design avoids two common dashboard problems: integrations cannot silently
+overwrite each other's data, and the dashboard does not become a second source
+of truth that drifts from the original system.
 
-- a declarative NixOS service
-- an OCI container and Docker Compose
-- a Raspberry Pi appliance image
-- a first-boot browser wizard for admin setup and plugin selection
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for component responsibilities and
+[`INTERFACES.md`](INTERFACES.md) for the public contracts.
 
-These are deployment adapters. They produce or consume the same validated application configuration and must not implement alternate application behavior.
+## Configuration
 
-## Delivery sequence
+Mission Control uses one TOML application configuration. An optional base file
+can be combined with lexically ordered `*.toml` fragments. The same merge,
+validation, defaults, and credential rules apply to direct and packaged
+deployments.
 
-1. Portable core, SQLite migrations, `mcctl`, tests, and Markdown rendering.
-2. Stable public plugin contracts plus a reference plugin and contract test harness.
-3. Minimal `mctrld` server and browser demo; authentication and production hardening remain follow-up work.
-4. Declarative NixOS deployment adapter.
-5. OCI/Compose deployment adapter.
-6. Guided first-boot setup and Raspberry Pi appliance image.
-7. Backup/restore automation and migration from GitHub tracking data.
-8. Machine-readable public schemas and generated interface documentation as tracked in #3.
+Configuration contains credential file references, never secret values. Use
+`mcctl config validate`, `effective`, and `explain` to inspect the result before
+starting the application.
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the near-term product sequence. See `ARCHITECTURE.md`, `INTERFACES.md`, and `TESTING.md` for the boundaries this implementation must preserve.
+The full configuration design is documented in
+[`docs/configuration-and-schema-evolution.md`](docs/configuration-and-schema-evolution.md).
+
+## Repository layout
+
+```text
+mission_control/  application code and built-in plugins
+plugins/          reference and filesystem-discovered plugin assets
+schema/           CUE contracts
+tests/            unit, contract, integration, CLI, and HTTP tests
+scripts/          schema and repository checks
+deploy/           NixOS, container, and appliance adapters
+docs/             design decisions and operator documentation
+```
+
+This repository owns the application, public contracts, tests, packaging, and
+product documentation. Host repositories only select a version and provide
+host-specific service, storage, network, and secret configuration.
+
+## Development
+
+Run the main checks from the repository root:
+
+```sh
+python -m pytest
+python -m ruff check .
+bash scripts/check-schemas.sh
+nix flake check
+```
+
+Changes should be small enough to review and test end to end. New abstractions
+need a demonstrated use case. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
+[`TESTING.md`](TESTING.md) for details.
+
+## Roadmap
+
+The next major step is to replace the prototype dashboard response with a
+versioned workspace model and generic plugin contributions. Later work includes
+typed creation forms, renderer-independent UI descriptions, file attachments,
+tags, saved views, and a richer task editor.
+
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the ordered plan.
