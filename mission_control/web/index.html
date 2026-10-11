@@ -39,6 +39,11 @@
         </div>
       </header>
 
+      <div class="keybar" aria-label="Keyboard shortcuts">
+        <span><kbd>S</kbd> Sections</span><span><kbd>D</kbd> Queue</span><span><kbd>F</kbd> Inspector</span>
+        <span><kbd>H J K L</kbd> or arrows</span><span><kbd>[ ]</kbd> Sidebars</span><span><kbd>G</kbd> Jump</span>
+      </div>
+
       <main class="workspace" id="workspace">
         <aside class="workspace-pane navigator-pane is-keyboard-active" id="navigator-pane" data-pane="navigator" tabindex="-1" aria-label="Sections">
           <div class="pane-heading"><span>Sections</span><kbd class="inline-key-hint">S</kbd></div>
@@ -73,7 +78,7 @@
       </main>
       <button class="drawer-backdrop" id="drawer-backdrop" type="button" aria-label="Close side panel" hidden></button>
 
-      <footer class="console-footer"><span>Reference client</span><span id="keyboard-mode-label">NAV</span></footer>
+      <footer class="console-footer"><span>Reference client</span><span id="keyboard-mode-label">NAV</span><span>Tab cycles visible panes · Esc goes back</span></footer>
     </div>
 
     <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-title">
