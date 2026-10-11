@@ -20,6 +20,17 @@
           <span class="brand-mark" aria-hidden="true">MC</span>
           <div><strong>Mission Control</strong><small>Household workspace</small></div>
         </div>
+        <div class="pane-controls" aria-label="Workspace layout">
+          <button class="pane-toggle" id="navigator-toggle" data-toggle-pane="navigator" type="button" aria-controls="navigator-pane" aria-expanded="true">
+            <span class="pane-toggle-icon" aria-hidden="true">☰</span><span>Sections</span><kbd class="inline-key-hint">[</kbd>
+          </button>
+          <button class="pane-toggle" id="inspector-toggle" data-toggle-pane="inspector" type="button" aria-controls="inspector-pane" aria-expanded="true">
+            <span class="pane-toggle-icon" aria-hidden="true">◫</span><span>Inspector</span><kbd class="inline-key-hint">]</kbd>
+          </button>
+          <button class="pane-toggle help-button" id="help-button" type="button" aria-label="Open keyboard help">
+            <span aria-hidden="true">?</span><span class="help-button-label">Keyboard help</span>
+          </button>
+        </div>
         <div class="system-state" aria-label="Workspace status">
           <span><i class="status-dot" aria-hidden="true"></i><strong id="connection-label">Connecting</strong></span>
           <span id="mode-label">Loading workspace</span>
@@ -28,15 +39,9 @@
         </div>
       </header>
 
-      <div class="keybar" aria-label="Keyboard shortcuts">
-        <span><kbd>S</kbd> Navigator</span><span><kbd>D</kbd> Queue</span><span><kbd>F</kbd> Inspector</span>
-        <span><kbd>H J K L</kbd> or arrows</span><span><kbd>G</kbd> Jump</span>
-        <button class="keybar-help" id="help-button" type="button"><kbd>?</kbd> Help</button>
-      </div>
-
       <main class="workspace" id="workspace">
-        <aside class="workspace-pane navigator-pane is-keyboard-active" data-pane="navigator" tabindex="-1" aria-label="Navigator">
-          <div class="pane-heading"><span>Navigator</span><kbd>S</kbd></div>
+        <aside class="workspace-pane navigator-pane is-keyboard-active" id="navigator-pane" data-pane="navigator" tabindex="-1" aria-label="Sections">
+          <div class="pane-heading"><span>Sections</span><kbd class="inline-key-hint">S</kbd></div>
           <nav class="primary-nav" aria-label="Primary navigation">
             <button class="nav-item is-active" data-view="overview" type="button"><span>01</span><strong>Overview</strong><small>Daily attention</small></button>
             <button class="nav-item" data-view="schedule" type="button"><span>02</span><strong>Schedule</strong><small>Events and tasks</small></button>
@@ -54,20 +59,21 @@
         <section class="workspace-pane queue-pane" data-pane="queue" tabindex="-1" aria-labelledby="page-title">
           <header class="queue-header">
             <div><p class="eyebrow" id="page-eyebrow">Household overview</p><h1 id="page-title">Overview</h1><p id="page-description">Decisions, schedule, and active work.</p></div>
-            <kbd>D</kbd>
+            <kbd class="inline-key-hint">D</kbd>
           </header>
           <section id="app" aria-live="polite" aria-busy="true"><div class="loading">Loading Mission Control…</div></section>
         </section>
 
-        <aside class="workspace-pane inspector-pane" data-pane="inspector" tabindex="-1" aria-label="Inspector">
-          <div class="pane-heading"><span>Inspector</span><kbd>F</kbd></div>
+        <aside class="workspace-pane inspector-pane" id="inspector-pane" data-pane="inspector" tabindex="-1" aria-label="Inspector">
+          <div class="pane-heading"><span>Inspector</span><kbd class="inline-key-hint">F</kbd></div>
           <div id="inspector-content">
             <div class="inspector-empty"><span class="inspector-glyph" aria-hidden="true">⌁</span><h2>Nothing selected</h2><p>Move through the queue to inspect context and available commands.</p></div>
           </div>
         </aside>
       </main>
+      <button class="drawer-backdrop" id="drawer-backdrop" type="button" aria-label="Close side panel" hidden></button>
 
-      <footer class="console-footer"><span>Reference client</span><span id="keyboard-mode-label">NAV</span><span>Tab cycles panes · Esc goes back</span></footer>
+      <footer class="console-footer"><span>Reference client</span><span id="keyboard-mode-label">NAV</span></footer>
     </div>
 
     <dialog class="help-dialog" id="help-dialog" aria-labelledby="help-title">

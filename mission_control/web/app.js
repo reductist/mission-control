@@ -10,6 +10,9 @@ const versionLabel = document.querySelector("#version-label");
 const statusDot = document.querySelector(".status-dot");
 const inspectorContent = document.querySelector("#inspector-content");
 const sourceHealthList = document.querySelector("#source-health-list");
+const workspace = document.querySelector("#workspace");
+const drawerBackdrop = document.querySelector("#drawer-backdrop");
+const narrowLayoutQuery = window.matchMedia?.("(max-width: 680px)");
 
 const viewCopy = {
   overview: {
@@ -63,7 +66,13 @@ document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(und
 }).format(new Date());
 
 document.querySelectorAll(".nav-item").forEach((button) => {
-  button.addEventListener("click", () => showView(button.dataset.view));
+  button.addEventListener("click", () => {
+    showView(button.dataset.view);
+    if (isNarrowLayout()) {
+      closeDrawers(false);
+      setActivePane("queue");
+    }
+  });
 });
 
 function showView(view) {
@@ -1680,6 +1689,10 @@ document.addEventListener("focusin", (event) => {
 const paneOrder = ["navigator", "queue", "inspector"];
 let activePane = "navigator";
 let jumpState = null;
+let openDrawer = null;
+let lastDrawerTrigger = null;
+let wasNarrowLayout = isNarrowLayout();
+const desktopPaneVisibility = { navigator: true, inspector: true };
 const focusHistory = [];
 const helpDialog = document.querySelector("#help-dialog");
 const jumpLayer = document.querySelector("#jump-layer");
@@ -1691,6 +1704,97 @@ function isTypingTarget(target) {
   return Boolean(target?.matches?.("input, textarea, select, [contenteditable='true']"));
 }
 
+function isNarrowViewport(width) {
+  return Number(width) <= 680;
+}
+
+function isNarrowLayout() {
+  return narrowLayoutQuery?.matches ?? isNarrowViewport(window.innerWidth || 1024);
+}
+
+function paneToggleForKey(key) {
+  return ({ "[": "navigator", "]": "inspector" })[key] || null;
+}
+
+function toggledPaneVisibility(visibility, name) {
+  return { ...visibility, [name]: !visibility[name] };
+}
+
+function nextDrawerState(current, name) {
+  return current === name ? null : name;
+}
+
+function drawerStateAfterResize(current, previousNarrow, nextNarrow) {
+  return previousNarrow === nextNarrow ? current : null;
+}
+
+function paneIsVisible(name) {
+  if (name === "queue") return true;
+  return isNarrowLayout() ? openDrawer === name : desktopPaneVisibility[name];
+}
+
+function visiblePaneOrder() {
+  return paneOrder.filter(paneIsVisible);
+}
+
+function fallbackPaneName(name, visibleNames) {
+  return visibleNames.includes(name) ? name : "queue";
+}
+
+function syncPaneLayout() {
+  if (!workspace) return;
+  const narrow = isNarrowLayout();
+  const navigatorVisible = narrow ? openDrawer === "navigator" : desktopPaneVisibility.navigator;
+  const inspectorVisible = narrow ? openDrawer === "inspector" : desktopPaneVisibility.inspector;
+  workspace.classList.toggle("is-navigator-hidden", !navigatorVisible);
+  workspace.classList.toggle("is-inspector-hidden", !inspectorVisible);
+  workspace.classList.toggle("is-navigator-drawer-open", narrow && navigatorVisible);
+  workspace.classList.toggle("is-inspector-drawer-open", narrow && inspectorVisible);
+  document.querySelectorAll("[data-toggle-pane]").forEach((button) => {
+    const visible = button.dataset.togglePane === "navigator" ? navigatorVisible : inspectorVisible;
+    button.setAttribute("aria-expanded", String(visible));
+    button.setAttribute("aria-label", `${visible ? "Hide" : "Show"} ${button.dataset.togglePane === "navigator" ? "sections" : "inspector"}`);
+  });
+  if (drawerBackdrop) drawerBackdrop.hidden = !(narrow && openDrawer);
+  const nextActivePane = fallbackPaneName(activePane, visiblePaneOrder());
+  if (nextActivePane !== activePane) setActivePane(nextActivePane, false);
+}
+
+function revealPane(name) {
+  if (name === "queue") return;
+  if (isNarrowLayout()) openDrawer = name;
+  else desktopPaneVisibility[name] = true;
+  syncPaneLayout();
+}
+
+function togglePane(name, trigger = document.querySelector(`[data-toggle-pane="${name}"]`)) {
+  const wasVisible = paneIsVisible(name);
+  if (isNarrowLayout()) {
+    openDrawer = nextDrawerState(openDrawer, name);
+    if (openDrawer) lastDrawerTrigger = trigger;
+  } else {
+    Object.assign(desktopPaneVisibility, toggledPaneVisibility(desktopPaneVisibility, name));
+  }
+  syncPaneLayout();
+  if (wasVisible && !paneIsVisible(name)) trigger?.focus?.({ preventScroll: true });
+  else if (!wasVisible && paneIsVisible(name) && !isNarrowLayout()) setActivePane(name);
+}
+
+function closeDrawers(restoreFocus = true) {
+  if (!openDrawer) return false;
+  openDrawer = null;
+  syncPaneLayout();
+  if (restoreFocus) lastDrawerTrigger?.focus?.({ preventScroll: true });
+  return true;
+}
+
+function handleLayoutResize() {
+  const narrow = isNarrowLayout();
+  openDrawer = drawerStateAfterResize(openDrawer, wasNarrowLayout, narrow);
+  wasNarrowLayout = narrow;
+  syncPaneLayout();
+}
+
 function paneForKey(key) {
   return ({ s: "navigator", d: "queue", f: "inspector" })[key.toLowerCase()] || null;
 }
@@ -1700,8 +1804,9 @@ function movementForKey(key) {
 }
 
 function cycledPaneName(name, delta) {
-  const current = paneOrder.indexOf(name);
-  return paneOrder[(current + delta + paneOrder.length) % paneOrder.length];
+  const panes = visiblePaneOrder();
+  const current = Math.max(0, panes.indexOf(name));
+  return panes[(current + delta + panes.length) % panes.length];
 }
 
 function paneElement(name) {
@@ -1716,6 +1821,7 @@ function visibleFocusable(pane) {
 }
 
 function setActivePane(name, moveFocus = true) {
+  if (!paneIsVisible(name)) revealPane(name);
   const pane = paneElement(name);
   if (!pane) return;
   activePane = name;
@@ -1738,13 +1844,14 @@ function moveWithinPane(delta) {
 }
 
 function moveAcrossPanes(delta) {
-  const current = paneOrder.indexOf(activePane);
-  const next = Math.max(0, Math.min(paneOrder.length - 1, current + delta));
+  const panes = visiblePaneOrder();
+  const current = panes.indexOf(activePane);
+  const next = Math.max(0, Math.min(panes.length - 1, current + delta));
   if (next === current) {
     announce(`${activePane} pane boundary`);
     return;
   }
-  setActivePane(paneOrder[next]);
+  setActivePane(panes[next]);
 }
 
 function cyclePane(delta) {
@@ -1760,6 +1867,7 @@ function announce(message) {
 function contextualCommands() {
   const commands = [
     ["S / D / F", "Focus Navigator, Queue, or Inspector"],
+    ["[ / ]", "Toggle the Sections or Inspector sidebar"],
     ["H J K L / arrows", "Move between panes or through the active pane"],
     ["Tab / Shift+Tab", "Cycle top-level panes in navigation mode"],
     ["G", "Jump: type two search characters, then a home-row hint"],
@@ -1841,6 +1949,7 @@ function handleEscape() {
     keyboardModeLabel.textContent = "NAV";
     return;
   }
+  if (closeDrawers()) return;
   if (entityDetail) {
     showView(detailReturnView);
     return;
@@ -1852,6 +1961,13 @@ function handleEscape() {
 
 document.querySelector("#help-button")?.addEventListener("click", openHelp);
 helpDialog?.addEventListener("close", () => { keyboardModeLabel.textContent = "NAV"; });
+document.querySelectorAll("[data-toggle-pane]").forEach((button) => {
+  button.addEventListener("click", () => togglePane(button.dataset.togglePane, button));
+});
+drawerBackdrop?.addEventListener("click", () => closeDrawers());
+narrowLayoutQuery?.addEventListener?.("change", handleLayoutResize);
+window.addEventListener?.("resize", handleLayoutResize);
+syncPaneLayout();
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
@@ -1860,6 +1976,12 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (helpDialog?.open || isTypingTarget(event.target)) return;
+  const toggledPane = paneToggleForKey(event.key);
+  if (toggledPane && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    togglePane(toggledPane);
+    return;
+  }
   if (jumpState) {
     if (event.key === "Backspace") {
       event.preventDefault();
