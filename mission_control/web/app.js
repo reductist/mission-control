@@ -12,6 +12,7 @@ const inspectorContent = document.querySelector("#inspector-content");
 const sourceHealthList = document.querySelector("#source-health-list");
 const workspace = document.querySelector("#workspace");
 const drawerBackdrop = document.querySelector("#drawer-backdrop");
+const mobileSectionTabs = document.querySelector(".mobile-section-tabs");
 const narrowLayoutQuery = window.matchMedia?.("(max-width: 680px)");
 
 const viewCopy = {
@@ -65,23 +66,29 @@ document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(und
   day: "numeric",
 }).format(new Date());
 
-document.querySelectorAll(".nav-item").forEach((button) => {
-  button.addEventListener("click", () => {
-    showView(button.dataset.view);
-    if (isNarrowLayout()) {
-      closeDrawers(false);
-      setActivePane("queue");
-    }
-  });
+document.querySelectorAll(".nav-item, .mobile-section-tab").forEach((button) => {
+  button.addEventListener("click", () => showView(button.dataset.view));
 });
 
 function showView(view) {
+  if (isNarrowLayout()) closeDrawers(false);
   activeView = view;
   entityDetail = null;
   activityExpanded = false;
-  document.querySelectorAll(".nav-item").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.view === view);
+  document.querySelectorAll(".nav-item, .mobile-section-tab").forEach((button) => {
+    const active = button.dataset.view === view;
+    button.classList.toggle("is-active", active);
+    if (button.classList.contains("mobile-section-tab")) {
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    }
   });
+  if (isNarrowLayout()) {
+    document.querySelector(`.mobile-section-tab[data-view="${view}"]`)?.scrollIntoView?.({
+      block: "nearest",
+      inline: "center",
+    });
+  }
   const copy = viewCopy[view];
   pageEyebrow.textContent = copy.eyebrow;
   pageTitle.textContent = copy.title;
@@ -1681,8 +1688,8 @@ inspectorContent?.addEventListener("click", (event) => {
 });
 
 document.addEventListener("focusin", (event) => {
-  const pane = event.target.closest?.("[data-pane]");
-  if (pane) setActivePane(pane.dataset.pane, false);
+  const pane = event.target.closest?.("[data-pane], [data-mobile-pane]");
+  if (pane) setActivePane(pane.dataset.pane || pane.dataset.mobilePane, false);
   if (event.target.closest?.("#app")) inspectElement(event.target);
 });
 
@@ -1730,7 +1737,8 @@ function drawerStateAfterResize(current, previousNarrow, nextNarrow) {
 
 function paneIsVisible(name) {
   if (name === "queue") return true;
-  return isNarrowLayout() ? openDrawer === name : desktopPaneVisibility[name];
+  if (isNarrowLayout()) return name === "navigator" || openDrawer === name;
+  return desktopPaneVisibility[name];
 }
 
 function visiblePaneOrder() {
@@ -1744,14 +1752,15 @@ function fallbackPaneName(name, visibleNames) {
 function syncPaneLayout() {
   if (!workspace) return;
   const narrow = isNarrowLayout();
-  const navigatorVisible = narrow ? openDrawer === "navigator" : desktopPaneVisibility.navigator;
+  const navigatorVisible = !narrow && desktopPaneVisibility.navigator;
   const inspectorVisible = narrow ? openDrawer === "inspector" : desktopPaneVisibility.inspector;
   workspace.classList.toggle("is-navigator-hidden", !navigatorVisible);
   workspace.classList.toggle("is-inspector-hidden", !inspectorVisible);
-  workspace.classList.toggle("is-navigator-drawer-open", narrow && navigatorVisible);
   workspace.classList.toggle("is-inspector-drawer-open", narrow && inspectorVisible);
   document.querySelectorAll("[data-toggle-pane]").forEach((button) => {
-    const visible = button.dataset.togglePane === "navigator" ? navigatorVisible : inspectorVisible;
+    const visible = button.dataset.togglePane === "navigator"
+      ? (narrow || navigatorVisible)
+      : inspectorVisible;
     button.setAttribute("aria-expanded", String(visible));
     button.setAttribute("aria-label", `${visible ? "Hide" : "Show"} ${button.dataset.togglePane === "navigator" ? "sections" : "inspector"}`);
   });
@@ -1762,15 +1771,23 @@ function syncPaneLayout() {
 
 function revealPane(name) {
   if (name === "queue") return;
-  if (isNarrowLayout()) openDrawer = name;
-  else desktopPaneVisibility[name] = true;
+  if (isNarrowLayout()) {
+    if (name === "inspector") {
+      openDrawer = name;
+      lastDrawerTrigger = document.querySelector("#inspector-toggle");
+    }
+  } else desktopPaneVisibility[name] = true;
   syncPaneLayout();
 }
 
 function togglePane(name, trigger = document.querySelector(`[data-toggle-pane="${name}"]`)) {
   const wasVisible = paneIsVisible(name);
   if (isNarrowLayout()) {
-    openDrawer = nextDrawerState(openDrawer, name);
+    if (name === "navigator") {
+      setActivePane("navigator");
+      return;
+    }
+    openDrawer = nextDrawerState(openDrawer, "inspector");
     if (openDrawer) lastDrawerTrigger = trigger;
   } else {
     Object.assign(desktopPaneVisibility, toggledPaneVisibility(desktopPaneVisibility, name));
@@ -1789,10 +1806,14 @@ function closeDrawers(restoreFocus = true) {
 }
 
 function handleLayoutResize() {
+  const focusedPane = document.activeElement?.closest?.("[data-pane], [data-mobile-pane]");
   const narrow = isNarrowLayout();
   openDrawer = drawerStateAfterResize(openDrawer, wasNarrowLayout, narrow);
   wasNarrowLayout = narrow;
   syncPaneLayout();
+  if (focusedPane && focusedPane !== paneElement(focusedPane.dataset.pane || focusedPane.dataset.mobilePane)) {
+    setActivePane("queue");
+  }
 }
 
 function paneForKey(key) {
@@ -1810,6 +1831,7 @@ function cycledPaneName(name, delta) {
 }
 
 function paneElement(name) {
+  if (name === "navigator" && isNarrowLayout()) return mobileSectionTabs;
   return document.querySelector(`[data-pane="${name}"]`);
 }
 
@@ -1825,7 +1847,9 @@ function setActivePane(name, moveFocus = true) {
   const pane = paneElement(name);
   if (!pane) return;
   activePane = name;
-  document.querySelectorAll("[data-pane]").forEach((item) => item.classList.toggle("is-keyboard-active", item === pane));
+  document.querySelectorAll("[data-pane], [data-mobile-pane]").forEach((item) => {
+    item.classList.toggle("is-keyboard-active", item === pane);
+  });
   if (moveFocus) {
     const target = pane.querySelector(".is-inspected")?.querySelector(focusableSelector) || visibleFocusable(pane)[0];
     (target || pane).focus({ preventScroll: true });
@@ -2029,7 +2053,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (event.key === "Tab" && event.target.closest?.("form")) return;
-  if (event.key === "Tab" && document.activeElement?.closest?.("[data-pane]")) {
+  if (event.key === "Tab" && document.activeElement?.closest?.("[data-pane], [data-mobile-pane]")) {
     event.preventDefault();
     cyclePane(event.shiftKey ? -1 : 1);
   }
