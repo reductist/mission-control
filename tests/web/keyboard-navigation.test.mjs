@@ -30,12 +30,12 @@ const context = {
   },
   fetch: () => new Promise(() => {}),
   setInterval() {},
-  window: { confirm: () => true },
+  window: { confirm: () => true, innerWidth: 1024 },
 };
 context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(
-  `${source}\n;globalThis.keyboardTest = { cycledPaneName, isTypingTarget, movementForKey, paneForKey };`,
+  `${source}\n;globalThis.keyboardTest = { cycledPaneName, drawerStateAfterResize, fallbackPaneName, isNarrowViewport, isTypingTarget, movementForKey, nextDrawerState, paneForKey, paneToggleForKey, toggledPaneVisibility };`,
   context,
 );
 
@@ -69,4 +69,42 @@ test("typing guards cover native fields and editable content", () => {
   assert.equal(keyboardTest.isTypingTarget(target("select")), true);
   assert.equal(keyboardTest.isTypingTarget(target("[contenteditable='true']")), true);
   assert.equal(keyboardTest.isTypingTarget(target("button")), false);
+});
+
+test("bracket shortcuts toggle sidebars without conflicting with pane focus keys", () => {
+  assert.equal(keyboardTest.paneToggleForKey("["), "navigator");
+  assert.equal(keyboardTest.paneToggleForKey("]"), "inspector");
+  assert.equal(keyboardTest.paneToggleForKey("s"), null);
+  assert.equal(keyboardTest.paneForKey("S"), "navigator");
+  assert.equal(keyboardTest.paneForKey("F"), "inspector");
+});
+
+test("sidebar toggles are reversible and independent", () => {
+  const initial = { navigator: true, inspector: true };
+  const withoutNavigator = keyboardTest.toggledPaneVisibility(initial, "navigator");
+  assert.equal(JSON.stringify(withoutNavigator), '{"navigator":false,"inspector":true}');
+  assert.equal(
+    JSON.stringify(keyboardTest.toggledPaneVisibility(withoutNavigator, "navigator")),
+    JSON.stringify(initial),
+  );
+  assert.equal(
+    JSON.stringify(keyboardTest.toggledPaneVisibility(initial, "inspector")),
+    '{"navigator":true,"inspector":false}',
+  );
+});
+
+test("drawers switch sides, close on repeat, and reset across layout changes", () => {
+  assert.equal(keyboardTest.nextDrawerState(null, "navigator"), "navigator");
+  assert.equal(keyboardTest.nextDrawerState("navigator", "inspector"), "inspector");
+  assert.equal(keyboardTest.nextDrawerState("inspector", "inspector"), null);
+  assert.equal(keyboardTest.drawerStateAfterResize("navigator", true, false), null);
+  assert.equal(keyboardTest.drawerStateAfterResize("navigator", true, true), "navigator");
+});
+
+test("Pixel 7a and narrower widths use drawers and hidden panes fall back to queue", () => {
+  assert.equal(keyboardTest.isNarrowViewport(412), true);
+  assert.equal(keyboardTest.isNarrowViewport(320), true);
+  assert.equal(keyboardTest.isNarrowViewport(681), false);
+  assert.equal(keyboardTest.fallbackPaneName("navigator", ["queue"]), "queue");
+  assert.equal(keyboardTest.fallbackPaneName("inspector", ["queue", "inspector"]), "inspector");
 });
