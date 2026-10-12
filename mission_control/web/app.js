@@ -56,6 +56,8 @@ let detailReturnView = "overview";
 let commandSequence = 0;
 let activityExpanded = false;
 let scheduleFilter = "all";
+let scheduleTags = [];
+let editingTask = null;
 let scheduleLayout = "agenda";
 let calendarRangeMode = "three-day";
 let refreshInFlight = false;
@@ -118,6 +120,7 @@ async function refresh() {
   refreshInFlight = true;
   try {
     const focus = captureAppFocus();
+    const draft = captureTaskDraft();
     const detailTarget = entityDetail?.source;
     const nextDashboard = await request("/api/dashboard");
     const homeSearchLoad = await loadHomeSearchDetails(nextDashboard);
@@ -135,6 +138,7 @@ async function refresh() {
     renderSourceHealth();
     app.setAttribute("aria-busy", "false");
     render();
+    restoreTaskDraft(draft);
     restoreAppFocus(focus);
     if (homeSearchLoad.failed) {
       showNotice("Some home-search details could not be refreshed. Last-known details remain visible.", "warning");
@@ -196,6 +200,8 @@ function focusSignature(element) {
     element.dataset?.entityType,
     element.dataset?.entityId,
     element.dataset?.command,
+    element.dataset?.editTask,
+    element.name === "tags" ? element.value : "",
   ].join("|");
 }
 
@@ -217,6 +223,7 @@ function render() {
     renderOverview();
   }
   resetInspector();
+  if (!entityDetail) renderSectionTasks();
 }
 
 function renderOverview() {
@@ -253,7 +260,7 @@ function renderOverview() {
     <section class="panel queue-section">
       <div class="panel-header"><h2>Work queue</h2><span>${visibleCount} visible</span></div>
       <div class="task-list">${visibleCount ? `${visibleYardActions.map(landscapeActionRow).join("")}${visibleCoreTasks.map(taskRow).join("")}` : '<div class="empty">No active work. Add a shared task below.</div>'}</div>
-      <form class="quick-add" id="quick-add-form"><input id="quick-add-title" name="title" required maxlength="160" placeholder="Add a shared task…" aria-label="New task title"><button class="primary-button" type="submit">Add</button></form>
+      <form class="quick-add" id="quick-add-form"><input id="quick-add-title" name="title" required maxlength="160" placeholder="Add a shared task…" aria-label="New task title"><button class="primary-button" type="submit">Add</button><details class="task-options"><summary>Deadline and tags</summary>${taskMetadataFields("create")}</details><p class="form-error" role="status"></p></form>
     </section>
     <section class="overview-rooms" aria-label="Workspace rooms">
       ${overviewRoom("Schedule", nextScheduled.length ? `${nextScheduled.length} upcoming` : "Clear", nextScheduled.map((entry) => `${scheduleTimingLabel(entry)} — ${entry.title}`), "schedule")}
@@ -325,6 +332,8 @@ function renderSchedule() {
           ${scheduleFilterButton("events", "Events")}
           ${scheduleFilterButton("tasks", "Tasks & reminders")}
         </div>
+        ${tagPicker("schedule-tags", scheduleTags, "Filter by tags", true)}
+        <p class="tag-filter-note">Matches any selected tag. Untagged entries appear when all tags are cleared.</p>
       </div>
       <div class="schedule-freshness">
         <span>Times shown in ${escapeHtml(timeZone)}</span>
@@ -355,6 +364,15 @@ function renderSchedule() {
     });
   });
   wireEntityLinks();
+  const tagFilter = document.querySelector("#schedule-tags");
+  tagFilter?.addEventListener("change", () => {
+    scheduleTags = selectedTags(tagFilter);
+    rerenderSchedulePreservingFocus();
+  });
+  document.querySelector("[data-clear-schedule-tags]")?.addEventListener("click", () => {
+    scheduleTags = [];
+    rerenderSchedulePreservingFocus();
+  });
 }
 
 function rerenderSchedulePreservingFocus() {
@@ -407,9 +425,10 @@ function scheduleEntries() {
 }
 
 function scheduleEntryMatchesFilter(entry) {
-  return scheduleFilter === "all"
+  const kindMatches = scheduleFilter === "all"
     || (scheduleFilter === "events" && entry.kind === "event")
     || (scheduleFilter === "tasks" && entry.kind === "action");
+  return kindMatches && matchesTags(entryTags(entry), scheduleTags);
 }
 
 function scheduleLayoutButton(value, label) {
@@ -606,6 +625,9 @@ function calendarEntryChip(entry, day, timeZone) {
   }
   const kindClass = entry.kind === "event" ? "is-event" : "is-task";
   const content = `<span>${escapeHtml(time)}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entryProvenance(entry))}</small>`;
+  if (entry.source?.plugin_id === "core" && entry.source?.entity_type === "task") {
+    return `<button class="calendar-item ${kindClass}" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}" aria-label="Edit ${escapeHtml(entry.title)}">${content}</button>`;
+  }
   if (providerHasCapability(entry.source?.plugin_id, "entity-details")) {
     return `<button class="calendar-item ${kindClass}"${entryAccentAttribute(entry)} type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}">${content}</button>`;
   }
@@ -636,7 +658,7 @@ function scheduleRow(entry) {
       <div>
         <h3 class="task-title">${entityTitle(entry)}</h3>
         ${entry.detail ? `<p class="task-description">${escapeHtml(entry.detail)}</p>` : ""}
-        <p class="item-meta">${escapeHtml(provenance)}</p>
+        <p class="item-meta">${escapeHtml(provenance)}${entry.source?.plugin_id === "core" ? ` · ${escapeHtml(taskDeadlineLabel(dashboard.tasks.find((task) => task.id === entry.source.entity_id) || {}))}` : ""}</p>
       </div>
       <span class="state-badge">${escapeHtml(kindLabel)}</span>
     </article>
@@ -644,6 +666,9 @@ function scheduleRow(entry) {
 }
 
 function entityTitle(entry) {
+  if (entry.source?.plugin_id === "core" && entry.source?.entity_type === "task") {
+    return `<button class="entity-link" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}">${escapeHtml(entry.title)}</button>`;
+  }
   return providerHasCapability(entry.source?.plugin_id, "entity-details")
     ? entityLink(entry)
     : escapeHtml(entry.title);
@@ -1120,6 +1145,8 @@ function taskRow(task) {
       <div>
         <h3 class="task-title">${escapeHtml(task.title)}</h3>
         <p class="task-description">${escapeHtml(detail)}</p>
+        <p class="item-meta">${escapeHtml(taskDeadlineLabel(task))}${task.tags?.length ? ` · ${escapeHtml(task.tags.map(tagLabel).join(" · "))}` : ""}</p>
+        <button class="text-button" type="button" data-edit-task="${escapeHtml(task.id)}" aria-label="Edit ${escapeHtml(task.title)}">Edit</button>
       </div>
       <span class="state-badge ${badgeClass}">${escapeHtml(task.blocked ? "blocked" : task.state)}</span>
     </article>
@@ -1227,7 +1254,7 @@ function closedItemRow(item) {
     <article class="closed-row">
       <div>
         <div class="closed-title-line">
-          <h3 class="task-title">${providerHasCapability(item.source?.plugin_id, "entity-details") ? entityLink(item) : escapeHtml(item.title)}</h3>
+          <h3 class="task-title">${entityTitle(item)}</h3>
           <span class="state-badge">${escapeHtml(item.state)}</span>
         </div>
         <p class="task-description">${escapeHtml(item.detail || "No additional detail")}</p>
@@ -1447,8 +1474,8 @@ function wireHomeSearchReviewButtons() {
   });
 }
 
-function wireCommandButtons() {
-  document.querySelectorAll("button[data-command]:not([data-activity-command])").forEach((button) => {
+function wireCommandButtons(root = document) {
+  root.querySelectorAll("button[data-command]:not([data-activity-command])").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
@@ -1600,20 +1627,193 @@ function showNotice(message, tone = "success") {
 
 async function addTask(event) {
   event.preventDefault();
+  const form = event.currentTarget;
   const input = document.querySelector("#quick-add-title");
   const title = input.value.trim();
   if (!title) return;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
   try {
+    const metadata = readTaskMetadata(form, "create");
     await request("/api/tasks", {
       method: "POST",
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, ...metadata }),
     });
     input.value = "";
+    form.reset();
     await refresh();
   } catch (error) {
-    renderError(error);
+    form.querySelector(".form-error").textContent = error.message;
+  } finally {
+    submit.disabled = false;
   }
 }
+
+function captureTaskDraft() {
+  const form = document.querySelector("#quick-add-form");
+  if (!form) return null;
+  return {
+    fields: [...(form.querySelectorAll?.("input, select") || [])].map((input) => ({ id: input.id, name: input.name, value: input.value, checked: input.checked })),
+    expanded: Boolean(form.querySelector?.(".task-options")?.open),
+  };
+}
+
+function restoreTaskDraft(draft) {
+  const form = document.querySelector("#quick-add-form");
+  if (!draft || !form) return;
+  for (const saved of draft.fields) {
+    const input = saved.id ? form.querySelector(`#${saved.id}`) : [...form.querySelectorAll('input[name="tags"]')].find((item) => item.value === saved.value);
+    if (!input) continue;
+    input.value = saved.value;
+    if (input.type === "checkbox") input.checked = saved.checked;
+  }
+  const options = form.querySelector(".task-options");
+  if (options) options.open = draft.expanded;
+  const specific = form.querySelector(".specific-time-fields");
+  if (specific) specific.hidden = form.querySelector('[name="deadline_mode"]').value !== "specific";
+}
+
+function taskTagCatalog() {
+  return dashboard?.task_tag_catalog || [];
+}
+
+function tagLabel(id) {
+  return taskTagCatalog().find((tag) => tag.id === id)?.label || id;
+}
+
+function entryTags(entry) {
+  if (entry.source?.plugin_id === "core" && entry.source?.entity_type === "task") {
+    return dashboard?.tasks?.find((task) => task.id === entry.source.entity_id)?.tags || [];
+  }
+  return taskTagCatalog().filter((tag) => (tag.plugin_ids || []).includes(entry.source?.plugin_id)).map((tag) => tag.id);
+}
+
+function matchesTags(tags, selected) {
+  return !selected.length || selected.some((tag) => tags.includes(tag));
+}
+
+function tagPicker(id, selected, label = "Tags", filter = false) {
+  return `<details class="tag-picker" data-tag-label="${escapeHtml(label)}"${filter && selected.length ? " open" : ""}><summary>${escapeHtml(label)}${selected.length ? ` (${selected.length})` : ""}</summary><fieldset id="${id}"><legend class="sr-only">${escapeHtml(label)}</legend>${taskTagCatalog().map((tag) => `<label><input id="${id}-${escapeHtml(tag.id)}" type="checkbox" name="tags" value="${escapeHtml(tag.id)}"${selected.includes(tag.id) ? " checked" : ""}>${escapeHtml(tag.label)}</label>`).join("")}</fieldset>${filter ? '<button class="text-button" type="button" data-clear-schedule-tags>Clear all tags</button>' : ""}</details>`;
+}
+
+function selectedTags(root) {
+  return [...root.querySelectorAll('input[name="tags"]:checked')].map((input) => input.value);
+}
+
+function wallTimeParts(value, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(value));
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return { date: `${part("year")}-${part("month")}-${part("day")}`, time: `${part("hour")}:${part("minute")}` };
+}
+
+function buildTaskDeadline(date, time, timeZone, occurrence = "earlier") {
+  if (!date) return null;
+  // Validate the zone even for civil dates. End of day remains a calendar date.
+  new Intl.DateTimeFormat("en", { timeZone }).format(new Date());
+  if (!time) return { kind: "due-on", due_on: date, time_zone: timeZone };
+  const wall = Date.parse(`${date}T${time}:00Z`);
+  const matches = [];
+  for (let offset = -840; offset <= 840; offset += 15) {
+    const instant = wall - offset * 60000;
+    const parts = wallTimeParts(instant, timeZone);
+    if (parts.date === date && parts.time === time) matches.push({ instant, offset });
+  }
+  matches.sort((a, b) => a.instant - b.instant);
+  if (!matches.length) throw new Error("That time does not exist in this timezone because the clocks change. Choose another time.");
+  const match = occurrence === "later" ? matches.at(-1) : matches[0];
+  const sign = match.offset < 0 ? "-" : "+";
+  const minutes = Math.abs(match.offset);
+  const offset = `${sign}${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  return { kind: "due-at", due_at: `${date}T${time}:00${offset}`, time_zone: timeZone };
+}
+
+function taskMetadataFields(prefix, task = {}) {
+  const deadline = task.deadline;
+  const zone = deadline?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const parts = deadline?.kind === "due-at" ? wallTimeParts(deadline.due_at, zone) : { date: deadline?.due_on || "", time: "" };
+  let later = false;
+  if (deadline?.kind === "due-at") {
+    later = Math.floor(new Date(buildTaskDeadline(parts.date, parts.time, zone, "earlier").due_at).valueOf() / 60000) !== Math.floor(new Date(deadline.due_at).valueOf() / 60000);
+  }
+  return `<div class="task-metadata-fields"><label for="${prefix}-date">Due date (optional)<input id="${prefix}-date" name="due_date" type="date" value="${escapeHtml(parts.date)}"></label><label for="${prefix}-deadline-mode">Deadline<select id="${prefix}-deadline-mode" name="deadline_mode"><option value="end-of-day"${parts.time ? "" : " selected"}>End of day</option><option value="specific"${parts.time ? " selected" : ""}>Specific time</option></select></label><div class="specific-time-fields"${parts.time ? "" : " hidden"}><label for="${prefix}-time">Time<input id="${prefix}-time" name="due_time" type="time" value="${parts.time}"></label><label for="${prefix}-occurrence">If the clock repeats this time<select id="${prefix}-occurrence" name="occurrence"><option value="earlier"${later ? "" : " selected"}>First occurrence</option><option value="later"${later ? " selected" : ""}>Second occurrence</option></select></label></div><label for="${prefix}-zone">Timezone<input id="${prefix}-zone" name="time_zone" value="${escapeHtml(zone)}" required spellcheck="false"></label><p class="deadline-note">End of day keeps this date in the named timezone. Clear the date to remove the deadline. Deadlines do not send notifications.</p>${tagPicker(`${prefix}-tags`, task.tags || [])}</div>`;
+}
+
+function deadlineForTaskFields(date, time, timeZone, occurrence, original = null) {
+  const next = buildTaskDeadline(date, time, timeZone, occurrence);
+  if (original?.kind === "due-at" && next?.kind === "due-at" && original.time_zone === next.time_zone
+      && Math.floor(new Date(original.due_at).valueOf() / 60000) === Math.floor(new Date(next.due_at).valueOf() / 60000)) {
+    return original;
+  }
+  return next;
+}
+
+function readTaskMetadata(form, originalDeadline = null) {
+  const value = (name) => form.querySelector(`[name="${name}"]`).value;
+  const date = value("due_date");
+  const specific = value("deadline_mode") === "specific";
+  if (date && specific && !value("due_time")) throw new Error("Choose a time or select End of day.");
+  return { deadline: deadlineForTaskFields(date, specific ? value("due_time") : "", value("time_zone"), value("occurrence"), originalDeadline), tags: selectedTags(form) };
+}
+
+function taskDeadlineLabel(task) {
+  const deadline = task.deadline;
+  if (!deadline) return "No deadline";
+  if (deadline.kind === "due-on") return `Due ${deadline.due_on} · End of day (${deadline.time_zone})`;
+  const parts = wallTimeParts(deadline.due_at, deadline.time_zone);
+  return `Due ${parts.date} ${parts.time} (${deadline.time_zone})`;
+}
+
+function renderSectionTasks() {
+  const ids = taskTagCatalog().filter((tag) => tag.view === activeView).map((tag) => tag.id);
+  if (!ids.length) return;
+  const tasks = dashboard.tasks.filter((task) => task.state !== "done" && matchesTags(task.tags || [], ids));
+  app.insertAdjacentHTML("beforeend", `<section class="panel section-core-tasks"><div class="panel-header"><h2>Shared tasks for ${escapeHtml(viewCopy[activeView].title)}</h2><span>${tasks.length} tagged</span></div><div class="task-list">${tasks.length ? tasks.map(taskRow).join("") : '<p class="empty">Tag a shared task to show it here.</p>'}</div></section>`);
+  wireCommandButtons(app.querySelector(".section-core-tasks"));
+}
+
+function openTaskEditor(id) {
+  const task = dashboard?.tasks?.find((item) => item.id === id);
+  if (!task) return;
+  editingTask = task;
+  const dialog = document.querySelector("#task-editor-dialog");
+  document.querySelector("#task-editor-content").innerHTML = `<form id="task-edit-form" class="task-edit-form"><div class="dialog-heading"><h2 id="task-editor-title">Edit shared task</h2><button type="button" data-close-task-editor aria-label="Close task editor">×</button></div><label for="edit-task-title">Title<input id="edit-task-title" name="title" value="${escapeHtml(task.title)}" required maxlength="160"></label><label for="edit-task-description">Description<textarea id="edit-task-description" name="description">${escapeHtml(task.description || "")}</textarea></label>${taskMetadataFields("edit", task)}<p class="form-error" role="status"></p><button class="primary-button" type="submit">Save task</button></form>`;
+  document.querySelector("#task-edit-form").addEventListener("submit", saveTaskEdit);
+  dialog.showModal();
+}
+
+async function saveTaskEdit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    await request(`/api/tasks/${encodeURIComponent(editingTask.id)}`, { method: "PATCH", body: JSON.stringify({ title: form.querySelector('[name="title"]').value.trim(), description: form.querySelector('[name="description"]').value, ...readTaskMetadata(form, editingTask.deadline), expected_revision: editingTask.updated_at }) });
+    document.querySelector("#task-editor-dialog").close();
+    await refresh();
+  } catch (error) {
+    form.querySelector(".form-error").textContent = error.status === 409 ? "This task changed. Close and reopen the editor to review current values before saving." : error.message;
+    if (error.status === 409) await refresh();
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const edit = event.target.closest?.("[data-edit-task]");
+  if (edit) openTaskEditor(edit.dataset.editTask);
+  if (event.target.closest?.("[data-close-task-editor]")) document.querySelector("#task-editor-dialog").close();
+});
+document.addEventListener("change", (event) => {
+  if (event.target.name === "tags") {
+    const picker = event.target.closest(".tag-picker");
+    const count = selectedTags(picker).length;
+    picker.querySelector("summary").textContent = `${picker.dataset.tagLabel}${count ? ` (${count})` : ""}`;
+  }
+  if (event.target.name === "deadline_mode") {
+    const form = event.target.closest("form");
+    form.querySelector(".specific-time-fields").hidden = event.target.value !== "specific";
+  }
+});
 
 function renderNoDemo(title, detail) {
   app.innerHTML = `<div class="error-box"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div>`;
@@ -1967,6 +2167,11 @@ function cancelJump() {
 }
 
 function handleEscape() {
+  const taskDialog = document.querySelector("#task-editor-dialog");
+  if (taskDialog?.open) {
+    taskDialog.close();
+    return;
+  }
   if (jumpState) return cancelJump();
   if (helpDialog?.open) {
     helpDialog.close();
@@ -1999,7 +2204,7 @@ document.addEventListener("keydown", (event) => {
     handleEscape();
     return;
   }
-  if (helpDialog?.open || isTypingTarget(event.target)) return;
+  if (helpDialog?.open || document.querySelector("#task-editor-dialog")?.open || isTypingTarget(event.target)) return;
   const toggledPane = paneToggleForKey(event.key);
   if (toggledPane && !event.metaKey && !event.ctrlKey && !event.altKey) {
     event.preventDefault();

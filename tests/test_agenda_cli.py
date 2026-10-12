@@ -108,7 +108,7 @@ def test_cli_projects_core_tasks_to_json_and_table(tmp_path, capsys):
                 "plugin_id": "core",
             },
             "state": "ready",
-            "timing": {"due_on": "2026-08-02", "kind": "due-on"},
+            "timing": {"kind": "anytime"},
             "title": "Review agenda PR",
         }
     ]

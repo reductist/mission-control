@@ -129,6 +129,11 @@ data and does not contact Google.
 To install the existing private HTTPS deployment as an online-only Android app,
 follow [`docs/android-pwa.md`](docs/android-pwa.md).
 
+To add a shared task with an optional deadline and several section tags, use
+Overview's **Deadline and tags** controls. See
+[`docs/task-deadlines-tags.md`](docs/task-deadlines-tags.md) for editing and
+filtering Schedule or Calendar.
+
 To connect a real Google account, follow
 [`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
 are stored separately from application configuration.

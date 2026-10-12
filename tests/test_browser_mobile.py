@@ -136,3 +136,139 @@ def test_desktop_sidebar_and_keyboard_context(browser):
     click("#navigator-toggle")
     click("#inspector-toggle")
     assert execute('return document.querySelector(".queue-pane").getBoundingClientRect().width') > before
+
+
+@pytest.mark.parametrize("width", [320, 412])
+def test_mobile_task_deadlines_tags_edit_and_schedule_filter(browser, width):
+    execute, click, viewport, _tap = browser
+    viewport(width)
+
+    def wait_for(script):
+        for _ in range(100):
+            if execute(script):
+                return
+            time.sleep(0.05)
+        assert execute(script), script
+
+    def fill(selector, value):
+        execute(f"const e=document.querySelector({json.dumps(selector)}); "
+                f"e.value={json.dumps(value)}; e.dispatchEvent(new Event('input',{{bubbles:true}})); "
+                "e.dispatchEvent(new Event('change',{bubbles:true}));")
+
+    today = execute("return new Date().toLocaleDateString('en-CA')")
+    titles = [f"Browser synthetic yard {width}", f"Browser synthetic social {width}"]
+    for index, title in enumerate(titles):
+        fill("#quick-add-title", title)
+        if not execute('return document.querySelector("details.task-options").open'):
+            click("details.task-options > summary")
+        fill("#create-date", today)
+        fill("#create-zone", "Europe/London")
+        assert execute('return document.querySelector("#create-deadline-mode").value') == "end-of-day"
+        if index:
+            fill("#create-deadline-mode", "specific")
+            assert not execute('return document.querySelector(".specific-time-fields").hidden')
+            fill("#create-time", "18:30")
+        if not execute('return document.querySelector("details.task-options .tag-picker").open'):
+            click("details.task-options .tag-picker > summary")
+        for tag in (["yard", "maintenance"] if index == 0 else ["personal-social"]):
+            click(f'#create-tags input[value="{tag}"]')
+        click('#quick-add-form button[type="submit"]')
+        wait_for(f"return [...document.querySelectorAll('.task-title')].some(e=>e.textContent==={json.dumps(title)})")
+        assert execute("return document.documentElement.scrollWidth <= innerWidth")
+
+    # Reload through WebDriver: values must come back from persisted server data.
+    viewport(width)
+    wait_for(f"return [...document.querySelectorAll('.task-title')].some(e=>e.textContent==={json.dumps(titles[0])})")
+    ids = []
+    for index, title in enumerate(titles):
+        task_id = execute(f"const row=[...document.querySelectorAll('.task-row')].find(e=>e.querySelector('.task-title')?.textContent==={json.dumps(title)}); return row?.querySelector('[data-edit-task]')?.dataset.editTask")
+        assert task_id
+        ids.append(task_id)
+        click(f'[data-edit-task="{task_id}"]')
+        assert execute('return document.querySelector("#edit-date").value') == today
+        assert execute('return document.querySelector("#edit-zone").value') == "Europe/London"
+        assert execute('return document.querySelector("#edit-deadline-mode").value') == ("specific" if index else "end-of-day")
+        assert execute('return [...document.querySelectorAll("#edit-tags input:checked")].map(e=>e.value).sort()') == (["personal-social"] if index else ["maintenance", "yard"])
+        if index:
+            assert execute('return document.querySelector("#edit-time").value') == "18:30"
+        click("[data-close-task-editor]")
+
+    click('.mobile-section-tab[data-view="schedule"]')
+    wait_for('return !!document.querySelector("#schedule-tags")')
+    click(".schedule-controls .tag-picker > summary")
+    click('#schedule-tags input[value="yard"]')
+    assert titles[0] in execute('return document.querySelector("#app").textContent')
+    assert titles[1] not in execute('return document.querySelector("#app").textContent')
+    click('#schedule-tags input[value="personal-social"]')
+    assert all(title in execute('return document.querySelector("#app").textContent') for title in titles)
+    click('[data-schedule-layout="calendar"]')
+    assert all(title in execute('return document.querySelector("#app").textContent') for title in titles)
+    click('[data-clear-schedule-tags]')
+    assert execute('return document.querySelectorAll("#schedule-tags input:checked").length') == 0
+
+    # Removing the deadline retains an unscheduled task; removing tags persists.
+    click('.mobile-section-tab[data-view="overview"]')
+    click(f'[data-edit-task="{ids[0]}"]')
+    fill("#edit-date", "")
+    click("#task-edit-form .tag-picker > summary")
+    click('#edit-tags input[value="yard"]')
+    click('#task-edit-form button[type="submit"]')
+    wait_for('return !document.querySelector("#task-editor-dialog").open')
+    wait_for(f'return document.activeElement?.dataset?.editTask === "{ids[0]}"')
+    viewport(width)
+    wait_for(f'return !!document.querySelector(\'[data-edit-task="{ids[0]}"]\')')
+    click(f'[data-edit-task="{ids[0]}"]')
+    assert execute('return document.querySelector("#edit-date").value') == ""
+    assert execute('return [...document.querySelectorAll("#edit-tags input:checked")].map(e=>e.value)') == ["maintenance"]
+    click("[data-close-task-editor]")
+    click('.mobile-section-tab[data-view="schedule"]')
+    click('[data-schedule-layout="calendar"]')
+    assert titles[0] not in execute('return [...document.querySelectorAll(".calendar-item")].map(e=>e.textContent).join(" ")')
+    assert titles[1] in execute('return document.querySelector("#app").textContent')
+
+    # A nonexistent civil time must fail visibly rather than shift the deadline.
+    click('.mobile-section-tab[data-view="overview"]')
+    click(f'[data-edit-task="{ids[1]}"]')
+    fill("#edit-date", "2026-03-29")
+    fill("#edit-time", "01:30")
+    click('#task-edit-form button[type="submit"]')
+    wait_for('return document.querySelector("#task-edit-form .form-error").textContent.includes("does not exist")')
+    assert execute('return document.querySelector("#task-editor-dialog").open')
+    # The explicit second occurrence survives saving/reopening a repeated time.
+    fill("#edit-date", "2026-10-25")
+    fill("#edit-occurrence", "later")
+    click("#task-edit-form .tag-picker > summary")
+    click('#edit-tags input[value="house-search"]')
+    click('#task-edit-form button[type="submit"]')
+    wait_for('return !document.querySelector("#task-editor-dialog").open')
+    wait_for(f'return document.activeElement?.dataset?.editTask === "{ids[1]}"')
+    viewport(width)
+    wait_for(f'return !!document.querySelector(\'[data-edit-task="{ids[1]}"]\')')
+    click(f'[data-edit-task="{ids[1]}"]')
+    assert execute('return document.querySelector("#edit-date").value') == "2026-10-25"
+    assert execute('return document.querySelector("#edit-time").value') == "01:30"
+    assert execute('return document.querySelector("#edit-occurrence").value') == "later"
+    assert execute('return [...document.querySelectorAll("#edit-tags input:checked")].map(e=>e.value).sort()') == ["house-search", "personal-social"]
+
+
+def test_unrelated_edit_preserves_precise_timed_deadline(browser):
+    execute, click, viewport, _tap = browser
+    viewport(412)
+    deadline = {"kind": "due-at", "due_at": "2026-10-15T18:30:45.123Z", "time_zone": "UTC"}
+    payload = {"title": "Browser precision fixture", "deadline": deadline, "tags": ["yard"]}
+    task = execute('return fetch("/api/tasks",{method:"POST",headers:{"Content-Type":"application/json","X-Mission-Control-Token":document.querySelector(\'meta[name="mission-control-write-token"]\').content},body:' + json.dumps(json.dumps(payload)) + '}).then(r=>r.json())')
+    viewport(412)
+    for _ in range(100):
+        if execute(f'return !!document.querySelector(\'[data-edit-task="{task["id"]}"]\')'):
+            break
+        time.sleep(0.05)
+    click(f'[data-edit-task="{task["id"]}"]')
+    execute('document.querySelector("#edit-task-title").value="Browser precision edited"')
+    click('#task-edit-form button[type="submit"]')
+    for _ in range(100):
+        if not execute('return document.querySelector("#task-editor-dialog").open'):
+            break
+        time.sleep(0.05)
+    result = execute('return fetch("/api/dashboard").then(r=>r.json()).then(d=>d.tasks.find(t=>t.id===' + json.dumps(task["id"]) + '))')
+    assert result["title"] == "Browser precision edited"
+    assert result["deadline"] == deadline

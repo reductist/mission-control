@@ -79,6 +79,8 @@ jobs:
               "mission_control/migrations/0002_entity_notes.sql",
               "mission_control/migrations/0003_entity_note_status_events.sql",
               "mission_control/migrations/0004_plugin_schema_migrations.sql",
+              "mission_control/migrations/0005_task_metadata.sql",
+              "mission_control/schemas/core-task-request.schema.json",
               "mission_control/builtin_plugins/landscape/agenda.json",
               "mission_control/builtin_plugins/landscape/config.defaults.json",
               "mission_control/builtin_plugins/landscape/config.presentation.json",

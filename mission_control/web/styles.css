@@ -724,6 +724,24 @@ kbd {
 }
 .keybar span { display: flex; align-items: center; gap: 5px; }
 .mobile-section-tabs { display: none; }
+.task-options { grid-column: 1 / -1; }
+.task-options summary, .tag-picker summary { cursor: pointer; padding: 9px 0; font-size: 12px; color: var(--accent); }
+.task-metadata-fields, .task-edit-form { display: grid; gap: 12px; min-width: 0; }
+.task-edit-form { padding: 16px; }
+.task-metadata-fields label, .task-edit-form > label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.task-metadata-fields input, .task-metadata-fields select, .task-edit-form input, .task-edit-form textarea {
+  min-width: 0; width: 100%; padding: 9px; border: 1px solid var(--border-strong); border-radius: 2px; background: #131618; color: var(--text); font-size: 13px;
+}
+.task-edit-form textarea { min-height: 72px; resize: vertical; }
+.specific-time-fields:not([hidden]) { display: grid; gap: 12px; }
+.tag-picker { border-top: 1px solid var(--border); }
+.tag-picker fieldset { margin: 0; padding: 8px; border: 1px solid var(--border); display: grid; gap: 4px; }
+.tag-picker fieldset label { min-height: 36px; padding: 6px; display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--text); cursor: pointer; }
+.tag-picker input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.tag-filter-note, .deadline-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.form-error { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 12px; }
+.section-core-tasks { margin-top: 12px; }
+.task-editor-dialog { max-height: calc(100dvh - 24px); overflow: auto; }
 
 .workspace { min-height: 0; display: grid; grid-template-columns: minmax(184px, .74fr) minmax(430px, 2.35fr) minmax(260px, 1fr); background: var(--border); gap: 1px; }
 .workspace.is-navigator-hidden { grid-template-columns: minmax(430px, 2.35fr) minmax(260px, 1fr); }
@@ -1008,6 +1026,9 @@ kbd {
   .schedule-choice, .schedule-filter { min-height: 34px; font-size: 11px; }
   .inspector-section h3 { font-size: 10px; }
   .command-table button { min-height: 38px; font-size: 11px; }
+  .task-metadata-fields label, .task-edit-form > label, .tag-picker fieldset label { font-size: 13px; }
+  .task-metadata-fields input, .task-metadata-fields select, .task-edit-form input, .task-edit-form textarea { font-size: 16px; }
+  .deadline-note, .tag-filter-note, .item-meta { font-size: 12px; }
   .ops-summary { grid-template-columns: repeat(2, 1fr); }
   .ops-summary > div:nth-child(2) { border-right: 0; }
   .ops-summary > div:nth-child(-n + 2) { border-bottom: 1px solid var(--border); }

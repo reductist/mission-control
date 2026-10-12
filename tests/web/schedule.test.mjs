@@ -32,11 +32,52 @@ const context = {
 context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(
-  `${source}\n;globalThis.scheduleTest = { calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, entryAccentToken, entryProvenance, escapeHtml, householdEntries, safeDetailHref, setDashboard(value) { dashboard = value; }, shiftCivilDate };`,
+  `${source}\n;globalThis.scheduleTest = { deadlineForTaskFields, buildTaskDeadline, matchesTags, entryTags, taskDeadlineLabel, calendarEntryIntersectsDay, calendarRange, civilDateValue, compareScheduleEntries, dateKeyInTimeZone, entryAccentToken, entryProvenance, escapeHtml, householdEntries, safeDetailHref, setDashboard(value) { dashboard = value; }, shiftCivilDate };`,
   context,
 );
 
 const { scheduleTest } = context;
+
+test("unrelated edits preserve deadline seconds, fraction, and Z spelling", () => {
+  for (const due_at of ["2026-10-15T18:30:45.123Z", "2026-10-15T18:30:45+00:00"]) {
+    const original = { kind: "due-at", due_at, time_zone: "UTC" };
+    assert.equal(scheduleTest.deadlineForTaskFields("2026-10-15", "18:30", "UTC", "earlier", original), original);
+    assert.notEqual(scheduleTest.deadlineForTaskFields("2026-10-15", "18:31", "UTC", "earlier", original).due_at, due_at);
+  }
+});
+
+test("date-only end of day stays a civil date in its named timezone", () => {
+  const deadline = scheduleTest.buildTaskDeadline("2026-03-08", "", "America/New_York");
+  assert.equal(deadline.kind, "due-on");
+  assert.equal(deadline.due_on, "2026-03-08");
+  assert.equal(deadline.time_zone, "America/New_York");
+  assert.equal(scheduleTest.buildTaskDeadline("", "", "America/New_York"), null);
+});
+
+test("timed deadlines use DST offsets and reject missing civil times", () => {
+  assert.equal(scheduleTest.buildTaskDeadline("2026-03-08", "23:00", "America/New_York").due_at, "2026-03-08T23:00:00-04:00");
+  assert.throws(() => scheduleTest.buildTaskDeadline("2026-03-08", "02:30", "America/New_York"), /does not exist/);
+  assert.equal(scheduleTest.buildTaskDeadline("2026-11-01", "01:30", "America/New_York", "earlier").due_at, "2026-11-01T01:30:00-04:00");
+  assert.equal(scheduleTest.buildTaskDeadline("2026-11-01", "01:30", "America/New_York", "later").due_at, "2026-11-01T01:30:00-05:00");
+});
+
+test("tag filters use OR and cleared filters include untagged entries", () => {
+  assert.equal(scheduleTest.matchesTags(["yard", "maintenance"], ["yard", "personal-social"]), true);
+  assert.equal(scheduleTest.matchesTags(["maintenance"], ["yard", "personal-social"]), false);
+  assert.equal(scheduleTest.matchesTags([], ["yard"]), false);
+  assert.equal(scheduleTest.matchesTags([], []), true);
+});
+
+test("core tags use stable task identity and providers use backend-owned catalog mapping", () => {
+  scheduleTest.setDashboard({ tasks: [{ id: "task-1", tags: ["yard", "maintenance"] }], task_tag_catalog: [
+    { id: "yard", plugin_ids: ["landscape"] }, { id: "maintenance", plugin_ids: ["household"] },
+  ] });
+  const tags = (entry) => Array.from(scheduleTest.entryTags(entry));
+  assert.deepEqual(tags({ source: { plugin_id: "core", entity_type: "task", entity_id: "task-1" } }), ["yard", "maintenance"]);
+  assert.deepEqual(tags({ source: { plugin_id: "landscape" } }), ["yard"]);
+  assert.deepEqual(tags({ source: { plugin_id: "household" } }), ["maintenance"]);
+  assert.deepEqual(tags({ source: { plugin_id: "google-calendar" } }), []);
+});
 
 test("household entries are available to the maintenance view", () => {
   scheduleTest.setDashboard({
