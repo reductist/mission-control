@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 import json
 from importlib.resources import files
 
@@ -8,7 +10,26 @@ from mission_control.agenda import agenda_entry_to_dict, project_core_tasks
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.task_metadata import TASK_TAG_CATALOG, normalize_deadline, normalize_tags
-from mission_control.tasks import TaskRepository
+from mission_control.tasks import StaleTaskRevisionError, TaskRepository
+
+
+def test_concurrent_edits_accept_only_one_matching_revision(tmp_path):
+    repo = repository(tmp_path)
+    task = repo.create("Concurrent synthetic task")
+    barrier = Barrier(2)
+
+    def edit(tag):
+        barrier.wait(timeout=5)
+        try:
+            repo.update(task.id, tags=[tag], expected_revision=task.updated_at)
+            return "accepted"
+        except StaleTaskRevisionError:
+            return "stale"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(edit, ["yard", "maintenance"]))
+    assert sorted(results) == ["accepted", "stale"]
+    assert len(repo.history(task.id)) == 2
 
 
 def repository(tmp_path):

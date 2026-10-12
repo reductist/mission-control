@@ -101,6 +101,9 @@ class TaskRepository:
         """
 
         with self.database.connect() as connection:
+            # Serialize the revision check and write: two editors must not both
+            # accept the same revision after reading before either writes.
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
             if row is None:
                 raise KeyError(task_id)
