@@ -16,6 +16,12 @@ public exposure, add application authentication, or supersede the accepted
 [network exposure decision](network-exposure.md). The current server has no user
 authentication and must not be exposed directly to an untrusted network.
 
+Before selecting or implementing a public path, define and prove the separate
+[secrets and authentication backend contracts](secrets-and-auth-backends.md).
+That prerequisite must cover private-key and session-secret lifecycle,
+expiration, rotation, revocation, outage behavior, and runtime credential
+delivery; this access review does not approve an implementation for it.
+
 ## Current constraints
 
 - Mission Control normally listens on `127.0.0.1:8000`.
