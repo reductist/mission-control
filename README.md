@@ -129,6 +129,10 @@ data and does not contact Google.
 To install the existing private HTTPS deployment as an online-only Android app,
 follow [`docs/android-pwa.md`](docs/android-pwa.md).
 
+To evaluate future home and remote PWA access without changing the application's
+safe loopback default, see the exploratory
+[`docs/remote-access-design.md`](docs/remote-access-design.md).
+
 To connect a real Google account, follow
 [`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
 are stored separately from application configuration.
