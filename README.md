@@ -133,6 +133,10 @@ To evaluate future home and remote PWA access without changing the application's
 safe loopback default, see the exploratory
 [`docs/remote-access-design.md`](docs/remote-access-design.md).
 
+The deferred prerequisite design for pluggable secret storage, authentication,
+authorization, and session boundaries is in
+[`docs/secrets-and-auth-backends.md`](docs/secrets-and-auth-backends.md).
+
 To connect a real Google account, follow
 [`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
 are stored separately from application configuration.
