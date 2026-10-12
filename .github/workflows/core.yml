@@ -45,10 +45,14 @@ jobs:
         run: python -m pytest
 
       - uses: browser-actions/setup-chrome@v1
+        id: browser
         with:
+          chrome-version: stable
           install-chromedriver: true
 
       - name: Test native mobile pointer and focus behavior
+        env:
+          MC_CHROME_BINARY: ${{ steps.browser.outputs.chrome-path }}
         run: MC_BROWSER_TESTS=1 python -m pytest tests/test_browser_mobile.py
 
       - name: Parse browser JavaScript

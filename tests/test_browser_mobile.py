@@ -13,6 +13,7 @@ import subprocess
 import threading
 import time
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 import pytest
 
@@ -38,8 +39,11 @@ def browser(tmp_path):
     def call(path, data=None, method="POST"):
         request = Request(base + path, data=json.dumps(data or {}).encode() if method == "POST" else None,
                           headers={"Content-Type": "application/json"}, method=method)
-        with urlopen(request, timeout=20) as response:
-            value = json.load(response)["value"]
+        try:
+            with urlopen(request, timeout=20) as response:
+                value = json.load(response)["value"]
+        except HTTPError as error:
+            raise AssertionError(error.read().decode()) from error
         assert not isinstance(value, dict) or "error" not in value, value
         return value
 
@@ -50,8 +54,11 @@ def browser(tmp_path):
                 break
             except OSError:
                 time.sleep(0.05)
-        session = call("/session", {"capabilities": {"alwaysMatch": {"browserName": "chrome", "goog:chromeOptions": {
-            "args": ["--headless", "--no-sandbox", "--disable-gpu"]}}}})["sessionId"]
+        options = {"args": ["--headless", "--no-sandbox", "--disable-gpu"]}
+        if os.environ.get("MC_CHROME_BINARY"):
+            options["binary"] = os.environ["MC_CHROME_BINARY"]
+        session = call("/session", {"capabilities": {"alwaysMatch": {
+            "browserName": "chrome", "goog:chromeOptions": options}}})["sessionId"]
         prefix = f"/session/{session}"
 
         def execute(script):
