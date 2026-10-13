@@ -467,6 +467,28 @@ def test_task_mutations_require_token_and_append_history(tmp_path):
         ]
 
 
+def test_task_deadline_tags_api_edit_clear_conflict_and_validation(tmp_path):
+    application = MissionControlApplication(Database(tmp_path / "metadata.db"), write_token="known-token")
+    deadline = {"kind": "due-on", "due_on": "2026-10-15", "time_zone": "Europe/Zurich"}
+    with running_server(application) as base_url:
+        _, task = request_json(f"{base_url}/api/tasks", method="POST", token="known-token", body={"title": "Synthetic task", "deadline": deadline, "tags": ["yard", "maintenance"]})
+        assert task["deadline"] == deadline
+        assert task["tags"] == ["yard", "maintenance"]
+        _, updated = request_json(f"{base_url}/api/tasks/{task['id']}", method="PATCH", token="known-token", body={"title": "Edited task", "description": "New detail", "deadline": None, "tags": [], "expected_revision": task["updated_at"]})
+        assert updated["title"] == "Edited task" and updated["description"] == "New detail"
+        assert updated["deadline"] is None and updated["tags"] == []
+        with pytest.raises(HTTPError) as stale:
+            request_json(f"{base_url}/api/tasks/{task['id']}", method="PATCH", token="known-token", body={"tags": ["yard"], "expected_revision": task["updated_at"]})
+        assert stale.value.code == 409
+        for payload in [{"title": 42}, {"description": None}, {"tags": "yard"}, {"deadline": []}, {"expected_revision": 1, "tags": []}, {"tags": ["unknown"]}, {"tags": ["yard", "yard"]}, {"deadline": {"kind": "due-at", "due_at": "2026-03-29T02:30:00+01:00", "time_zone": "Europe/Zurich"}}, {"unknown": True}]:
+            with pytest.raises(HTTPError) as invalid:
+                request_json(f"{base_url}/api/tasks/{task['id']}", method="PATCH", token="known-token", body=payload)
+            assert invalid.value.code == 400
+        _, dashboard = request_json(f"{base_url}/api/dashboard")
+        assert {tag["id"] for tag in dashboard["task_tag_catalog"]} == {"maintenance", "house-search", "personal-social", "yard"}
+        assert application.repository.get(task["id"]).tags == []
+
+
 def test_command_endpoint_routes_core_task_state_with_revision_and_auth(tmp_path):
     application = MissionControlApplication(
         Database(tmp_path / "mission-control.db"),

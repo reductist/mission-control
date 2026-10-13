@@ -77,7 +77,8 @@ from mission_control.plugins import (
     StandardEntityCapability,
     entity_type_registration,
 )
-from mission_control.tasks import TASK_STATES, Task, TaskRepository
+from mission_control.tasks import TASK_STATES, StaleTaskRevisionError, Task, TaskRepository
+from mission_control.task_metadata import TASK_TAG_CATALOG, validate_task_request
 
 MAX_REQUEST_BYTES = 64 * 1024
 _TASK_PATH = re.compile(r"^/api/tasks/([^/]+)$")
@@ -316,6 +317,7 @@ class MissionControlApplication:
                 "completed": len(closed_items.items),
             },
             "tasks": [_task_to_dict(task) for task in _sort_tasks(tasks)],
+            "task_tag_catalog": list(TASK_TAG_CATALOG),
             "agenda": agenda_to_list(agenda),
             "closed_items": closed_items_to_list(closed_items),
             "providers": self._provider_documents(),
@@ -445,7 +447,11 @@ class MissionControlApplication:
         return documents
 
     def create_task(self, document: object) -> dict[str, object]:
-        payload = _object_payload(document, allowed={"title", "description"})
+        payload = _object_payload(document, allowed={"title", "description", "deadline", "tags"})
+        try:
+            validate_task_request(document, "create")
+        except ValueError as error:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-task", str(error)) from error
         title = payload.get("title")
         description = payload.get("description", "")
         if not isinstance(title, str):
@@ -459,7 +465,7 @@ class MissionControlApplication:
                 "description must be a string",
             )
         try:
-            return _task_to_dict(self.repository.create(title, description))
+            return _task_to_dict(self.repository.create(title, description, deadline=payload.get("deadline"), tags=payload.get("tags", [])))
         except (TypeError, ValueError) as error:
             raise ApiError(
                 HTTPStatus.BAD_REQUEST, "invalid-task", str(error)
@@ -468,9 +474,13 @@ class MissionControlApplication:
     def update_task(self, task_id: str, document: object) -> dict[str, object]:
         payload = _object_payload(
             document,
-            allowed={"state", "blocked", "waiting_on", "review_after"},
+            allowed={"title", "description", "state", "blocked", "waiting_on", "review_after", "deadline", "tags", "expected_revision"},
         )
-        if not payload:
+        try:
+            validate_task_request(document, "update")
+        except ValueError as error:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "invalid-task", str(error)) from error
+        if not (set(payload) - {"expected_revision"}):
             raise ApiError(
                 HTTPStatus.BAD_REQUEST,
                 "empty-update",
@@ -485,6 +495,8 @@ class MissionControlApplication:
             )
         try:
             return _task_to_dict(self.repository.update(task_id, **payload))
+        except StaleTaskRevisionError as error:
+            raise ApiError(HTTPStatus.CONFLICT, "stale-task", str(error)) from error
         except KeyError as error:
             raise ApiError(
                 HTTPStatus.NOT_FOUND, "task-not-found", "task not found"

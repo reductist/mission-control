@@ -758,6 +758,8 @@ def project_core_tasks(
                 "blocked": task.blocked,
                 "waiting_on": task.waiting_on,
                 "review_after": task.review_after,
+                "deadline": task.deadline,
+                "tags": task.tags,
                 "updated_at": task.updated_at,
             }
         )
@@ -772,11 +774,11 @@ def project_core_tasks(
             state = ActionState.READY
 
         timing: ActionTiming = AnytimeTiming()
-        if task.review_after is not None:
-            try:
-                timing = DueOnTiming(_parse_date(task.review_after, "task.review_after"))
-            except AgendaContributionError:
-                timing = AnytimeTiming()
+        if task.deadline is not None:
+            if task.deadline["kind"] == "due-on":
+                timing = DueOnTiming(_parse_date(task.deadline["due_on"], "task.deadline.due_on"))
+            else:
+                timing = DueAtTiming(_parse_datetime(task.deadline["due_at"], "task.deadline.due_at"))
 
         detail_parts = [part for part in (task.description, task.waiting_on) if part]
         entries.append(

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final
 from uuid import uuid4
 
 from mission_control.database import Database
+from mission_control.task_metadata import normalize_deadline, normalize_tags
 
 TASK_STATES: Final[tuple[str, ...]] = ("backlog", "ready", "in-progress", "done")
 _UNSET: Final = object()
@@ -33,16 +34,20 @@ class Task:
     review_after: str | None
     created_at: str
     updated_at: str
+    deadline: dict[str, str] | None = None
+    tags: list[str] = field(default_factory=list)
 
 
 class TaskRepository:
     def __init__(self, database: Database) -> None:
         self.database = database
 
-    def create(self, title: str, description: str = "") -> Task:
+    def create(self, title: str, description: str = "", *, deadline: object = None, tags: object = _UNSET) -> Task:
         title = self._normalize_title(title)
         if not isinstance(description, str):
             raise TypeError("task description must be a string")
+        deadline = normalize_deadline(deadline)
+        tags = normalize_tags([] if tags is _UNSET else tags)
 
         now = datetime.now(UTC).isoformat()
         task_id = str(uuid4())
@@ -54,15 +59,17 @@ class TaskRepository:
             "blocked": False,
             "waiting_on": None,
             "review_after": None,
+            "deadline": deadline,
+            "tags": tags,
         }
 
         with self.database.connect() as connection:
             connection.execute(
                 """
-                INSERT INTO tasks(id, title, description, state, blocked, created_at, updated_at)
-                VALUES (?, ?, ?, 'backlog', 0, ?, ?)
+                INSERT INTO tasks(id, title, description, state, blocked, created_at, updated_at, deadline_json, tags_json)
+                VALUES (?, ?, ?, 'backlog', 0, ?, ?, ?, ?)
                 """,
-                (task_id, title, description, now, now),
+                (task_id, title, description, now, now, json.dumps(deadline) if deadline is not None else None, json.dumps(tags)),
             )
             connection.execute(
                 """
@@ -84,6 +91,8 @@ class TaskRepository:
         waiting_on: str | None | object = _UNSET,
         review_after: str | None | object = _UNSET,
         expected_revision: str | object = _UNSET,
+        deadline: object = _UNSET,
+        tags: object = _UNSET,
     ) -> Task:
         """Update a task and append one event for material changes.
 
@@ -92,6 +101,9 @@ class TaskRepository:
         """
 
         with self.database.connect() as connection:
+            # Serialize the revision check and write: two editors must not both
+            # accept the same revision after reading before either writes.
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
             if row is None:
                 raise KeyError(task_id)
@@ -110,6 +122,8 @@ class TaskRepository:
                 "blocked": current.blocked,
                 "waiting_on": current.waiting_on,
                 "review_after": current.review_after,
+                "deadline": current.deadline,
+                "tags": current.tags,
             }
 
             if title is not _UNSET:
@@ -144,6 +158,11 @@ class TaskRepository:
                     review_after, "review_after"
                 )
 
+            if deadline is not _UNSET:
+                next_values["deadline"] = normalize_deadline(deadline)
+            if tags is not _UNSET:
+                next_values["tags"] = normalize_tags(tags)
+
             changes = {
                 field: {"from": getattr(current, field), "to": value}
                 for field, value in next_values.items()
@@ -157,7 +176,7 @@ class TaskRepository:
                 """
                 UPDATE tasks
                 SET title = ?, description = ?, state = ?, blocked = ?,
-                    waiting_on = ?, review_after = ?, updated_at = ?
+                    waiting_on = ?, review_after = ?, updated_at = ?, deadline_json = ?, tags_json = ?
                 WHERE id = ?
                 """,
                 (
@@ -168,6 +187,8 @@ class TaskRepository:
                     next_values["waiting_on"],
                     next_values["review_after"],
                     now,
+                    json.dumps(next_values["deadline"]) if next_values["deadline"] is not None else None,
+                    json.dumps(next_values["tags"]),
                     task_id,
                 ),
             )
@@ -248,4 +269,6 @@ class TaskRepository:
             review_after=row["review_after"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            deadline=json.loads(row["deadline_json"]) if row["deadline_json"] else None,
+            tags=json.loads(row["tags_json"]),
         )

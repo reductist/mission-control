@@ -432,6 +432,7 @@ def test_core_tasks_project_through_the_same_contract():
         blocked=False,
         waiting_on=None,
         review_after="2026-08-02",
+        deadline={"kind": "due-on", "due_on": "2026-08-02", "time_zone": "Europe/Zurich"},
         created_at="2026-07-29T00:00:00+00:00",
         updated_at="2026-07-29T00:00:00+00:00",
     )
