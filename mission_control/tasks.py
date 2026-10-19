@@ -11,7 +11,14 @@ from uuid import uuid4
 from mission_control.database import Database
 from mission_control.task_metadata import normalize_deadline, normalize_tags
 
-TASK_STATES: Final[tuple[str, ...]] = ("backlog", "ready", "in-progress", "done")
+TASK_STATES: Final[tuple[str, ...]] = (
+    "backlog",
+    "ready",
+    "in-progress",
+    "done",
+    "canceled",
+)
+CLOSED_TASK_STATES: Final[frozenset[str]] = frozenset({"done", "canceled"})
 _UNSET: Final = object()
 
 
@@ -21,6 +28,14 @@ class StaleTaskRevisionError(ValueError):
     def __init__(self, current_revision: str) -> None:
         super().__init__("task revision is stale")
         self.current_revision = current_revision
+
+
+class UnfinishedChildrenError(ValueError):
+    """A parent was explicitly completed while it still has open children."""
+
+    def __init__(self, child_ids: list[str]) -> None:
+        super().__init__("parent task has unfinished children")
+        self.child_ids = tuple(child_ids)
 
 
 @dataclass(frozen=True)
@@ -36,13 +51,23 @@ class Task:
     updated_at: str
     deadline: dict[str, str] | None = None
     tags: list[str] = field(default_factory=list)
+    parent_id: str | None = None
+    sibling_order: int = 0
 
 
 class TaskRepository:
     def __init__(self, database: Database) -> None:
         self.database = database
 
-    def create(self, title: str, description: str = "", *, deadline: object = None, tags: object = _UNSET) -> Task:
+    def create(
+        self,
+        title: str,
+        description: str = "",
+        *,
+        deadline: object = None,
+        tags: object = _UNSET,
+        parent_id: str | None = None,
+    ) -> Task:
         title = self._normalize_title(title)
         if not isinstance(description, str):
             raise TypeError("task description must be a string")
@@ -61,15 +86,33 @@ class TaskRepository:
             "review_after": None,
             "deadline": deadline,
             "tags": tags,
+            "parent_id": parent_id,
         }
 
         with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._validate_parent(connection, task_id, parent_id, task_has_children=False)
+            sibling_order = self._next_sibling_order(connection, parent_id)
+            payload["sibling_order"] = sibling_order
             connection.execute(
                 """
-                INSERT INTO tasks(id, title, description, state, blocked, created_at, updated_at, deadline_json, tags_json)
-                VALUES (?, ?, ?, 'backlog', 0, ?, ?, ?, ?)
+                INSERT INTO tasks(
+                    id, title, description, state, blocked, created_at, updated_at,
+                    deadline_json, tags_json, parent_id, sibling_order
+                )
+                VALUES (?, ?, ?, 'backlog', 0, ?, ?, ?, ?, ?, ?)
                 """,
-                (task_id, title, description, now, now, json.dumps(deadline) if deadline is not None else None, json.dumps(tags)),
+                (
+                    task_id,
+                    title,
+                    description,
+                    now,
+                    now,
+                    json.dumps(deadline) if deadline is not None else None,
+                    json.dumps(tags),
+                    parent_id,
+                    sibling_order,
+                ),
             )
             connection.execute(
                 """
@@ -93,6 +136,8 @@ class TaskRepository:
         expected_revision: str | object = _UNSET,
         deadline: object = _UNSET,
         tags: object = _UNSET,
+        parent_id: str | None | object = _UNSET,
+        sibling_order: int | object = _UNSET,
     ) -> Task:
         """Update a task and append one event for material changes.
 
@@ -124,6 +169,8 @@ class TaskRepository:
                 "review_after": current.review_after,
                 "deadline": current.deadline,
                 "tags": current.tags,
+                "parent_id": current.parent_id,
+                "sibling_order": current.sibling_order,
             }
 
             if title is not _UNSET:
@@ -163,6 +210,45 @@ class TaskRepository:
             if tags is not _UNSET:
                 next_values["tags"] = normalize_tags(tags)
 
+            target_parent = current.parent_id
+            if parent_id is not _UNSET:
+                if parent_id is not None and not isinstance(parent_id, str):
+                    raise TypeError("task parent_id must be a string or null")
+                target_parent = parent_id
+                has_children = connection.execute(
+                    "SELECT 1 FROM tasks WHERE parent_id = ? LIMIT 1", (task_id,)
+                ).fetchone() is not None
+                self._validate_parent(
+                    connection,
+                    task_id,
+                    target_parent,
+                    task_has_children=has_children,
+                )
+                next_values["parent_id"] = target_parent
+
+            if sibling_order is not _UNSET:
+                if not isinstance(sibling_order, int) or isinstance(sibling_order, bool):
+                    raise TypeError("task sibling_order must be an integer")
+                if sibling_order < 0:
+                    raise ValueError("task sibling_order must not be negative")
+                next_values["sibling_order"] = sibling_order
+            elif target_parent != current.parent_id:
+                next_values["sibling_order"] = self._next_sibling_order(
+                    connection, target_parent, excluding=task_id
+                )
+
+            if next_values["state"] == "done" and current.state != "done":
+                unfinished = [
+                    row["id"]
+                    for row in connection.execute(
+                        "SELECT id FROM tasks WHERE parent_id = ? "
+                        "AND state NOT IN ('done', 'canceled') ORDER BY sibling_order, id",
+                        (task_id,),
+                    ).fetchall()
+                ]
+                if unfinished:
+                    raise UnfinishedChildrenError(unfinished)
+
             changes = {
                 field: {"from": getattr(current, field), "to": value}
                 for field, value in next_values.items()
@@ -176,7 +262,8 @@ class TaskRepository:
                 """
                 UPDATE tasks
                 SET title = ?, description = ?, state = ?, blocked = ?,
-                    waiting_on = ?, review_after = ?, updated_at = ?, deadline_json = ?, tags_json = ?
+                    waiting_on = ?, review_after = ?, updated_at = ?, deadline_json = ?,
+                    tags_json = ?, parent_id = ?, sibling_order = ?
                 WHERE id = ?
                 """,
                 (
@@ -189,9 +276,22 @@ class TaskRepository:
                     now,
                     json.dumps(next_values["deadline"]) if next_values["deadline"] is not None else None,
                     json.dumps(next_values["tags"]),
+                    next_values["parent_id"],
+                    next_values["sibling_order"],
                     task_id,
                 ),
             )
+            if next_values["parent_id"] != current.parent_id:
+                self._normalize_sibling_orders(connection, current.parent_id)
+            if sibling_order is not _UNSET:
+                self._place_at_order(
+                    connection,
+                    task_id,
+                    next_values["parent_id"],
+                    int(next_values["sibling_order"]),
+                )
+            else:
+                self._normalize_sibling_orders(connection, next_values["parent_id"])
             connection.execute(
                 """
                 INSERT INTO task_events(event_id, task_id, event_type, payload_json, occurred_at)
@@ -218,9 +318,38 @@ class TaskRepository:
     def list(self) -> list[Task]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM tasks ORDER BY created_at, id"
+                "SELECT * FROM tasks ORDER BY parent_id IS NOT NULL, parent_id, sibling_order, created_at, id"
             ).fetchall()
         return [self._task_from_row(row) for row in rows]
+
+    def progress(self, task_id: str) -> dict[str, int | bool]:
+        """Return transport-neutral progress derived only from direct children."""
+
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT state FROM tasks WHERE parent_id = ?", (task_id,)
+            ).fetchall()
+            parent = connection.execute(
+                "SELECT state FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+        if parent is None:
+            raise KeyError(task_id)
+        total = len(rows)
+        done = sum(row["state"] == "done" for row in rows)
+        canceled = sum(row["state"] == "canceled" for row in rows)
+        unfinished = total - done - canceled
+        closed = done + canceled
+        return {
+            "total": total,
+            "done": done,
+            "canceled": canceled,
+            "unfinished": unfinished,
+            "closed": closed,
+            "percent": round(closed * 100 / total) if total else 0,
+            "ready_to_close": total > 0
+            and unfinished == 0
+            and parent["state"] not in CLOSED_TASK_STATES,
+        }
 
     def history(self, task_id: str) -> list[dict[str, object]]:
         with self.database.connect() as connection:
@@ -258,6 +387,68 @@ class TaskRepository:
         return value.strip() or None
 
     @staticmethod
+    def _validate_parent(
+        connection, task_id: str, parent_id: str | None, *, task_has_children: bool
+    ) -> None:
+        if parent_id is None:
+            return
+        if parent_id == task_id:
+            raise ValueError("a task cannot be its own parent")
+        parent = connection.execute(
+            "SELECT parent_id FROM tasks WHERE id = ?", (parent_id,)
+        ).fetchone()
+        if parent is None:
+            raise ValueError("task parent does not exist")
+        if parent["parent_id"] is not None:
+            raise ValueError("task hierarchy supports only two levels")
+        if task_has_children:
+            raise ValueError("a parent task cannot be attached beneath another task")
+
+    @staticmethod
+    def _next_sibling_order(connection, parent_id: str | None, *, excluding: str | None = None) -> int:
+        clause = "parent_id IS NULL" if parent_id is None else "parent_id = ?"
+        parameters: list[object] = [] if parent_id is None else [parent_id]
+        if excluding is not None:
+            clause += " AND id <> ?"
+            parameters.append(excluding)
+        row = connection.execute(
+            f"SELECT coalesce(max(sibling_order), -1) + 1 AS next_order FROM tasks WHERE {clause}",
+            parameters,
+        ).fetchone()
+        return int(row["next_order"])
+
+    @staticmethod
+    def _normalize_sibling_orders(connection, parent_id: str | None) -> None:
+        clause = "parent_id IS NULL" if parent_id is None else "parent_id = ?"
+        parameters: tuple[object, ...] = () if parent_id is None else (parent_id,)
+        rows = connection.execute(
+            f"SELECT id FROM tasks WHERE {clause} ORDER BY sibling_order, created_at, id",
+            parameters,
+        ).fetchall()
+        connection.executemany(
+            "UPDATE tasks SET sibling_order = ? WHERE id = ?",
+            ((index, row["id"]) for index, row in enumerate(rows)),
+        )
+
+    @staticmethod
+    def _place_at_order(
+        connection, task_id: str, parent_id: str | None, requested: int
+    ) -> None:
+        clause = "parent_id IS NULL" if parent_id is None else "parent_id = ?"
+        parameters: tuple[object, ...] = () if parent_id is None else (parent_id,)
+        rows = connection.execute(
+            f"SELECT id FROM tasks WHERE {clause} AND id <> ? "
+            "ORDER BY sibling_order, created_at, id",
+            (*parameters, task_id),
+        ).fetchall()
+        identities = [row["id"] for row in rows]
+        identities.insert(min(requested, len(identities)), task_id)
+        connection.executemany(
+            "UPDATE tasks SET sibling_order = ? WHERE id = ?",
+            ((index, identity) for index, identity in enumerate(identities)),
+        )
+
+    @staticmethod
     def _task_from_row(row) -> Task:
         return Task(
             id=row["id"],
@@ -271,4 +462,6 @@ class TaskRepository:
             updated_at=row["updated_at"],
             deadline=json.loads(row["deadline_json"]) if row["deadline_json"] else None,
             tags=json.loads(row["tags_json"]),
+            parent_id=row["parent_id"],
+            sibling_order=row["sibling_order"],
         )

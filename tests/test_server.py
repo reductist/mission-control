@@ -480,13 +480,15 @@ def test_task_deadline_tags_api_edit_clear_conflict_and_validation(tmp_path):
         with pytest.raises(HTTPError) as stale:
             request_json(f"{base_url}/api/tasks/{task['id']}", method="PATCH", token="known-token", body={"tags": ["yard"], "expected_revision": task["updated_at"]})
         assert stale.value.code == 409
-        for payload in [{"title": 42}, {"description": None}, {"tags": "yard"}, {"deadline": []}, {"expected_revision": 1, "tags": []}, {"tags": ["unknown"]}, {"tags": ["yard", "yard"]}, {"deadline": {"kind": "due-at", "due_at": "2026-03-29T02:30:00+01:00", "time_zone": "Europe/Zurich"}}, {"unknown": True}]:
+        for payload in [{"title": 42}, {"description": None}, {"tags": "yard"}, {"deadline": []}, {"expected_revision": 1, "tags": []}, {"tags": ["yard", "YARD"]}, {"deadline": {"kind": "due-at", "due_at": "2026-03-29T02:30:00+01:00", "time_zone": "Europe/Zurich"}}, {"unknown": True}]:
             with pytest.raises(HTTPError) as invalid:
                 request_json(f"{base_url}/api/tasks/{task['id']}", method="PATCH", token="known-token", body=payload)
             assert invalid.value.code == 400
+        _, custom = request_json(f"{base_url}/api/tasks/{task['id']}", method="PATCH", token="known-token", body={"tags": ["  Mold   review  "]})
+        assert custom["tags"] == ["Mold review"]
         _, dashboard = request_json(f"{base_url}/api/dashboard")
-        assert {tag["id"] for tag in dashboard["task_tag_catalog"]} == {"maintenance", "house-search", "personal-social", "yard"}
-        assert application.repository.get(task["id"]).tags == []
+        assert {tag["id"] for tag in dashboard["task_tag_catalog"]} == {"maintenance", "house-search", "personal-social", "yard", "Mold review"}
+        assert application.repository.get(task["id"]).tags == ["Mold review"]
 
 
 def test_command_endpoint_routes_core_task_state_with_revision_and_auth(tmp_path):

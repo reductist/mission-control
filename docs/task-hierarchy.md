@@ -107,3 +107,10 @@ keyboard and touch without relying on drag alone. Parent detail remains legible
 at mobile widths. Compact default views may truncate long display text, but
 they preserve the stored text and provide a clickable, keyboard-accessible
 expansion without covering edit or hierarchy controls.
+
+## Synthetic review screenshots
+
+These fixtures contain demonstration content only. They show the collapsed,
+dense parent summary at [desktop width](assets/task-hierarchy-desktop.png) and
+[mobile width](assets/task-hierarchy-mobile.png); no production task data is
+included.

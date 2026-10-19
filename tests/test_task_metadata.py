@@ -83,15 +83,20 @@ def test_invalid_deadlines_rejected_without_write(tmp_path, deadline):
     assert len(repo.history(task.id)) == 1
 
 
-@pytest.mark.parametrize("tags", [["yard", "yard"], ["unknown"], "yard", [None]])
+@pytest.mark.parametrize("tags", [["yard", "YARD"], ["mold", " mold "], "yard", [None]])
 def test_invalid_tags(tags):
     with pytest.raises((TypeError, ValueError)):
         normalize_tags(tags)
 
 
-def test_task_schema_catalog_ids_agree():
+def test_task_schema_allows_bounded_custom_labels():
     schema = json.loads(files("mission_control").joinpath("schemas", "core-task-request.schema.json").read_text())
-    assert schema["$defs"]["tags"]["items"]["enum"] == [tag["id"] for tag in TASK_TAG_CATALOG]
+    assert schema["$defs"]["tags"]["items"] == {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40,
+    }
+    assert {tag["id"] for tag in TASK_TAG_CATALOG} >= {"yard", "maintenance"}
 
 
 def test_upgrade_preserves_legacy_tasks_and_events(tmp_path):
@@ -99,12 +104,12 @@ def test_upgrade_preserves_legacy_tasks_and_events(tmp_path):
     root = files("mission_control").joinpath("migrations")
     with database.connect() as connection:
         for migration in sorted(root.iterdir(), key=lambda path: path.name):
-            if migration.name.startswith("0005"):
+            if not migration.name.startswith(("0001", "0002", "0003", "0004")):
                 continue
             connection.executescript(migration.read_text())
         connection.execute("INSERT INTO tasks(id,title,description,state,blocked,review_after,created_at,updated_at) VALUES ('legacy','Existing task','','ready',0,'2026-10-15','old','old')")
         connection.execute("INSERT INTO task_events(event_id,task_id,event_type,payload_json,occurred_at) VALUES ('old-event','legacy','task.created','{}','old')")
-    assert MigrationRunner(database).apply() == [5]
+    assert MigrationRunner(database).apply() == [5, 6]
     task = TaskRepository(database).get("legacy")
     assert task.title == "Existing task" and task.review_after == "2026-10-15"
     assert task.deadline is None and task.tags == []

@@ -232,9 +232,9 @@ function render() {
 
 function renderOverview() {
   const summary = dashboard.summary;
-  const activeTasks = dashboard.tasks.filter((task) => task.state !== "done" || task.children_count || task.progress?.total);
+  const activeTasks = dashboard.tasks.filter((task) => !["done", "canceled"].includes(task.state) || task.children_count || task.progress?.total);
   const visibleTasks = visibleTaskRoots(dashboard.tasks)
-    .filter((task) => task.state !== "done" || task.children_count || task.progress?.total)
+    .filter((task) => !["done", "canceled"].includes(task.state) || task.children_count || task.progress?.total)
     .slice(0, 7);
   const house = providerInitiative("home-search");
   const scheduled = scheduleEntries().filter((entry) => entry.timing?.kind !== "anytime");
@@ -1195,7 +1195,8 @@ function parentProgress(task, children) {
 function taskRow(task, options = {}) {
   const { children = [], child = false, position = 0, siblingCount = 0 } = options;
   const done = task.state === "done";
-  const nextState = done ? "ready" : "done";
+  const closed = done || task.state === "canceled";
+  const nextState = closed ? "ready" : "done";
   const badgeClass = task.blocked ? "is-blocked" : task.state === "in-progress" ? "is-active" : "";
   const detail = task.description || task.waiting_on || "No additional detail";
   const parent = children.length > 0 || task.children_count > 0 || task.progress?.total > 0;
@@ -1206,7 +1207,7 @@ function taskRow(task, options = {}) {
     : "";
   const completionControl = parent && progress.unfinished > 0 && !done
     ? `<button class="task-toggle has-unfinished" type="button" data-show-unfinished="${escapeHtml(task.id)}" aria-label="${escapeHtml(`${progress.unfinished} unfinished child tasks; expand ${task.title}`)}">!</button>`
-    : `<button class="task-toggle" type="button" data-plugin-id="core" data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-revision="${escapeHtml(task.updated_at)}" data-command="set-state" data-next-state="${nextState}" aria-label="${done ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : ""}</button>`;
+    : `<button class="task-toggle" type="button" data-plugin-id="core" data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-revision="${escapeHtml(task.updated_at)}" data-command="set-state" data-next-state="${nextState}" aria-label="${closed ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : task.state === "canceled" ? "×" : ""}</button>`;
   return `
     <article class="task-row ${done ? "is-done" : ""} ${parent ? "is-parent" : ""} ${child ? "is-child" : ""}" data-task-id="${escapeHtml(task.id)}">
       <div class="task-leading">
@@ -1867,10 +1868,10 @@ function taskDeadlineLabel(task) {
 function renderSectionTasks() {
   const ids = taskTagCatalog().filter((tag) => tag.view === activeView).map((tag) => tag.id);
   if (!ids.length) return;
-  const tasks = dashboard.tasks.filter((task) => task.state !== "done" && matchesTags(task.tags || [], ids));
+  const tasks = dashboard.tasks.filter((task) => !["done", "canceled"].includes(task.state) && matchesTags(task.tags || [], ids));
   const matchedIds = new Set(tasks.map((task) => task.id));
   const roots = visibleTaskRoots(dashboard.tasks).filter((task) =>
-    task.state !== "done" && (matchedIds.has(task.id) || taskChildren(task).some((child) => matchedIds.has(child.id))),
+    !["done", "canceled"].includes(task.state) && (matchedIds.has(task.id) || taskChildren(task).some((child) => matchedIds.has(child.id))),
   );
   app.insertAdjacentHTML("beforeend", `<section class="panel section-core-tasks"><div class="panel-header"><h2>Shared tasks for ${escapeHtml(viewCopy[activeView].title)}</h2><span>${tasks.length} tagged</span></div><div class="task-list">${roots.length ? renderTaskHierarchy(dashboard.tasks, roots) : '<p class="empty">Tag a shared task to show it here.</p>'}</div></section>`);
   wireCommandButtons(app.querySelector(".section-core-tasks"));

@@ -748,6 +748,8 @@ def project_core_tasks(
     entries: list[AgendaEntry] = []
     serializable_tasks: list[dict[str, object]] = []
 
+    tasks = tuple(tasks)
+    titles = {task.id: task.title for task in tasks}
     for task in tasks:
         serializable_tasks.append(
             {
@@ -760,10 +762,12 @@ def project_core_tasks(
                 "review_after": task.review_after,
                 "deadline": task.deadline,
                 "tags": task.tags,
+                "parent_id": task.parent_id,
+                "sibling_order": task.sibling_order,
                 "updated_at": task.updated_at,
             }
         )
-        if task.state == "done":
+        if task.state in {"done", "canceled"}:
             continue
 
         if task.blocked:
@@ -781,6 +785,9 @@ def project_core_tasks(
                 timing = DueAtTiming(_parse_datetime(task.deadline["due_at"], "task.deadline.due_at"))
 
         detail_parts = [part for part in (task.description, task.waiting_on) if part]
+        parent_title = titles.get(task.parent_id or "")
+        if parent_title is not None:
+            detail_parts.append(f"Parent: {parent_title}")
         entries.append(
             Action(
                 entry_id=task.id,
@@ -788,7 +795,11 @@ def project_core_tasks(
                 title=task.title,
                 state=state,
                 timing=timing,
-                context="Core tasks",
+                context=(
+                    f"Core tasks · {parent_title}"
+                    if parent_title is not None
+                    else "Core tasks"
+                ),
                 detail="; ".join(detail_parts) or None,
                 revision=task.updated_at,
             )
