@@ -134,6 +134,13 @@ Overview's **Deadline and tags** controls. See
 [`docs/task-deadlines-tags.md`](docs/task-deadlines-tags.md) for editing and
 filtering Schedule or Calendar.
 
+Task parents group real child tasks without inheriting lifecycle, dates, or
+tags. See [`docs/task-hierarchy.md`](docs/task-hierarchy.md) for hierarchy and
+client-contract semantics. The separate
+[`eight-task production migration plan`](docs/eight-task-production-migration.md)
+is an approval-gated, privacy-safe operator template; it is not authorization to
+change production data.
+
 To connect a real Google account, follow
 [`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
 are stored separately from application configuration.

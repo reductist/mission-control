@@ -738,6 +738,9 @@ kbd {
 .tag-picker fieldset { margin: 0; padding: 8px; border: 1px solid var(--border); display: grid; gap: 4px; }
 .tag-picker fieldset label { min-height: 36px; padding: 6px; display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--text); cursor: pointer; }
 .tag-picker input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.custom-tag-row { padding: 8px 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.custom-tag-row label { color: var(--muted); font-size: 11px; }
+.custom-tag-row input { min-width: 0; }
 .tag-filter-note, .deadline-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .form-error { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 12px; }
 .section-core-tasks { margin-top: 12px; }
@@ -842,9 +845,28 @@ kbd {
 .panel-body { padding: 13px; }
 .queue-section { margin-bottom: 10px; }
 .task-row { min-height: 57px; padding: 8px 10px; grid-template-columns: 23px minmax(0, 1fr) auto; gap: 8px; border-left: 3px solid transparent; }
+.task-row.is-parent { min-height: 52px; grid-template-columns: 44px minmax(0, 1fr) auto; background: #1c2023; }
+.task-row.is-child { padding-left: 25px; border-left-color: #343b40; }
+.task-children { margin-left: 13px; border-left: 1px solid #343b40; }
+.task-leading { display: flex; align-items: center; gap: 4px; }
+.task-disclosure { width: 20px; height: 20px; padding: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font: 14px/1 var(--mono); }
+.task-disclosure:focus-visible, .expandable-text:focus-visible, .reorder-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-main { min-width: 0; }
+.task-state { display: grid; justify-items: end; gap: 4px; }
+.task-progress, .ready-to-close { color: var(--muted); font: 8px/1.2 var(--mono); text-transform: uppercase; white-space: nowrap; }
+.ready-to-close { color: var(--accent); }
+.task-actions { margin-top: 3px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.reorder-controls { display: inline-flex; gap: 4px; }
+.reorder-controls button { min-width: 30px; min-height: 30px; padding: 0; border: 1px solid var(--border-strong); background: #15181a; color: var(--text); cursor: pointer; touch-action: manipulation; }
+.reorder-controls button:disabled { opacity: .35; cursor: default; }
+.expandable-text { max-width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; cursor: zoom-in; font: inherit; line-height: inherit; text-align: left; overflow-wrap: anywhere; }
+.expandable-text[aria-expanded="true"] { cursor: zoom-out; }
+.expandable-text[aria-expanded="false"] .text-preview { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.task-description .expandable-text[aria-expanded="false"] .text-preview { -webkit-line-clamp: 2; }
 .task-row:hover, .schedule-row:hover, .candidate-card:hover, .closed-row:hover { background: #1e2327; }
 .task-row.is-inspected, .schedule-row.is-inspected, .candidate-card.is-inspected, .closed-row.is-inspected, .room-row.is-inspected { border-left-color: var(--accent); background: #252b2f; box-shadow: inset 0 0 0 1px #394146; }
 .task-toggle { width: 19px; height: 19px; border-radius: 2px; background: #15181a; }
+.task-toggle.has-unfinished { border-color: var(--warning); color: var(--warning); }
 .task-title { margin: 0 0 3px; font-size: 12px; }
 .task-description { font-size: 10px; line-height: 1.35; }
 .state-badge, .signal { padding: 4px 5px; border-radius: 2px; font-size: 7px; }
@@ -1037,7 +1059,16 @@ kbd {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .content-grid, .section-intro, .detail-grid, .entity-layout, .house-criteria-grid, .candidate-facts { grid-template-columns: 1fr; }
   .task-row { grid-template-columns: 23px minmax(0, 1fr); }
+  .task-row.is-parent { grid-template-columns: 44px minmax(0, 1fr); }
+  .task-row.is-child { padding-left: 14px; }
+  .task-children { margin-left: 5px; }
   .task-row .state-badge { grid-column: 2; justify-self: start; }
+  .task-state { grid-column: 2; justify-items: start; }
+  .task-actions { gap: 14px; }
+  .reorder-controls button { min-width: 40px; min-height: 40px; font-size: 16px; }
+  .task-editor-dialog { width: calc(100vw - 16px); max-width: none; margin: 8px; }
+  .custom-tag-row { grid-template-columns: 1fr auto; }
+  .custom-tag-row label { grid-column: 1 / -1; }
   .console-footer { display: none; }
 }
 

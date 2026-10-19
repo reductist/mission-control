@@ -337,7 +337,7 @@ def contribution_to_dict(
 def project_core_closed_items(
     tasks: Iterable[Task], *, generated_at: datetime
 ) -> ClosedItemsContribution:
-    """Project completed transitional core tasks into the shared closed-item model."""
+    """Project completed and canceled core tasks into the shared closed-item model."""
 
     provider = ProviderRef(PluginId("core"))
     serializable_tasks: list[dict[str, object]] = []
@@ -347,7 +347,7 @@ def project_core_closed_items(
         "set-state",
     )
     for task in tasks:
-        if task.state != "done":
+        if task.state not in {"done", "canceled"}:
             continue
         serializable_tasks.append(
             {

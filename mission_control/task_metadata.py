@@ -5,6 +5,7 @@ from functools import lru_cache
 from importlib.resources import files
 import json
 import re
+import unicodedata
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from jsonschema import Draft202012Validator
@@ -21,8 +22,6 @@ TASK_TAG_CATALOG = (
 @lru_cache(maxsize=2)
 def task_request_validator(operation: str) -> Draft202012Validator:
     schema = json.loads(files("mission_control").joinpath("schemas", "core-task-request.schema.json").read_text())
-    # Catalog owns the taxonomy; the schema exposes the same stable IDs to clients.
-    schema["$defs"]["tags"]["items"]["enum"] = [tag["id"] for tag in TASK_TAG_CATALOG]
     schema["$ref"] = f"#/$defs/{operation}"
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema)
@@ -36,13 +35,23 @@ def validate_task_request(document: object, operation: str) -> None:
 
 def normalize_tags(value: object) -> list[str]:
     if not isinstance(value, list) or any(not isinstance(tag, str) for tag in value):
-        raise TypeError("task tags must be a list of stable tag IDs")
-    allowed = {tag["id"] for tag in TASK_TAG_CATALOG}
-    if any(tag not in allowed for tag in value):
-        raise ValueError("unsupported task tag")
-    if len(value) != len(set(value)):
-        raise ValueError("task tags must be unique")
-    return list(value)
+        raise TypeError("task tags must be a list of labels")
+    normalized: list[str] = []
+    identities: set[str] = set()
+    for raw in value:
+        tag = " ".join(unicodedata.normalize("NFKC", raw).split())
+        if not tag:
+            raise ValueError("task tags must not be empty")
+        if len(tag) > 40:
+            raise ValueError("task tags must be at most 40 characters")
+        identity = tag.casefold()
+        if identity in identities:
+            raise ValueError("task tags must be unique ignoring case and whitespace")
+        identities.add(identity)
+        normalized.append(tag)
+    if len(normalized) > 12:
+        raise ValueError("tasks support at most 12 tags")
+    return normalized
 
 
 def normalize_deadline(value: object) -> dict[str, str] | None:

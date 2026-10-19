@@ -77,7 +77,14 @@ from mission_control.plugins import (
     StandardEntityCapability,
     entity_type_registration,
 )
-from mission_control.tasks import TASK_STATES, StaleTaskRevisionError, Task, TaskRepository
+from mission_control.tasks import (
+    CLOSED_TASK_STATES,
+    TASK_STATES,
+    StaleTaskRevisionError,
+    Task,
+    TaskRepository,
+    UnfinishedChildrenError,
+)
 from mission_control.task_metadata import TASK_TAG_CATALOG, validate_task_request
 
 MAX_REQUEST_BYTES = 64 * 1024
@@ -265,7 +272,7 @@ class MissionControlApplication:
 
     def dashboard(self) -> dict[str, object]:
         tasks = self.repository.list()
-        active = [task for task in tasks if task.state != "done"]
+        active = [task for task in tasks if task.state not in CLOSED_TASK_STATES]
         generated_at = datetime.now(UTC)
         builtin_contributions = self._agenda_contributions(generated_at)
 
@@ -316,8 +323,18 @@ class MissionControlApplication:
                 "blocked": sum(task.blocked for task in active),
                 "completed": len(closed_items.items),
             },
-            "tasks": [_task_to_dict(task) for task in _sort_tasks(tasks)],
-            "task_tag_catalog": list(TASK_TAG_CATALOG),
+            "tasks": [
+                _task_to_dict(task, repository=self.repository)
+                for task in _sort_tasks(tasks)
+            ],
+            "task_hierarchy": {
+                "schema_version": "mission-control.tasks/v1",
+                "max_depth": 2,
+                "ordering": "presentation-only",
+                "completion": "explicit-parent",
+                "dates_and_tags_inherit": False,
+            },
+            "task_tag_catalog": _task_tag_catalog(tasks),
             "agenda": agenda_to_list(agenda),
             "closed_items": closed_items_to_list(closed_items),
             "providers": self._provider_documents(),
@@ -447,7 +464,10 @@ class MissionControlApplication:
         return documents
 
     def create_task(self, document: object) -> dict[str, object]:
-        payload = _object_payload(document, allowed={"title", "description", "deadline", "tags"})
+        payload = _object_payload(
+            document,
+            allowed={"title", "description", "deadline", "tags", "parent_id"},
+        )
         try:
             validate_task_request(document, "create")
         except ValueError as error:
@@ -465,7 +485,16 @@ class MissionControlApplication:
                 "description must be a string",
             )
         try:
-            return _task_to_dict(self.repository.create(title, description, deadline=payload.get("deadline"), tags=payload.get("tags", [])))
+            return _task_to_dict(
+                self.repository.create(
+                    title,
+                    description,
+                    deadline=payload.get("deadline"),
+                    tags=payload.get("tags", []),
+                    parent_id=payload.get("parent_id"),
+                ),
+                repository=self.repository,
+            )
         except (TypeError, ValueError) as error:
             raise ApiError(
                 HTTPStatus.BAD_REQUEST, "invalid-task", str(error)
@@ -474,7 +503,19 @@ class MissionControlApplication:
     def update_task(self, task_id: str, document: object) -> dict[str, object]:
         payload = _object_payload(
             document,
-            allowed={"title", "description", "state", "blocked", "waiting_on", "review_after", "deadline", "tags", "expected_revision"},
+            allowed={
+                "title",
+                "description",
+                "state",
+                "blocked",
+                "waiting_on",
+                "review_after",
+                "deadline",
+                "tags",
+                "parent_id",
+                "sibling_order",
+                "expected_revision",
+            },
         )
         try:
             validate_task_request(document, "update")
@@ -494,12 +535,22 @@ class MissionControlApplication:
                 f"state must be one of: {', '.join(TASK_STATES)}",
             )
         try:
-            return _task_to_dict(self.repository.update(task_id, **payload))
+            return _task_to_dict(
+                self.repository.update(task_id, **payload),
+                repository=self.repository,
+            )
         except StaleTaskRevisionError as error:
             raise ApiError(HTTPStatus.CONFLICT, "stale-task", str(error)) from error
         except KeyError as error:
             raise ApiError(
                 HTTPStatus.NOT_FOUND, "task-not-found", "task not found"
+            ) from error
+        except UnfinishedChildrenError as error:
+            raise ApiError(
+                HTTPStatus.CONFLICT,
+                "unfinished-children",
+                "finish or cancel the unfinished child tasks before completing the parent: "
+                + ", ".join(error.child_ids),
             ) from error
         except (TypeError, ValueError) as error:
             raise ApiError(
@@ -810,21 +861,46 @@ def _object_payload(document: object, *, allowed: set[str]) -> dict[str, Any]:
     return dict(document)
 
 
-def _task_to_dict(task: Task) -> dict[str, object]:
-    return asdict(task)
+def _task_to_dict(
+    task: Task, *, repository: TaskRepository | None = None
+) -> dict[str, object]:
+    document = asdict(task)
+    if repository is not None:
+        document["progress"] = repository.progress(task.id)
+    return document
 
 
 def _sort_tasks(tasks: list[Task]) -> list[Task]:
-    state_order = {"in-progress": 0, "ready": 1, "backlog": 2, "done": 3}
-    return sorted(
-        tasks,
-        key=lambda task: (
-            state_order[task.state],
-            not task.blocked,
-            task.title.casefold(),
-            task.id,
-        ),
+    roots = sorted(
+        (task for task in tasks if task.parent_id is None),
+        key=lambda task: (task.sibling_order, task.created_at, task.id),
     )
+    children: dict[str, list[Task]] = {}
+    for task in tasks:
+        if task.parent_id is not None:
+            children.setdefault(task.parent_id, []).append(task)
+    ordered: list[Task] = []
+    for root in roots:
+        ordered.append(root)
+        ordered.extend(
+            sorted(
+                children.get(root.id, []),
+                key=lambda task: (task.sibling_order, task.created_at, task.id),
+            )
+        )
+    return ordered
+
+
+def _task_tag_catalog(tasks: list[Task]) -> list[dict[str, object]]:
+    defaults = {tag["id"].casefold(): dict(tag) for tag in TASK_TAG_CATALOG}
+    for task in tasks:
+        for label in task.tags:
+            identity = label.casefold()
+            defaults.setdefault(
+                identity,
+                {"id": label, "label": label, "plugin_ids": []},
+            )
+    return sorted(defaults.values(), key=lambda tag: str(tag["label"]).casefold())
 
 
 def _seed_demo_tasks(repository: TaskRepository) -> None:

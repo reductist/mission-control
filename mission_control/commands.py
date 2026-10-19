@@ -21,7 +21,12 @@ from mission_control.plugins import (
     PluginRegistration,
     entity_type_registration,
 )
-from mission_control.tasks import TASK_STATES, StaleTaskRevisionError, TaskRepository
+from mission_control.tasks import (
+    TASK_STATES,
+    StaleTaskRevisionError,
+    TaskRepository,
+    UnfinishedChildrenError,
+)
 
 
 class CommandContractError(ValueError):
@@ -647,6 +652,13 @@ class CoreTaskCommandOwner:
                     "stale-revision",
                     "The task changed after this view was loaded; refresh before retrying.",
                 ),
+            )
+        except UnfinishedChildrenError as error:
+            return _rejected(
+                command,
+                "unfinished-children",
+                "Finish or cancel the unfinished child tasks before completing the parent: "
+                + ", ".join(error.child_ids),
             )
         except (TypeError, ValueError) as error:
             return _rejected(command, "invalid-task", str(error))

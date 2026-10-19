@@ -9,16 +9,16 @@
         {"type": "object", "required": ["kind", "due_at", "time_zone"], "additionalProperties": false, "properties": {"kind": {"const": "due-at"}, "due_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"}, "time_zone": {"type": "string", "minLength": 1}}}
       ]
     },
-    "tags": {"type": "array", "uniqueItems": true, "items": {"enum": ["maintenance", "house-search", "personal-social", "yard"]}},
+    "tags": {"type": "array", "maxItems": 12, "items": {"type": "string", "minLength": 1, "maxLength": 40}},
     "create": {
       "type": "object", "required": ["title"], "additionalProperties": false,
-      "properties": {"title": {"type": "string", "minLength": 1}, "description": {"type": "string"}, "deadline": {"$ref": "#/$defs/deadline"}, "tags": {"$ref": "#/$defs/tags"}}
+      "properties": {"title": {"type": "string", "minLength": 1}, "description": {"type": "string"}, "deadline": {"$ref": "#/$defs/deadline"}, "tags": {"$ref": "#/$defs/tags"}, "parent_id": {"type": ["string", "null"], "minLength": 1}}
     },
     "update": {
       "type": "object", "minProperties": 1, "additionalProperties": false,
       "properties": {
         "title": {"type": "string", "minLength": 1}, "description": {"type": "string"}, "deadline": {"$ref": "#/$defs/deadline"}, "tags": {"$ref": "#/$defs/tags"},
-        "state": {"enum": ["backlog", "ready", "in-progress", "done"]}, "blocked": {"type": "boolean"}, "waiting_on": {"type": ["string", "null"]}, "review_after": {"type": ["string", "null"]}, "expected_revision": {"type": "string"}
+        "state": {"enum": ["backlog", "ready", "in-progress", "done", "canceled"]}, "blocked": {"type": "boolean"}, "waiting_on": {"type": ["string", "null"]}, "review_after": {"type": ["string", "null"]}, "expected_revision": {"type": "string"}, "parent_id": {"type": ["string", "null"], "minLength": 1}, "sibling_order": {"type": "integer", "minimum": 0}
       }
     }
   }

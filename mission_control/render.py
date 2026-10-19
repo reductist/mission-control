@@ -11,6 +11,7 @@ _STATE_HEADINGS = {
     "ready": "Ready",
     "in-progress": "In Progress",
     "done": "Done",
+    "canceled": "Canceled",
 }
 
 
