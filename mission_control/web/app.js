@@ -61,6 +61,10 @@ let editingTask = null;
 let scheduleLayout = "agenda";
 let calendarRangeMode = "three-day";
 let refreshInFlight = false;
+const expandedParents = new Set();
+const expandedTaskText = new Set();
+const TASK_TITLE_PREVIEW_LENGTH = 72;
+const TASK_DETAIL_PREVIEW_LENGTH = 120;
 
 document.querySelector("#today-label").textContent = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
@@ -228,8 +232,10 @@ function render() {
 
 function renderOverview() {
   const summary = dashboard.summary;
-  const activeTasks = dashboard.tasks.filter((task) => task.state !== "done");
-  const visibleTasks = activeTasks.slice(0, 7);
+  const activeTasks = dashboard.tasks.filter((task) => task.state !== "done" || task.children_count || task.progress?.total);
+  const visibleTasks = visibleTaskRoots(dashboard.tasks)
+    .filter((task) => task.state !== "done" || task.children_count || task.progress?.total)
+    .slice(0, 7);
   const house = providerInitiative("home-search");
   const scheduled = scheduleEntries().filter((entry) => entry.timing?.kind !== "anytime");
   const maintenanceCases = householdEntries().filter((entry) => entry.kind === "initiative");
@@ -259,7 +265,7 @@ function renderOverview() {
     </div>
     <section class="panel queue-section">
       <div class="panel-header"><h2>Work queue</h2><span>${visibleCount} visible</span></div>
-      <div class="task-list">${visibleCount ? `${visibleYardActions.map(landscapeActionRow).join("")}${visibleCoreTasks.map(taskRow).join("")}` : '<div class="empty">No active work. Add a shared task below.</div>'}</div>
+      <div class="task-list">${visibleCount ? `${visibleYardActions.map(landscapeActionRow).join("")}${renderTaskHierarchy(dashboard.tasks, visibleCoreTasks)}` : '<div class="empty">No active work. Add a shared task below.</div>'}</div>
       <form class="quick-add" id="quick-add-form"><input id="quick-add-title" name="title" required maxlength="160" placeholder="Add a shared task…" aria-label="New task title"><button class="primary-button" type="submit">Add</button><details class="task-options"><summary>Deadline and tags</summary>${taskMetadataFields("create")}</details><p class="form-error" role="status"></p></form>
     </section>
     <section class="overview-rooms" aria-label="Workspace rooms">
@@ -271,6 +277,8 @@ function renderOverview() {
   `;
 
   wireCommandButtons();
+  wireTaskHierarchyControls();
+  wireExpandableText();
   wireEntityLinks();
   document.querySelector("#quick-add-form").addEventListener("submit", addTask);
   document.querySelectorAll(".text-button[data-view]").forEach((button) => {
@@ -624,7 +632,8 @@ function calendarEntryChip(entry, day, timeZone) {
     time = "All day";
   }
   const kindClass = entry.kind === "event" ? "is-event" : "is-task";
-  const content = `<span>${escapeHtml(time)}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(entryProvenance(entry))}</small>`;
+  const parent = parentTaskForEntry(entry);
+  const content = `<span>${escapeHtml(time)}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml([parent ? `Child of ${parent.title}` : "", entryProvenance(entry)].filter(Boolean).join(" · "))}</small>`;
   if (entry.source?.plugin_id === "core" && entry.source?.entity_type === "task") {
     return `<button class="calendar-item ${kindClass}" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}" aria-label="Edit ${escapeHtml(entry.title)}">${content}</button>`;
   }
@@ -652,17 +661,26 @@ function scheduleRow(entry) {
     .filter(Boolean)
     .join(" · ");
   const timeValue = scheduleTimeValue(entry);
+  const parent = parentTaskForEntry(entry);
   return `
     <article class="schedule-row"${entryAccentAttribute(entry)}>
       <time class="schedule-time"${timeValue ? ` datetime="${escapeHtml(timeValue)}"` : ""}>${escapeHtml(scheduleTimingLabel(entry))}</time>
       <div>
         <h3 class="task-title">${entityTitle(entry)}</h3>
         ${entry.detail ? `<p class="task-description">${escapeHtml(entry.detail)}</p>` : ""}
-        <p class="item-meta">${escapeHtml(provenance)}${entry.source?.plugin_id === "core" ? ` · ${escapeHtml(taskDeadlineLabel(dashboard.tasks.find((task) => task.id === entry.source.entity_id) || {}))}` : ""}</p>
+        <p class="item-meta">${parent ? `Child of ${escapeHtml(parent.title)} · ` : ""}${escapeHtml(provenance)}${entry.source?.plugin_id === "core" ? ` · ${escapeHtml(taskDeadlineLabel(dashboard.tasks.find((task) => task.id === entry.source.entity_id) || {}))}` : ""}</p>
       </div>
       <span class="state-badge">${escapeHtml(kindLabel)}</span>
     </article>
   `;
+}
+
+function parentTaskForEntry(entry) {
+  if (entry.source?.plugin_id !== "core" || entry.source?.entity_type !== "task") return null;
+  const task = dashboard?.tasks?.find((candidate) => candidate.id === entry.source.entity_id);
+  return task?.parent_id
+    ? dashboard.tasks.find((candidate) => candidate.id === task.parent_id) || null
+    : null;
 }
 
 function entityTitle(entry) {
@@ -1134,21 +1152,78 @@ function metric(label, value, detail) {
   return `<div class="metric"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(String(value))}</strong>${detail ? `<span class="metric-detail">${escapeHtml(detail)}</span>` : ""}</div>`;
 }
 
-function taskRow(task) {
+function taskChildren(task, tasks = dashboard?.tasks || []) {
+  return tasks
+    .filter((candidate) => candidate.parent_id === task.id)
+    .sort((left, right) => (left.sibling_order ?? 0) - (right.sibling_order ?? 0)
+      || left.title.localeCompare(right.title));
+}
+
+function visibleTaskRoots(tasks) {
+  const ids = new Set(tasks.map((task) => task.id));
+  return tasks
+    .filter((task) => !task.parent_id || !ids.has(task.parent_id))
+    .sort((left, right) => (left.sibling_order ?? 0) - (right.sibling_order ?? 0)
+      || left.title.localeCompare(right.title));
+}
+
+function renderTaskHierarchy(tasks, roots = visibleTaskRoots(tasks)) {
+  return roots.map((task) => {
+    const children = taskChildren(task, tasks);
+    const expanded = expandedParents.has(task.id);
+    return `${taskRow(task, { children, expanded })}${children.length && expanded
+      ? `<div class="task-children" role="group" aria-label="Children of ${escapeHtml(task.title)}">${children.map((child, index) => taskRow(child, { child: true, position: index, siblingCount: children.length })).join("")}</div>`
+      : ""}`;
+  }).join("");
+}
+
+function taskTextPreview(value, key, limit, className) {
+  const text = value || "";
+  if (text.length <= limit) return `<span class="${className}">${escapeHtml(text)}</span>`;
+  const expanded = expandedTaskText.has(key);
+  const preview = `${text.slice(0, limit).trimEnd()}...`;
+  return `<button class="expandable-text ${className}" type="button" data-expand-text="${escapeHtml(key)}" aria-expanded="${expanded}" aria-label="${expanded ? "Collapse" : "Expand"} full text"><span class="text-preview"${expanded ? " hidden" : ""}>${escapeHtml(preview)}</span><span class="text-full"${expanded ? "" : " hidden"}>${escapeHtml(text)}</span></button>`;
+}
+
+function parentProgress(task, children) {
+  if (task.progress) return task.progress;
+  const done = children.filter((child) => child.state === "done").length;
+  const canceled = children.filter((child) => child.state === "canceled").length;
+  return { done, canceled, unfinished: children.length - done - canceled, total: children.length };
+}
+
+function taskRow(task, options = {}) {
+  const { children = [], child = false, position = 0, siblingCount = 0 } = options;
   const done = task.state === "done";
   const nextState = done ? "ready" : "done";
   const badgeClass = task.blocked ? "is-blocked" : task.state === "in-progress" ? "is-active" : "";
   const detail = task.description || task.waiting_on || "No additional detail";
+  const parent = children.length > 0 || task.children_count > 0 || task.progress?.total > 0;
+  const expanded = options.expanded ?? expandedParents.has(task.id);
+  const progress = parentProgress(task, children);
+  const progressLabel = parent
+    ? `${progress.done || 0}/${progress.total ?? task.children_count ?? 0} done${progress.canceled ? ` · ${progress.canceled} canceled` : ""}`
+    : "";
+  const completionControl = parent && progress.unfinished > 0 && !done
+    ? `<button class="task-toggle has-unfinished" type="button" data-show-unfinished="${escapeHtml(task.id)}" aria-label="${escapeHtml(`${progress.unfinished} unfinished child tasks; expand ${task.title}`)}">!</button>`
+    : `<button class="task-toggle" type="button" data-plugin-id="core" data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-revision="${escapeHtml(task.updated_at)}" data-command="set-state" data-next-state="${nextState}" aria-label="${done ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : ""}</button>`;
   return `
-    <article class="task-row ${done ? "is-done" : ""}">
-      <button class="task-toggle" type="button" data-plugin-id="core" data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-revision="${escapeHtml(task.updated_at)}" data-command="set-state" data-next-state="${nextState}" aria-label="${done ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : ""}</button>
-      <div>
-        <h3 class="task-title">${escapeHtml(task.title)}</h3>
-        <p class="task-description">${escapeHtml(detail)}</p>
-        <p class="item-meta">${escapeHtml(taskDeadlineLabel(task))}${task.tags?.length ? ` · ${escapeHtml(task.tags.map(tagLabel).join(" · "))}` : ""}</p>
-        <button class="text-button" type="button" data-edit-task="${escapeHtml(task.id)}" aria-label="Edit ${escapeHtml(task.title)}">Edit</button>
+    <article class="task-row ${done ? "is-done" : ""} ${parent ? "is-parent" : ""} ${child ? "is-child" : ""}" data-task-id="${escapeHtml(task.id)}">
+      <div class="task-leading">
+        ${parent ? `<button class="task-disclosure" type="button" data-toggle-children="${escapeHtml(task.id)}" aria-expanded="${expanded}" aria-label="${expanded ? "Collapse" : "Expand"} ${escapeHtml(task.title)} children">${expanded ? "▾" : "▸"}</button>` : ""}
+        ${completionControl}
       </div>
-      <span class="state-badge ${badgeClass}">${escapeHtml(task.blocked ? "blocked" : task.state)}</span>
+      <div class="task-main">
+        <h3 class="task-title">${taskTextPreview(task.title, `${task.id}:title`, TASK_TITLE_PREVIEW_LENGTH, "task-title-text")}</h3>
+        <p class="task-description">${taskTextPreview(detail, `${task.id}:detail`, TASK_DETAIL_PREVIEW_LENGTH, "task-detail-text")}</p>
+        <p class="item-meta">${escapeHtml(taskDeadlineLabel(task))}${task.tags?.length ? ` · ${escapeHtml(task.tags.map(tagLabel).join(" · "))}` : ""}</p>
+        <div class="task-actions">
+          <button class="text-button" type="button" data-edit-task="${escapeHtml(task.id)}" aria-label="Edit ${escapeHtml(task.title)}">Edit</button>
+          ${!child ? `<button class="text-button" type="button" data-add-child="${escapeHtml(task.id)}">Add child</button>` : ""}
+          ${child ? `<span class="reorder-controls" aria-label="Reorder ${escapeHtml(task.title)}"><button type="button" data-move-task="up" data-task-id="${escapeHtml(task.id)}" ${position === 0 ? "disabled" : ""} aria-label="Move ${escapeHtml(task.title)} up">↑</button><button type="button" data-move-task="down" data-task-id="${escapeHtml(task.id)}" ${position === siblingCount - 1 ? "disabled" : ""} aria-label="Move ${escapeHtml(task.title)} down">↓</button></span>` : ""}
+        </div>
+      </div>
+      <div class="task-state">${parent ? `<span class="task-progress">${escapeHtml(progressLabel)}</span>` : ""}${(task.ready_to_close || task.progress?.ready_to_close) ? '<span class="ready-to-close">Ready to close</span>' : ""}<span class="state-badge ${badgeClass}">${escapeHtml(task.blocked ? "blocked" : task.state)}</span></div>
     </article>
   `;
 }
@@ -1693,11 +1768,34 @@ function matchesTags(tags, selected) {
 }
 
 function tagPicker(id, selected, label = "Tags", filter = false) {
-  return `<details class="tag-picker" data-tag-label="${escapeHtml(label)}"${filter && selected.length ? " open" : ""}><summary>${escapeHtml(label)}${selected.length ? ` (${selected.length})` : ""}</summary><fieldset id="${id}"><legend class="sr-only">${escapeHtml(label)}</legend>${taskTagCatalog().map((tag) => `<label><input id="${id}-${escapeHtml(tag.id)}" type="checkbox" name="tags" value="${escapeHtml(tag.id)}"${selected.includes(tag.id) ? " checked" : ""}>${escapeHtml(tag.label)}</label>`).join("")}</fieldset>${filter ? '<button class="text-button" type="button" data-clear-schedule-tags>Clear all tags</button>' : ""}</details>`;
+  return `<details class="tag-picker" data-tag-label="${escapeHtml(label)}"${filter && selected.length ? " open" : ""}><summary>${escapeHtml(label)}${selected.length ? ` (${selected.length})` : ""}</summary><fieldset id="${id}"><legend class="sr-only">${escapeHtml(label)}</legend>${taskTagCatalog().map((tag) => `<label><input id="${id}-${escapeHtml(tag.id)}" type="checkbox" name="tags" value="${escapeHtml(tag.id)}"${selected.includes(tag.id) ? " checked" : ""}>${escapeHtml(tag.label)}</label>`).join("")}</fieldset>${filter ? '<button class="text-button" type="button" data-clear-schedule-tags>Clear all tags</button>' : `<div class="custom-tag-row"><label for="${id}-custom">New tag</label><input id="${id}-custom" name="custom_tag" maxlength="40" placeholder="e.g. Weekend projects"><button class="secondary-button" type="button" data-add-custom-tag>Add tag</button></div><p class="tag-filter-note">Choose several tags or add a label. Matching capitalization and spacing are combined.</p>`}</details>`;
 }
 
 function selectedTags(root) {
   return [...root.querySelectorAll('input[name="tags"]:checked')].map((input) => input.value);
+}
+
+function normalizeTag(value) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
+function addCustomTag(picker) {
+  const input = picker.querySelector('[name="custom_tag"]');
+  const label = input.value.trim().replace(/\s+/g, " ");
+  const normalized = normalizeTag(label);
+  if (!normalized) return;
+  const existing = [...picker.querySelectorAll('input[name="tags"]')]
+    .find((candidate) => normalizeTag(candidate.value) === normalized
+      || normalizeTag(candidate.closest("label")?.textContent || "") === normalized);
+  if (existing) {
+    existing.checked = true;
+  } else {
+    const fieldset = picker.querySelector("fieldset");
+    fieldset.insertAdjacentHTML("beforeend", `<label><input type="checkbox" name="tags" value="${escapeHtml(label)}" checked>${escapeHtml(label)}</label>`);
+  }
+  input.value = "";
+  const count = selectedTags(picker).length;
+  picker.querySelector("summary").textContent = `${picker.dataset.tagLabel} (${count})`;
 }
 
 function wallTimeParts(value, timeZone) {
@@ -1735,7 +1833,10 @@ function taskMetadataFields(prefix, task = {}) {
   if (deadline?.kind === "due-at") {
     later = Math.floor(new Date(buildTaskDeadline(parts.date, parts.time, zone, "earlier").due_at).valueOf() / 60000) !== Math.floor(new Date(deadline.due_at).valueOf() / 60000);
   }
-  return `<div class="task-metadata-fields"><label for="${prefix}-date">Due date (optional)<input id="${prefix}-date" name="due_date" type="date" value="${escapeHtml(parts.date)}"></label><label for="${prefix}-deadline-mode">Deadline<select id="${prefix}-deadline-mode" name="deadline_mode"><option value="end-of-day"${parts.time ? "" : " selected"}>End of day</option><option value="specific"${parts.time ? " selected" : ""}>Specific time</option></select></label><div class="specific-time-fields"${parts.time ? "" : " hidden"}><label for="${prefix}-time">Time<input id="${prefix}-time" name="due_time" type="time" value="${parts.time}"></label><label for="${prefix}-occurrence">If the clock repeats this time<select id="${prefix}-occurrence" name="occurrence"><option value="earlier"${later ? "" : " selected"}>First occurrence</option><option value="later"${later ? " selected" : ""}>Second occurrence</option></select></label></div><label for="${prefix}-zone">Timezone<input id="${prefix}-zone" name="time_zone" value="${escapeHtml(zone)}" required spellcheck="false"></label><p class="deadline-note">End of day keeps this date in the named timezone. Clear the date to remove the deadline. Deadlines do not send notifications.</p>${tagPicker(`${prefix}-tags`, task.tags || [])}</div>`;
+  const suggested = prefix === "create"
+    ? taskTagCatalog().filter((tag) => tag.suggested || tag.default_selected).map((tag) => tag.id)
+    : [];
+  return `<div class="task-metadata-fields"><label for="${prefix}-date">Due date (optional)<input id="${prefix}-date" name="due_date" type="date" value="${escapeHtml(parts.date)}"></label><label for="${prefix}-deadline-mode">Deadline<select id="${prefix}-deadline-mode" name="deadline_mode"><option value="end-of-day"${parts.time ? "" : " selected"}>End of day</option><option value="specific"${parts.time ? " selected" : ""}>Specific time</option></select></label><div class="specific-time-fields"${parts.time ? "" : " hidden"}><label for="${prefix}-time">Time<input id="${prefix}-time" name="due_time" type="time" value="${parts.time}"></label><label for="${prefix}-occurrence">If the clock repeats this time<select id="${prefix}-occurrence" name="occurrence"><option value="earlier"${later ? "" : " selected"}>First occurrence</option><option value="later"${later ? " selected" : ""}>Second occurrence</option></select></label></div><label for="${prefix}-zone">Timezone<input id="${prefix}-zone" name="time_zone" value="${escapeHtml(zone)}" required spellcheck="false"></label><p class="deadline-note">End of day keeps this date in the named timezone. Clear the date to remove the deadline. Deadlines do not send notifications.</p>${tagPicker(`${prefix}-tags`, task.tags || suggested)}</div>`;
 }
 
 function deadlineForTaskFields(date, time, timeZone, occurrence, original = null) {
@@ -1767,8 +1868,22 @@ function renderSectionTasks() {
   const ids = taskTagCatalog().filter((tag) => tag.view === activeView).map((tag) => tag.id);
   if (!ids.length) return;
   const tasks = dashboard.tasks.filter((task) => task.state !== "done" && matchesTags(task.tags || [], ids));
-  app.insertAdjacentHTML("beforeend", `<section class="panel section-core-tasks"><div class="panel-header"><h2>Shared tasks for ${escapeHtml(viewCopy[activeView].title)}</h2><span>${tasks.length} tagged</span></div><div class="task-list">${tasks.length ? tasks.map(taskRow).join("") : '<p class="empty">Tag a shared task to show it here.</p>'}</div></section>`);
+  const matchedIds = new Set(tasks.map((task) => task.id));
+  const roots = visibleTaskRoots(dashboard.tasks).filter((task) =>
+    task.state !== "done" && (matchedIds.has(task.id) || taskChildren(task).some((child) => matchedIds.has(child.id))),
+  );
+  app.insertAdjacentHTML("beforeend", `<section class="panel section-core-tasks"><div class="panel-header"><h2>Shared tasks for ${escapeHtml(viewCopy[activeView].title)}</h2><span>${tasks.length} tagged</span></div><div class="task-list">${roots.length ? renderTaskHierarchy(dashboard.tasks, roots) : '<p class="empty">Tag a shared task to show it here.</p>'}</div></section>`);
   wireCommandButtons(app.querySelector(".section-core-tasks"));
+  wireTaskHierarchyControls(app.querySelector(".section-core-tasks"));
+  wireExpandableText(app.querySelector(".section-core-tasks"));
+}
+
+function taskParentOptions(task) {
+  if (task?.progress?.total || taskChildren(task).length) return "";
+  return (dashboard?.tasks || [])
+    .filter((candidate) => candidate.id !== task?.id && !candidate.parent_id)
+    .map((candidate) => `<option value="${escapeHtml(candidate.id)}"${task?.parent_id === candidate.id ? " selected" : ""}>${escapeHtml(candidate.title)}</option>`)
+    .join("");
 }
 
 function openTaskEditor(id) {
@@ -1776,7 +1891,7 @@ function openTaskEditor(id) {
   if (!task) return;
   editingTask = task;
   const dialog = document.querySelector("#task-editor-dialog");
-  document.querySelector("#task-editor-content").innerHTML = `<form id="task-edit-form" class="task-edit-form"><div class="dialog-heading"><h2 id="task-editor-title">Edit shared task</h2><button type="button" data-close-task-editor aria-label="Close task editor">×</button></div><label for="edit-task-title">Title<input id="edit-task-title" name="title" value="${escapeHtml(task.title)}" required maxlength="160"></label><label for="edit-task-description">Description<textarea id="edit-task-description" name="description">${escapeHtml(task.description || "")}</textarea></label>${taskMetadataFields("edit", task)}<p class="form-error" role="status"></p><button class="primary-button" type="submit">Save task</button></form>`;
+  document.querySelector("#task-editor-content").innerHTML = `<form id="task-edit-form" class="task-edit-form"><div class="dialog-heading"><h2 id="task-editor-title">Edit shared task</h2><button type="button" data-close-task-editor aria-label="Close task editor">×</button></div><label for="edit-task-title">Title<input id="edit-task-title" name="title" value="${escapeHtml(task.title)}" required maxlength="160"></label><label for="edit-task-description">Description<textarea id="edit-task-description" name="description">${escapeHtml(task.description || "")}</textarea></label><label for="edit-task-parent">Parent task<select id="edit-task-parent" name="parent_id"><option value="">No parent</option>${taskParentOptions(task)}</select></label><p class="deadline-note">Moving a task changes its presentation only; it does not create a dependency or copy dates and tags.</p>${taskMetadataFields("edit", task)}<p class="form-error" role="status"></p><button class="primary-button" type="submit">Save task</button></form>`;
   document.querySelector("#task-edit-form").addEventListener("submit", saveTaskEdit);
   dialog.showModal();
 }
@@ -1787,7 +1902,7 @@ async function saveTaskEdit(event) {
   const submit = form.querySelector('button[type="submit"]');
   submit.disabled = true;
   try {
-    await request(`/api/tasks/${encodeURIComponent(editingTask.id)}`, { method: "PATCH", body: JSON.stringify({ title: form.querySelector('[name="title"]').value.trim(), description: form.querySelector('[name="description"]').value, ...readTaskMetadata(form, editingTask.deadline), expected_revision: editingTask.updated_at }) });
+    await request(`/api/tasks/${encodeURIComponent(editingTask.id)}`, { method: "PATCH", body: JSON.stringify({ title: form.querySelector('[name="title"]').value.trim(), description: form.querySelector('[name="description"]').value, parent_id: form.querySelector('[name="parent_id"]').value || null, ...readTaskMetadata(form, editingTask.deadline), expected_revision: editingTask.updated_at }) });
     document.querySelector("#task-editor-dialog").close();
     await refresh();
   } catch (error) {
@@ -1798,9 +1913,39 @@ async function saveTaskEdit(event) {
   }
 }
 
+function openAddChildEditor(parentId) {
+  const parent = dashboard?.tasks?.find((task) => task.id === parentId);
+  if (!parent) return;
+  const dialog = document.querySelector("#task-editor-dialog");
+  document.querySelector("#task-editor-content").innerHTML = `<form id="task-child-form" class="task-edit-form" data-parent-id="${escapeHtml(parentId)}"><div class="dialog-heading"><h2 id="task-editor-title">Add child to ${escapeHtml(parent.title)}</h2><button type="button" data-close-task-editor aria-label="Close child task editor">×</button></div><label for="child-task-title">Title<input id="child-task-title" name="title" required maxlength="160" autofocus></label><label for="child-task-description">Description<textarea id="child-task-description" name="description"></textarea></label><p class="deadline-note">This child keeps its own status, dates, and tags. Nothing is inherited from its parent.</p>${taskMetadataFields("child")}<p class="form-error" role="status"></p><button class="primary-button" type="submit">Add child</button></form>`;
+  document.querySelector("#task-child-form").addEventListener("submit", addChildTask);
+  dialog.showModal();
+}
+
+async function addChildTask(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    await request("/api/tasks", { method: "POST", body: JSON.stringify({ title: form.querySelector('[name="title"]').value.trim(), description: form.querySelector('[name="description"]').value, parent_id: form.dataset.parentId, ...readTaskMetadata(form) }) });
+    expandedParents.add(form.dataset.parentId);
+    document.querySelector("#task-editor-dialog").close();
+    await refresh();
+  } catch (error) {
+    form.querySelector(".form-error").textContent = error.message;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
 document.addEventListener("click", (event) => {
   const edit = event.target.closest?.("[data-edit-task]");
   if (edit) openTaskEditor(edit.dataset.editTask);
+  const addChild = event.target.closest?.("[data-add-child]");
+  if (addChild) openAddChildEditor(addChild.dataset.addChild);
+  const customTag = event.target.closest?.("[data-add-custom-tag]");
+  if (customTag) addCustomTag(customTag.closest(".tag-picker"));
   if (event.target.closest?.("[data-close-task-editor]")) document.querySelector("#task-editor-dialog").close();
 });
 document.addEventListener("change", (event) => {
@@ -1814,6 +1959,70 @@ document.addEventListener("change", (event) => {
     form.querySelector(".specific-time-fields").hidden = event.target.value !== "specific";
   }
 });
+
+function wireExpandableText(root = document) {
+  root.querySelectorAll("[data-expand-text]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.expandText;
+      const expanded = button.getAttribute("aria-expanded") === "true";
+      if (expanded) expandedTaskText.delete(key);
+      else expandedTaskText.add(key);
+      button.setAttribute("aria-expanded", String(!expanded));
+      button.setAttribute("aria-label", `${expanded ? "Expand" : "Collapse"} full text`);
+      button.querySelector(".text-preview").hidden = !expanded;
+      button.querySelector(".text-full").hidden = expanded;
+    });
+  });
+}
+
+function wireTaskHierarchyControls(root = document) {
+  root.querySelectorAll("[data-toggle-children]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.toggleChildren;
+      if (expandedParents.has(id)) expandedParents.delete(id);
+      else expandedParents.add(id);
+      render();
+    });
+  });
+  root.querySelectorAll("[data-move-task]").forEach((button) => {
+    button.addEventListener("click", () => moveTaskSibling(button.dataset.taskId, button.dataset.moveTask));
+  });
+  root.querySelectorAll("[data-show-unfinished]").forEach((button) => {
+    button.addEventListener("click", () => {
+      expandedParents.add(button.dataset.showUnfinished);
+      render();
+      showNotice("Finish or cancel the remaining child tasks before completing this parent.", "warning");
+    });
+  });
+  root.querySelectorAll(".task-row.is-child").forEach((row) => {
+    row.tabIndex = 0;
+    row.addEventListener("keydown", (event) => {
+      if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      moveTaskSibling(row.dataset.taskId, event.key === "ArrowUp" ? "up" : "down");
+    });
+  });
+}
+
+async function moveTaskSibling(id, direction) {
+  const task = dashboard?.tasks?.find((candidate) => candidate.id === id);
+  if (!task?.parent_id) return;
+  const siblings = taskChildren({ id: task.parent_id });
+  const index = siblings.findIndex((candidate) => candidate.id === id);
+  const targetIndex = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
+  try {
+    await request(`/api/tasks/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sibling_order: targetIndex, expected_revision: task.updated_at }),
+    });
+    await refresh();
+    document.querySelector(`[data-task-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+  } catch (error) {
+    showNotice(error.status === 409 ? "Task order changed elsewhere. The current order was refreshed." : error.message, "warning");
+    if (error.status === 409) await refresh();
+  }
+}
 
 function renderNoDemo(title, detail) {
   app.innerHTML = `<div class="error-box"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div>`;
