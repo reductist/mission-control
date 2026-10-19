@@ -261,7 +261,7 @@ function renderOverview() {
   app.innerHTML = `
     ${attention.length ? `<div class="attention-strip" role="status"><span>${attention.length}</span><strong>Needs attention</strong><p>${escapeHtml(attention.map(({ entry }) => entry.title).join(" · "))}</p></div>` : ""}
     <div class="ops-summary" aria-label="Workspace summary">
-      ${compactMetric("Open", openWork)}${compactMetric("Moving", summary.in_progress)}${compactMetric("Blocked", blockedWork)}${compactMetric("Done", summary.completed)}
+      ${compactMetric("Open", openWork)}${compactMetric("Moving", summary.in_progress)}${compactMetric("Blocked", blockedWork)}${compactMetric("Closed", summary.completed)}
     </div>
     <section class="panel queue-section">
       <div class="panel-header"><h2>Work queue</h2><span>${visibleCount} visible</span></div>
@@ -372,6 +372,7 @@ function renderSchedule() {
     });
   });
   wireEntityLinks();
+  wireExpandableText();
   const tagFilter = document.querySelector("#schedule-tags");
   tagFilter?.addEventListener("change", () => {
     scheduleTags = selectedTags(tagFilter);
@@ -633,9 +634,13 @@ function calendarEntryChip(entry, day, timeZone) {
   }
   const kindClass = entry.kind === "event" ? "is-event" : "is-task";
   const parent = parentTaskForEntry(entry);
-  const content = `<span>${escapeHtml(time)}</span><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml([parent ? `Child of ${parent.title}` : "", entryProvenance(entry)].filter(Boolean).join(" · "))}</small>`;
-  if (entry.source?.plugin_id === "core" && entry.source?.entity_type === "task") {
-    return `<button class="calendar-item ${kindClass}" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}" aria-label="Edit ${escapeHtml(entry.title)}">${content}</button>`;
+  const coreTask = entry.source?.plugin_id === "core" && entry.source?.entity_type === "task";
+  const title = coreTask
+    ? taskTextPreview(entry.title, `calendar:${entry.source.entity_id}:title`, 56, "calendar-title")
+    : `<strong>${escapeHtml(entry.title)}</strong>`;
+  const content = `<span>${escapeHtml(time)}</span>${title}<small>${escapeHtml([parent ? `Child of ${parent.title}` : "", entryProvenance(entry)].filter(Boolean).join(" · "))}</small>`;
+  if (coreTask) {
+    return `<div class="calendar-item ${kindClass}">${content}<button class="text-button" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}" aria-label="Edit ${escapeHtml(entry.title)}">Edit</button></div>`;
   }
   if (providerHasCapability(entry.source?.plugin_id, "entity-details")) {
     return `<button class="calendar-item ${kindClass}"${entryAccentAttribute(entry)} type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}">${content}</button>`;
@@ -666,9 +671,10 @@ function scheduleRow(entry) {
     <article class="schedule-row"${entryAccentAttribute(entry)}>
       <time class="schedule-time"${timeValue ? ` datetime="${escapeHtml(timeValue)}"` : ""}>${escapeHtml(scheduleTimingLabel(entry))}</time>
       <div>
-        <h3 class="task-title">${entityTitle(entry)}</h3>
-        ${entry.detail ? `<p class="task-description">${escapeHtml(entry.detail)}</p>` : ""}
+        <h3 class="task-title">${entry.source?.plugin_id === "core" ? taskTextPreview(entry.title, `schedule:${entry.source.entity_id}:title`, TASK_TITLE_PREVIEW_LENGTH, "task-title-text") : entityTitle(entry)}</h3>
+        ${entry.detail ? `<p class="task-description">${entry.source?.plugin_id === "core" ? taskTextPreview(entry.detail, `schedule:${entry.source.entity_id}:detail`, TASK_DETAIL_PREVIEW_LENGTH, "task-detail-text") : escapeHtml(entry.detail)}</p>` : ""}
         <p class="item-meta">${parent ? `Child of ${escapeHtml(parent.title)} · ` : ""}${escapeHtml(provenance)}${entry.source?.plugin_id === "core" ? ` · ${escapeHtml(taskDeadlineLabel(dashboard.tasks.find((task) => task.id === entry.source.entity_id) || {}))}` : ""}</p>
+        ${entry.source?.plugin_id === "core" ? `<button class="text-button" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}">Edit</button>` : ""}
       </div>
       <span class="state-badge">${escapeHtml(kindLabel)}</span>
     </article>
@@ -844,6 +850,7 @@ function renderHistory() {
   `;
   wireCommandButtons();
   wireEntityLinks();
+  wireExpandableText();
 }
 
 function renderHouse() {
@@ -1167,10 +1174,10 @@ function visibleTaskRoots(tasks) {
       || left.title.localeCompare(right.title));
 }
 
-function renderTaskHierarchy(tasks, roots = visibleTaskRoots(tasks)) {
+function renderTaskHierarchy(tasks, roots = visibleTaskRoots(tasks), forceExpanded = false) {
   return roots.map((task) => {
     const children = taskChildren(task, tasks);
-    const expanded = expandedParents.has(task.id);
+    const expanded = forceExpanded || expandedParents.has(task.id);
     return `${taskRow(task, { children, expanded })}${children.length && expanded
       ? `<div class="task-children" role="group" aria-label="Children of ${escapeHtml(task.title)}">${children.map((child, index) => taskRow(child, { child: true, position: index, siblingCount: children.length })).join("")}</div>`
       : ""}`;
@@ -1205,7 +1212,7 @@ function taskRow(task, options = {}) {
   const progressLabel = parent
     ? `${progress.done || 0}/${progress.total ?? task.children_count ?? 0} done${progress.canceled ? ` · ${progress.canceled} canceled` : ""}`
     : "";
-  const completionControl = parent && progress.unfinished > 0 && !done
+  const completionControl = parent && progress.unfinished > 0 && !closed
     ? `<button class="task-toggle has-unfinished" type="button" data-show-unfinished="${escapeHtml(task.id)}" aria-label="${escapeHtml(`${progress.unfinished} unfinished child tasks; expand ${task.title}`)}">!</button>`
     : `<button class="task-toggle" type="button" data-plugin-id="core" data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-revision="${escapeHtml(task.updated_at)}" data-command="set-state" data-next-state="${nextState}" aria-label="${closed ? "Reopen" : "Complete"} ${escapeHtml(task.title)}">${done ? "✓" : task.state === "canceled" ? "×" : ""}</button>`;
   return `
@@ -1219,6 +1226,7 @@ function taskRow(task, options = {}) {
         <p class="task-description">${taskTextPreview(detail, `${task.id}:detail`, TASK_DETAIL_PREVIEW_LENGTH, "task-detail-text")}</p>
         <p class="item-meta">${escapeHtml(taskDeadlineLabel(task))}${task.tags?.length ? ` · ${escapeHtml(task.tags.map(tagLabel).join(" · "))}` : ""}</p>
         <div class="task-actions">
+          ${task.filter_context ? '<span class="item-meta">Parent context</span>' : ""}
           <button class="text-button" type="button" data-edit-task="${escapeHtml(task.id)}" aria-label="Edit ${escapeHtml(task.title)}">Edit</button>
           ${!child ? `<button class="text-button" type="button" data-add-child="${escapeHtml(task.id)}">Add child</button>` : ""}
           ${child ? `<span class="reorder-controls" aria-label="Reorder ${escapeHtml(task.title)}"><button type="button" data-move-task="up" data-task-id="${escapeHtml(task.id)}" ${position === 0 ? "disabled" : ""} aria-label="Move ${escapeHtml(task.title)} up">↑</button><button type="button" data-move-task="down" data-task-id="${escapeHtml(task.id)}" ${position === siblingCount - 1 ? "disabled" : ""} aria-label="Move ${escapeHtml(task.title)} down">↓</button></span>` : ""}
@@ -1330,10 +1338,10 @@ function closedItemRow(item) {
     <article class="closed-row">
       <div>
         <div class="closed-title-line">
-          <h3 class="task-title">${entityTitle(item)}</h3>
+          <h3 class="task-title">${item.source?.plugin_id === "core" ? taskTextPreview(item.title, `history:${item.source.entity_id}:title`, TASK_TITLE_PREVIEW_LENGTH, "task-title-text") : entityTitle(item)}</h3>
           <span class="state-badge">${escapeHtml(item.state)}</span>
         </div>
-        <p class="task-description">${escapeHtml(item.detail || "No additional detail")}</p>
+        <p class="task-description">${item.source?.plugin_id === "core" ? taskTextPreview(item.detail || "No additional detail", `history:${item.source.entity_id}:detail`, TASK_DETAIL_PREVIEW_LENGTH, "task-detail-text") : escapeHtml(item.detail || "No additional detail")}</p>
         <p class="item-meta">${escapeHtml(provenance)}</p>
       </div>
       ${control}
@@ -1777,7 +1785,7 @@ function selectedTags(root) {
 }
 
 function normalizeTag(value) {
-  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
 function addCustomTag(picker) {
@@ -1865,15 +1873,35 @@ function taskDeadlineLabel(task) {
   return `Due ${parts.date} ${parts.time} (${deadline.time_zone})`;
 }
 
+function sectionTaskHierarchy(ids, sourceTasks = dashboard.tasks) {
+  const matches = sourceTasks.filter((task) =>
+    !["done", "canceled"].includes(task.state)
+    && matchesTags(task.tags || [], ids));
+  const matchedIds = new Set(matches.map((task) => task.id));
+  const roots = visibleTaskRoots(sourceTasks).flatMap((task) => {
+    const childMatch = taskChildren(task, sourceTasks).some(
+      (child) => matchedIds.has(child.id),
+    );
+    return matchedIds.has(task.id) || childMatch
+      ? [{ ...task, filter_context: !matchedIds.has(task.id) }]
+      : [];
+  });
+  return {
+    matches,
+    roots,
+    tasks: [
+      ...roots,
+      ...sourceTasks.filter((task) => task.parent_id
+        && (matchedIds.has(task.id) || matchedIds.has(task.parent_id))),
+    ],
+  };
+}
+
 function renderSectionTasks() {
   const ids = taskTagCatalog().filter((tag) => tag.view === activeView).map((tag) => tag.id);
   if (!ids.length) return;
-  const tasks = dashboard.tasks.filter((task) => !["done", "canceled"].includes(task.state) && matchesTags(task.tags || [], ids));
-  const matchedIds = new Set(tasks.map((task) => task.id));
-  const roots = visibleTaskRoots(dashboard.tasks).filter((task) =>
-    !["done", "canceled"].includes(task.state) && (matchedIds.has(task.id) || taskChildren(task).some((child) => matchedIds.has(child.id))),
-  );
-  app.insertAdjacentHTML("beforeend", `<section class="panel section-core-tasks"><div class="panel-header"><h2>Shared tasks for ${escapeHtml(viewCopy[activeView].title)}</h2><span>${tasks.length} tagged</span></div><div class="task-list">${roots.length ? renderTaskHierarchy(dashboard.tasks, roots) : '<p class="empty">Tag a shared task to show it here.</p>'}</div></section>`);
+  const filtered = sectionTaskHierarchy(ids);
+  app.insertAdjacentHTML("beforeend", `<section class="panel section-core-tasks"><div class="panel-header"><h2>Shared tasks for ${escapeHtml(viewCopy[activeView].title)}</h2><span>${filtered.matches.length} tagged · parent context retained</span></div><div class="task-list">${filtered.roots.length ? renderTaskHierarchy(filtered.tasks, filtered.roots, true) : '<p class="empty">Tag a shared task to show it here.</p>'}</div></section>`);
   wireCommandButtons(app.querySelector(".section-core-tasks"));
   wireTaskHierarchyControls(app.querySelector(".section-core-tasks"));
   wireExpandableText(app.querySelector(".section-core-tasks"));

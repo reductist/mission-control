@@ -10,7 +10,11 @@ from mission_control.closed_items import project_core_closed_items
 from mission_control.database import Database
 from mission_control.migrations import MigrationRunner
 from mission_control.server import ApiError, MissionControlApplication
-from mission_control.tasks import TaskRepository, UnfinishedChildrenError
+from mission_control.tasks import (
+    StaleTaskRevisionError,
+    TaskRepository,
+    UnfinishedChildrenError,
+)
 
 
 def repository_for(tmp_path) -> TaskRepository:
@@ -50,6 +54,25 @@ def test_move_and_reorder_are_presentation_only(tmp_path):
     moved = repository.update(first.id, parent_id=second_parent.id)
     assert moved.parent_id == second_parent.id
     assert moved.sibling_order == 0
+
+
+def test_reorder_advances_shifted_sibling_revisions_for_conflict_detection(tmp_path):
+    repository = repository_for(tmp_path)
+    parent = repository.create("Parent")
+    first = repository.create("First", parent_id=parent.id)
+    second = repository.create("Second", parent_id=parent.id)
+    third = repository.create("Third", parent_id=parent.id)
+    viewed_second_revision = second.updated_at
+
+    repository.update(third.id, sibling_order=0, expected_revision=third.updated_at)
+    assert repository.get(second.id).updated_at != viewed_second_revision
+    with pytest.raises(StaleTaskRevisionError):
+        repository.update(
+            second.id,
+            sibling_order=0,
+            expected_revision=viewed_second_revision,
+        )
+    assert repository.history(first.id)[-1]["event_type"] == "task.reordered"
 
 
 def test_parent_progress_keeps_canceled_distinct_and_completion_explicit(tmp_path):
@@ -117,6 +140,19 @@ def test_custom_tags_normalize_and_prevent_accidental_duplicates(tmp_path):
     application = MissionControlApplication(repository.database)
     catalog = application.dashboard()["task_tag_catalog"]
     assert any(item["id"] == "Custom Label" for item in catalog)
+
+
+def test_tags_reuse_catalog_and_first_custom_label_identity(tmp_path):
+    repository = repository_for(tmp_path)
+    first = repository.create("First", tags=["Ｍｏｌｄ Review", "YARD"])
+    second = repository.create("Second", tags=["mold review", "Yard"])
+    assert first.tags == ["Mold Review", "yard"]
+    assert second.tags == ["Mold Review", "yard"]
+
+    application = MissionControlApplication(repository.database)
+    catalog = application.dashboard()["task_tag_catalog"]
+    assert [item["id"] for item in catalog].count("Mold Review") == 1
+    assert not any(item["id"] in {"YARD", "Yard"} for item in catalog)
 
 
 def test_parent_completion_api_surfaces_unfinished_children(tmp_path):

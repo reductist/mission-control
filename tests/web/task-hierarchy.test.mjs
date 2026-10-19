@@ -39,6 +39,7 @@ vm.createContext(context);
 vm.runInContext(
   `${source}\n;globalThis.hierarchyTest = {
     renderTaskHierarchy, taskTextPreview, normalizeTag, parentTaskForEntry,
+    sectionTaskHierarchy, scheduleRow, calendarEntryChip, closedItemRow,
     expand(id) { expandedParents.add(id); },
     setState(value) { dashboard = value; },
   };`,
@@ -105,6 +106,51 @@ test("long text uses a literal ellipsis preview and retains escaped full text", 
 test("custom tag normalization combines capitalization and repeated spacing", () => {
   assert.equal(hierarchyTest.normalizeTag("  Weekend   Projects "), "weekend projects");
   assert.equal(hierarchyTest.normalizeTag("WEEKEND PROJECTS"), "weekend projects");
+});
+
+test("compatibility-equivalent custom tag text normalizes to one identity", () => {
+  assert.equal(hierarchyTest.normalizeTag("ＭＯＬＤ"), "mold");
+});
+
+test("tag filters retain a closed parent as context for its matching open child", () => {
+  const closedParent = { ...parent, state: "done", tags: [] };
+  const taggedChild = { ...first, state: "ready", tags: ["yard"] };
+  const result = hierarchyTest.sectionTaskHierarchy(["yard"], [closedParent, taggedChild]);
+  assert.equal(result.matches.length, 1);
+  assert.equal(result.roots.length, 1);
+  assert.equal(result.roots[0].id, "parent");
+  assert.equal(result.roots[0].filter_context, true);
+  const html = hierarchyTest.renderTaskHierarchy(result.tasks, result.roots, true);
+  assert.match(html, /Parent context/);
+  assert.match(html, /Book room/);
+});
+
+test("schedule, calendar, and history bound core task text without nesting edit controls", () => {
+  const longTitle = "Long synthetic task ".repeat(8);
+  const longDetail = "Detailed synthetic context ".repeat(10);
+  const task = { ...first, title: longTitle, description: longDetail, deadline: null };
+  hierarchyTest.setState({ tasks: [parent, task], task_tag_catalog: [] });
+  const entry = {
+    id: task.id,
+    kind: "action",
+    title: longTitle,
+    detail: longDetail,
+    timing: { kind: "due-on", due_on: "2026-10-20" },
+    source: { plugin_id: "core", entity_type: "task", entity_id: task.id },
+  };
+  assert.match(hierarchyTest.scheduleRow(entry), /expandable-text/);
+  const calendar = hierarchyTest.calendarEntryChip(entry, "2026-10-20", "UTC");
+  assert.match(calendar, /expandable-text/);
+  assert.match(calendar, /data-edit-task="first"/);
+  assert.doesNotMatch(calendar, /<button class="calendar-item/);
+  const history = hierarchyTest.closedItemRow({
+    ...entry,
+    item_id: task.id,
+    state: "done",
+    closed_at: "2026-10-20T00:00:00+00:00",
+    affordances: [],
+  });
+  assert.match(history, /expandable-text/);
 });
 
 test("dated child entries retain parent context", () => {

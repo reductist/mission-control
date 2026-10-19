@@ -9,7 +9,7 @@ from typing import Final
 from uuid import uuid4
 
 from mission_control.database import Database
-from mission_control.task_metadata import normalize_deadline, normalize_tags
+from mission_control.task_metadata import TASK_TAG_CATALOG, normalize_deadline, normalize_tags
 
 TASK_STATES: Final[tuple[str, ...]] = (
     "backlog",
@@ -93,6 +93,8 @@ class TaskRepository:
             connection.execute("BEGIN IMMEDIATE")
             self._validate_parent(connection, task_id, parent_id, task_has_children=False)
             sibling_order = self._next_sibling_order(connection, parent_id)
+            tags = self._canonicalize_tags(connection, tags)
+            payload["tags"] = tags
             payload["sibling_order"] = sibling_order
             connection.execute(
                 """
@@ -208,7 +210,9 @@ class TaskRepository:
             if deadline is not _UNSET:
                 next_values["deadline"] = normalize_deadline(deadline)
             if tags is not _UNSET:
-                next_values["tags"] = normalize_tags(tags)
+                next_values["tags"] = self._canonicalize_tags(
+                    connection, normalize_tags(tags)
+                )
 
             target_parent = current.parent_id
             if parent_id is not _UNSET:
@@ -231,7 +235,13 @@ class TaskRepository:
                     raise TypeError("task sibling_order must be an integer")
                 if sibling_order < 0:
                     raise ValueError("task sibling_order must not be negative")
-                next_values["sibling_order"] = sibling_order
+                clause = "parent_id IS NULL" if target_parent is None else "parent_id = ?"
+                parameters: tuple[object, ...] = () if target_parent is None else (target_parent,)
+                count = connection.execute(
+                    f"SELECT count(*) FROM tasks WHERE {clause} AND id <> ?",
+                    (*parameters, task_id),
+                ).fetchone()[0]
+                next_values["sibling_order"] = min(sibling_order, count)
             elif target_parent != current.parent_id:
                 next_values["sibling_order"] = self._next_sibling_order(
                     connection, target_parent, excluding=task_id
@@ -282,16 +292,24 @@ class TaskRepository:
                 ),
             )
             if next_values["parent_id"] != current.parent_id:
-                self._normalize_sibling_orders(connection, current.parent_id)
+                self._normalize_sibling_orders(
+                    connection, current.parent_id, now=now, cause_task_id=task_id
+                )
             if sibling_order is not _UNSET:
                 self._place_at_order(
                     connection,
                     task_id,
                     next_values["parent_id"],
                     int(next_values["sibling_order"]),
+                    now=now,
                 )
             else:
-                self._normalize_sibling_orders(connection, next_values["parent_id"])
+                self._normalize_sibling_orders(
+                    connection,
+                    next_values["parent_id"],
+                    now=now,
+                    cause_task_id=task_id,
+                )
             connection.execute(
                 """
                 INSERT INTO task_events(event_id, task_id, event_type, payload_json, occurred_at)
@@ -418,35 +436,118 @@ class TaskRepository:
         return int(row["next_order"])
 
     @staticmethod
-    def _normalize_sibling_orders(connection, parent_id: str | None) -> None:
-        clause = "parent_id IS NULL" if parent_id is None else "parent_id = ?"
-        parameters: tuple[object, ...] = () if parent_id is None else (parent_id,)
-        rows = connection.execute(
-            f"SELECT id FROM tasks WHERE {clause} ORDER BY sibling_order, created_at, id",
-            parameters,
-        ).fetchall()
-        connection.executemany(
-            "UPDATE tasks SET sibling_order = ? WHERE id = ?",
-            ((index, row["id"]) for index, row in enumerate(rows)),
-        )
-
-    @staticmethod
-    def _place_at_order(
-        connection, task_id: str, parent_id: str | None, requested: int
+    def _normalize_sibling_orders(
+        connection,
+        parent_id: str | None,
+        *,
+        now: str | None = None,
+        cause_task_id: str | None = None,
     ) -> None:
         clause = "parent_id IS NULL" if parent_id is None else "parent_id = ?"
         parameters: tuple[object, ...] = () if parent_id is None else (parent_id,)
         rows = connection.execute(
-            f"SELECT id FROM tasks WHERE {clause} AND id <> ? "
+            f"SELECT id, sibling_order FROM tasks WHERE {clause} "
+            "ORDER BY sibling_order, created_at, id",
+            parameters,
+        ).fetchall()
+        TaskRepository._write_sibling_orders(
+            connection,
+            [(row["id"], row["sibling_order"]) for row in rows],
+            [row["id"] for row in rows],
+            now=now,
+            cause_task_id=cause_task_id,
+        )
+
+    @staticmethod
+    def _canonicalize_tags(connection, tags: list[str]) -> list[str]:
+        canonical: dict[str, str] = {}
+        for item in TASK_TAG_CATALOG:
+            identifier = str(item["id"])
+            canonical[identifier.casefold()] = identifier
+            canonical[str(item["label"]).casefold()] = identifier
+        rows = connection.execute("SELECT tags_json FROM tasks ORDER BY created_at, id").fetchall()
+        for row in rows:
+            for label in json.loads(row["tags_json"]):
+                canonical.setdefault(label.casefold(), label)
+        values = [canonical.get(tag.casefold(), tag) for tag in tags]
+        if len(values) != len(set(values)):
+            raise ValueError("task tags must resolve to unique labels")
+        return values
+
+    @staticmethod
+    def _place_at_order(
+        connection,
+        task_id: str,
+        parent_id: str | None,
+        requested: int,
+        *,
+        now: str,
+    ) -> None:
+        clause = "parent_id IS NULL" if parent_id is None else "parent_id = ?"
+        parameters: tuple[object, ...] = () if parent_id is None else (parent_id,)
+        rows = connection.execute(
+            f"SELECT id, sibling_order FROM tasks WHERE {clause} AND id <> ? "
             "ORDER BY sibling_order, created_at, id",
             (*parameters, task_id),
         ).fetchall()
         identities = [row["id"] for row in rows]
         identities.insert(min(requested, len(identities)), task_id)
-        connection.executemany(
-            "UPDATE tasks SET sibling_order = ? WHERE id = ?",
-            ((index, identity) for index, identity in enumerate(identities)),
+        current = [(row["id"], row["sibling_order"]) for row in rows]
+        target = connection.execute(
+            "SELECT sibling_order FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        assert target is not None
+        current.append((task_id, target["sibling_order"]))
+        TaskRepository._write_sibling_orders(
+            connection,
+            current,
+            identities,
+            now=now,
+            cause_task_id=task_id,
         )
+
+    @staticmethod
+    def _write_sibling_orders(
+        connection,
+        current_rows: list[tuple[str, int]],
+        ordered_ids: list[str],
+        *,
+        now: str | None,
+        cause_task_id: str | None,
+    ) -> None:
+        current = dict(current_rows)
+        for order, identity in enumerate(ordered_ids):
+            previous = current[identity]
+            if previous == order:
+                continue
+            if now is None or identity == cause_task_id:
+                connection.execute(
+                    "UPDATE tasks SET sibling_order = ? WHERE id = ?",
+                    (order, identity),
+                )
+                continue
+            connection.execute(
+                "UPDATE tasks SET sibling_order = ?, updated_at = ? WHERE id = ?",
+                (order, now, identity),
+            )
+            connection.execute(
+                "INSERT INTO task_events(event_id, task_id, event_type, payload_json, occurred_at) "
+                "VALUES (?, ?, 'task.reordered', ?, ?)",
+                (
+                    str(uuid4()),
+                    identity,
+                    json.dumps(
+                        {
+                            "changes": {
+                                "sibling_order": {"from": previous, "to": order}
+                            },
+                            "cause_task_id": cause_task_id,
+                        },
+                        sort_keys=True,
+                    ),
+                    now,
+                ),
+            )
 
     @staticmethod
     def _task_from_row(row) -> Task:
