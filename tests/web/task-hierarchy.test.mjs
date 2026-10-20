@@ -240,7 +240,10 @@ test("dated child entries retain parent context", () => {
 });
 
 test("mobile hierarchy keeps readable state and touch-sized ordering controls", () => {
-  const mobile = css.slice(css.indexOf("@media (max-width: 680px)"));
+  const denseScheduleRule = css.lastIndexOf(".schedule-row { padding: 9px 10px;");
+  const mobileRule = css.lastIndexOf("@media (max-width: 680px)");
+  assert.ok(mobileRule > denseScheduleRule);
+  const mobile = css.slice(mobileRule);
   assert.match(mobile, /\.task-row\.is-parent \{ grid-template-columns: 44px minmax\(0, 1fr\); \}/);
   assert.match(mobile, /\.task-state \{ grid-column: 2; justify-items: start; \}/);
   assert.match(mobile, /\.reorder-controls button \{ min-width: 40px; min-height: 40px/);

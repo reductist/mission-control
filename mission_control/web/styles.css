@@ -630,9 +630,7 @@ button.calendar-item:focus-visible { outline: 2px solid var(--accent); outline-o
   .activity-disclosure-meta { margin-left: auto; text-align: right; }
   .schedule-toolbar { align-items: flex-start; flex-direction: column; }
   .schedule-freshness { justify-items: start; }
-  .schedule-row { grid-template-columns: minmax(0, 1fr); }
   .schedule-time { grid-column: 1 / -1; }
-  .schedule-row > .state-badge { grid-column: 1; justify-self: start; }
   .calendar-heading { align-items: flex-start; flex-direction: column; }
 }
 
@@ -1051,6 +1049,8 @@ kbd {
   .primary-button, .secondary-button, .activity-action, .text-button { font-size: 11px; }
   .room-row ul, .metric-detail, .schedule-time, .schedule-freshness { font-size: 11px; line-height: 1.45; }
   .schedule-choice, .schedule-filter { min-height: 34px; font-size: 11px; }
+  .schedule-row { grid-template-columns: minmax(0, 1fr); }
+  .schedule-row > .state-badge { grid-column: 1; justify-self: start; }
   .inspector-section h3 { font-size: 10px; }
   .command-table button { min-height: 38px; font-size: 11px; }
   .task-metadata-fields label, .task-edit-form > label, .tag-picker fieldset label { font-size: 13px; }

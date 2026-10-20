@@ -138,6 +138,60 @@ def test_desktop_sidebar_and_keyboard_context(browser):
     assert execute('return document.querySelector(".queue-pane").getBoundingClientRect().width') > before
 
 
+@pytest.mark.parametrize(("width", "expected_columns"), [(320, 1), (412, 1), (1440, 3)])
+def test_provider_schedule_row_responsive_layout(browser, width, expected_columns):
+    execute, click, viewport, _tap = browser
+    viewport(width)
+    click((".mobile-section-tab" if width <= 680 else ".nav-item") + '[data-view="schedule"]')
+    execute(
+        '''
+        const fixture = document.createElement("section");
+        fixture.id = "provider-layout-fixture";
+        fixture.innerHTML = scheduleRow({
+          id: "provider-layout-fixture",
+          kind: "event",
+          title: "Provider event title ".repeat(8),
+          detail: `https://example.invalid/${"x".repeat(240)}`,
+          timing: {
+            kind: "timed",
+            starts_at: "2026-10-20T12:00:00+00:00",
+            ends_at: "2026-10-20T13:00:00+00:00",
+          },
+          source: {
+            plugin_id: "google-calendar",
+            entity_type: "calendar-event",
+            entity_id: "provider-layout-fixture",
+          },
+        });
+        document.querySelector("#app").prepend(fixture);
+        wireExpandableText(fixture);
+        '''
+    )
+    row = "#provider-layout-fixture .schedule-row"
+    columns = execute(
+        f'return getComputedStyle(document.querySelector({json.dumps(row)})).gridTemplateColumns'
+    )
+    assert len(columns.split()) == expected_columns
+    assert execute(
+        f'return document.querySelectorAll({json.dumps(row + " .expandable-text")}).length'
+    ) == 2
+    assert execute(
+        f'return [...document.querySelectorAll({json.dumps(row + " .text-preview")})]'
+        '.every((element) => element.textContent.endsWith("..."))'
+    )
+    click(row + " .expandable-text")
+    assert execute(
+        f'return document.querySelector({json.dumps(row + " .expandable-text")})'
+        '.getAttribute("aria-expanded")'
+    ) == "true"
+    assert execute("return document.documentElement.scrollWidth <= innerWidth")
+    if width <= 680:
+        assert execute(
+            f'return getComputedStyle(document.querySelector({json.dumps(row + " > .state-badge")}))'
+            '.gridColumnStart'
+        ) == "1"
+
+
 @pytest.mark.parametrize("width", [320, 412])
 def test_mobile_task_deadlines_tags_edit_and_schedule_filter(browser, width):
     execute, click, viewport, _tap = browser
