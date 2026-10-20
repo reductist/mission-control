@@ -213,6 +213,7 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   font: 10px/1.35 var(--mono);
 }
 .schedule-days { display: grid; gap: 16px; }
+.schedule-task-hierarchy { margin-bottom: 16px; }
 .schedule-list { display: grid; }
 .schedule-row {
   padding: 15px 18px;
@@ -224,6 +225,7 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
 }
 .schedule-row[data-accent] { border-left: 3px solid var(--entry-accent); padding-left: 12px; }
 .schedule-row:last-child { border-bottom: 0; }
+.schedule-row > div { min-width: 0; }
 .schedule-time {
   color: var(--accent);
   font: 600 12px/1.5 var(--mono);
@@ -318,9 +320,11 @@ button.calendar-item:focus-visible { outline: 2px solid var(--accent); outline-o
 .schedule-row[data-accent="accent-8"], .calendar-item[data-accent="accent-8"] { --entry-accent: #65708c; }
 .calendar-item[data-accent] { border-left-color: var(--entry-accent); }
 .calendar-item strong {
+  min-width: 0;
   overflow-wrap: anywhere;
   font: 600 12px/1.3 var(--sans);
 }
+.calendar-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .calendar-item small { color: var(--muted); font: 9px/1.2 var(--mono); }
 .calendar-empty { color: var(--muted); font: 10px/1.3 var(--mono); }
 .stack { display: grid; gap: 18px; }
@@ -626,8 +630,9 @@ button.calendar-item:focus-visible { outline: 2px solid var(--accent); outline-o
   .activity-disclosure-meta { margin-left: auto; text-align: right; }
   .schedule-toolbar { align-items: flex-start; flex-direction: column; }
   .schedule-freshness { justify-items: start; }
-  .schedule-row { grid-template-columns: 1fr auto; }
+  .schedule-row { grid-template-columns: minmax(0, 1fr); }
   .schedule-time { grid-column: 1 / -1; }
+  .schedule-row > .state-badge { grid-column: 1; justify-self: start; }
   .calendar-heading { align-items: flex-start; flex-direction: column; }
 }
 

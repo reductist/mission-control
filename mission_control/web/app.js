@@ -233,9 +233,7 @@ function render() {
 function renderOverview() {
   const summary = dashboard.summary;
   const activeTasks = dashboard.tasks.filter((task) => !["done", "canceled"].includes(task.state) || task.children_count || task.progress?.total);
-  const visibleTasks = visibleTaskRoots(dashboard.tasks)
-    .filter((task) => !["done", "canceled"].includes(task.state) || task.children_count || task.progress?.total)
-    .slice(0, 7);
+  const visibleTasks = overviewTaskRoots(dashboard.tasks);
   const house = providerInitiative("home-search");
   const scheduled = scheduleEntries().filter((entry) => entry.timing?.kind !== "anytime");
   const maintenanceCases = householdEntries().filter((entry) => entry.kind === "initiative");
@@ -244,7 +242,7 @@ function renderOverview() {
   const yardInitiative = yardEntries.find((entry) => entry.kind === "initiative");
   const yardActions = yardEntries.filter((entry) => entry.kind === "action");
   const visibleYardActions = yardActions.slice(0, 4);
-  const visibleCoreTasks = visibleTasks.slice(0, Math.max(0, 7 - visibleYardActions.length));
+  const visibleCoreTasks = visibleTasks;
   const visibleCount = visibleYardActions.length + visibleCoreTasks.length;
   const openWork = summary.open + yardActions.length + openMaintenanceCases.length;
   const blockedWork = summary.blocked
@@ -284,6 +282,13 @@ function renderOverview() {
   document.querySelectorAll(".text-button[data-view]").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
+}
+
+function overviewTaskRoots(tasks) {
+  return visibleTaskRoots(tasks)
+    .filter((task) => !["done", "canceled"].includes(task.state)
+      || task.children_count
+      || task.progress?.total);
 }
 
 function compactMetric(label, value) {
@@ -372,6 +377,8 @@ function renderSchedule() {
     });
   });
   wireEntityLinks();
+  wireCommandButtons();
+  wireTaskHierarchyControls();
   wireExpandableText();
   const tagFilter = document.querySelector("#schedule-tags");
   tagFilter?.addEventListener("change", () => {
@@ -391,6 +398,11 @@ function rerenderSchedulePreservingFocus() {
 }
 
 function renderAgendaSchedule(entries, timeZone) {
+  if (scheduleFilter === "tasks") return renderTaskReminderAgenda(entries, timeZone);
+  return renderChronologicalAgenda(entries, timeZone);
+}
+
+function renderChronologicalAgenda(entries, timeZone) {
   const groups = new Map();
   entries.forEach((entry) => {
     const key = scheduleDateKey(entry, timeZone);
@@ -403,6 +415,27 @@ function renderAgendaSchedule(entries, timeZone) {
         ? [...groups].map(([key, items]) => scheduleDay(key, items)).join("")
         : '<section class="panel empty">Nothing scheduled in this range.</section>'}
     </div>
+  `;
+}
+
+function renderTaskReminderAgenda(entries, timeZone) {
+  const matchedIds = new Set(entries
+    .filter((entry) => entry.source?.plugin_id === "core"
+      && entry.source?.entity_type === "task")
+    .map((entry) => entry.source.entity_id));
+  const hierarchy = taskHierarchyForMatchedIds(matchedIds);
+  const providerEntries = entries.filter((entry) => entry.source?.plugin_id !== "core");
+  return `
+    ${hierarchy.roots.length ? `
+      <section class="panel schedule-task-hierarchy">
+        <div class="panel-header"><h2>Shared tasks</h2><span>${matchedIds.size} matched · parent context retained</span></div>
+        <div class="task-list">${renderTaskHierarchy(hierarchy.tasks, hierarchy.roots)}</div>
+      </section>
+    ` : ""}
+    ${providerEntries.length ? renderChronologicalAgenda(providerEntries, timeZone) : ""}
+    ${!hierarchy.roots.length && !providerEntries.length
+      ? '<section class="panel empty">Nothing scheduled in this range.</section>'
+      : ""}
   `;
 }
 
@@ -637,13 +670,13 @@ function calendarEntryChip(entry, day, timeZone) {
   const coreTask = entry.source?.plugin_id === "core" && entry.source?.entity_type === "task";
   const title = coreTask
     ? taskTextPreview(entry.title, `calendar:${entry.source.entity_id}:title`, 56, "calendar-title")
-    : `<strong>${escapeHtml(entry.title)}</strong>`;
+    : boundedTextPreview(entry.title, 56, "calendar-title");
   const content = `<span>${escapeHtml(time)}</span>${title}<small>${escapeHtml([parent ? `Child of ${parent.title}` : "", entryProvenance(entry)].filter(Boolean).join(" · "))}</small>`;
   if (coreTask) {
     return `<div class="calendar-item ${kindClass}">${content}<button class="text-button" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}" aria-label="Edit ${escapeHtml(entry.title)}">Edit</button></div>`;
   }
   if (providerHasCapability(entry.source?.plugin_id, "entity-details")) {
-    return `<button class="calendar-item ${kindClass}"${entryAccentAttribute(entry)} type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}">${content}</button>`;
+    return `<button class="calendar-item ${kindClass}"${entryAccentAttribute(entry)} type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}" aria-label="${escapeHtml(`${time}: ${entry.title}`)}">${content}</button>`;
   }
   return `<div class="calendar-item ${kindClass}"${entryAccentAttribute(entry)}>${content}</div>`;
 }
@@ -667,14 +700,33 @@ function scheduleRow(entry) {
     .join(" · ");
   const timeValue = scheduleTimeValue(entry);
   const parent = parentTaskForEntry(entry);
+  const identity = `${entry.source?.plugin_id || "unknown"}:${entry.source?.entity_type || "entry"}:${entry.source?.entity_id || entry.id}`;
+  const title = taskTextPreview(
+    entry.title,
+    `schedule:${identity}:title`,
+    TASK_TITLE_PREVIEW_LENGTH,
+    "task-title-text",
+  );
+  const detail = entry.detail
+    ? taskTextPreview(
+      entry.detail,
+      `schedule:${identity}:detail`,
+      TASK_DETAIL_PREVIEW_LENGTH,
+      "task-detail-text",
+    )
+    : "";
+  const detailControl = entry.source?.plugin_id !== "core"
+    && providerHasCapability(entry.source?.plugin_id, "entity-details")
+    ? `<button class="text-button" type="button" data-entity-link data-plugin-id="${escapeHtml(entry.source.plugin_id)}" data-entity-type="${escapeHtml(entry.source.entity_type)}" data-entity-id="${escapeHtml(entry.source.entity_id)}">Open details</button>`
+    : "";
   return `
     <article class="schedule-row"${entryAccentAttribute(entry)}>
       <time class="schedule-time"${timeValue ? ` datetime="${escapeHtml(timeValue)}"` : ""}>${escapeHtml(scheduleTimingLabel(entry))}</time>
       <div>
-        <h3 class="task-title">${entry.source?.plugin_id === "core" ? taskTextPreview(entry.title, `schedule:${entry.source.entity_id}:title`, TASK_TITLE_PREVIEW_LENGTH, "task-title-text") : entityTitle(entry)}</h3>
-        ${entry.detail ? `<p class="task-description">${entry.source?.plugin_id === "core" ? taskTextPreview(entry.detail, `schedule:${entry.source.entity_id}:detail`, TASK_DETAIL_PREVIEW_LENGTH, "task-detail-text") : escapeHtml(entry.detail)}</p>` : ""}
+        <h3 class="task-title">${title}</h3>
+        ${detail ? `<p class="task-description">${detail}</p>` : ""}
         <p class="item-meta">${parent ? `Child of ${escapeHtml(parent.title)} · ` : ""}${escapeHtml(provenance)}${entry.source?.plugin_id === "core" ? ` · ${escapeHtml(taskDeadlineLabel(dashboard.tasks.find((task) => task.id === entry.source.entity_id) || {}))}` : ""}</p>
-        ${entry.source?.plugin_id === "core" ? `<button class="text-button" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}">Edit</button>` : ""}
+        ${entry.source?.plugin_id === "core" ? `<button class="text-button" type="button" data-edit-task="${escapeHtml(entry.source.entity_id)}">Edit</button>` : detailControl}
       </div>
       <span class="state-badge">${escapeHtml(kindLabel)}</span>
     </article>
@@ -1177,7 +1229,7 @@ function visibleTaskRoots(tasks) {
 function renderTaskHierarchy(tasks, roots = visibleTaskRoots(tasks), forceExpanded = false) {
   return roots.map((task) => {
     const children = taskChildren(task, tasks);
-    const expanded = forceExpanded || expandedParents.has(task.id);
+    const expanded = forceExpanded || task.filter_context || expandedParents.has(task.id);
     return `${taskRow(task, { children, expanded })}${children.length && expanded
       ? `<div class="task-children" role="group" aria-label="Children of ${escapeHtml(task.title)}">${children.map((child, index) => taskRow(child, { child: true, position: index, siblingCount: children.length })).join("")}</div>`
       : ""}`;
@@ -1190,6 +1242,12 @@ function taskTextPreview(value, key, limit, className) {
   const expanded = expandedTaskText.has(key);
   const preview = `${text.slice(0, limit).trimEnd()}...`;
   return `<button class="expandable-text ${className}" type="button" data-expand-text="${escapeHtml(key)}" aria-expanded="${expanded}" aria-label="${expanded ? "Collapse" : "Expand"} full text"><span class="text-preview"${expanded ? " hidden" : ""}>${escapeHtml(preview)}</span><span class="text-full"${expanded ? "" : " hidden"}>${escapeHtml(text)}</span></button>`;
+}
+
+function boundedTextPreview(value, limit, className) {
+  const text = value || "";
+  const preview = text.length > limit ? `${text.slice(0, limit).trimEnd()}...` : text;
+  return `<strong class="${className}" title="${escapeHtml(text)}">${escapeHtml(preview)}</strong>`;
 }
 
 function parentProgress(task, children) {
@@ -1878,6 +1936,10 @@ function sectionTaskHierarchy(ids, sourceTasks = dashboard.tasks) {
     !["done", "canceled"].includes(task.state)
     && matchesTags(task.tags || [], ids));
   const matchedIds = new Set(matches.map((task) => task.id));
+  return { matches, ...taskHierarchyForMatchedIds(matchedIds, sourceTasks) };
+}
+
+function taskHierarchyForMatchedIds(matchedIds, sourceTasks = dashboard.tasks) {
   const roots = visibleTaskRoots(sourceTasks).flatMap((task) => {
     const childMatch = taskChildren(task, sourceTasks).some(
       (child) => matchedIds.has(child.id),
@@ -1887,7 +1949,6 @@ function sectionTaskHierarchy(ids, sourceTasks = dashboard.tasks) {
       : [];
   });
   return {
-    matches,
     roots,
     tasks: [
       ...roots,

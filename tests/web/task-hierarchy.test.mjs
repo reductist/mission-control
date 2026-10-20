@@ -39,8 +39,10 @@ vm.createContext(context);
 vm.runInContext(
   `${source}\n;globalThis.hierarchyTest = {
     renderTaskHierarchy, taskTextPreview, normalizeTag, parentTaskForEntry,
-    sectionTaskHierarchy, scheduleRow, calendarEntryChip, closedItemRow,
+    sectionTaskHierarchy, taskHierarchyForMatchedIds, renderAgendaSchedule,
+    overviewTaskRoots, scheduleRow, calendarEntryChip, closedItemRow,
     expand(id) { expandedParents.add(id); },
+    setScheduleFilter(value) { scheduleFilter = value; },
     setState(value) { dashboard = value; },
   };`,
   context,
@@ -125,6 +127,38 @@ test("tag filters retain a closed parent as context for its matching open child"
   assert.match(html, /Book room/);
 });
 
+test("task reminder agenda injects a mismatched parent once and renders it before its child", () => {
+  const taggedChild = { ...first, state: "ready", tags: ["test"] };
+  const untaggedParent = { ...parent, tags: [] };
+  hierarchyTest.setState({ tasks: [taggedChild, untaggedParent], task_tag_catalog: [] });
+  const childEntry = {
+    id: taggedChild.id,
+    kind: "action",
+    title: taggedChild.title,
+    detail: taggedChild.description,
+    timing: { kind: "anytime" },
+    source: { plugin_id: "core", entity_type: "task", entity_id: taggedChild.id },
+  };
+  hierarchyTest.setScheduleFilter("tasks");
+  const html = hierarchyTest.renderAgendaSchedule([childEntry], "UTC");
+  assert.ok(html.indexOf(untaggedParent.title) < html.indexOf(taggedChild.title));
+  assert.equal((html.match(/<article class="task-row[^"]*" data-task-id="first"/g) || []).length, 1);
+  assert.match(html, /Parent context/);
+  assert.match(html, /aria-expanded="true"/);
+});
+
+test("overview keeps active roots beyond the former seven-item limit", () => {
+  const roots = Array.from({ length: 9 }, (_, index) => ({
+    ...parent,
+    id: `root-${index}`,
+    title: `Root ${index}`,
+    sibling_order: index,
+    children_count: 0,
+  }));
+  assert.equal(hierarchyTest.overviewTaskRoots(roots).length, 9);
+  assert.match(hierarchyTest.renderTaskHierarchy(roots), /Root 8/);
+});
+
 test("schedule, calendar, and history bound core task text without nesting edit controls", () => {
   const longTitle = "Long synthetic task ".repeat(8);
   const longDetail = "Detailed synthetic context ".repeat(10);
@@ -153,6 +187,50 @@ test("schedule, calendar, and history bound core task text without nesting edit 
   assert.match(history, /expandable-text/);
 });
 
+test("provider event and task previews bound long text and unbroken URLs without losing details", () => {
+  const longTitle = "Provider event title ".repeat(7);
+  const longUrl = `https://example.invalid/${"x".repeat(240)}`;
+  hierarchyTest.setState({
+    tasks: [],
+    task_tag_catalog: [],
+    providers: [{ id: "google-calendar", capabilities: ["entity-details"] }],
+  });
+  const entry = {
+    id: "provider-event",
+    kind: "event",
+    title: longTitle,
+    detail: longUrl,
+    timing: {
+      kind: "timed",
+      starts_at: "2026-10-20T12:00:00+00:00",
+      ends_at: "2026-10-20T13:00:00+00:00",
+    },
+    source: {
+      plugin_id: "google-calendar",
+      entity_type: "calendar-event",
+      entity_id: "provider-event",
+    },
+  };
+  const row = hierarchyTest.scheduleRow(entry);
+  assert.equal((row.match(/expandable-text/g) || []).length, 2);
+  assert.match(row, /Open details/);
+  assert.match(row, /\.\.\./);
+  assert.match(row, new RegExp(`x{${240}}`));
+  const providerTask = hierarchyTest.scheduleRow({
+    ...entry,
+    id: "provider-task",
+    kind: "action",
+    timing: { kind: "due-on", due_on: "2026-10-20" },
+    source: { ...entry.source, entity_type: "task", entity_id: "provider-task" },
+  });
+  assert.equal((providerTask.match(/expandable-text/g) || []).length, 2);
+  assert.match(providerTask, /Open details/);
+  const calendar = hierarchyTest.calendarEntryChip(entry, "2026-10-20", "UTC");
+  assert.match(calendar, /calendar-title/);
+  assert.match(calendar, /\.\.\./);
+  assert.match(calendar, /aria-label=/);
+});
+
 test("dated child entries retain parent context", () => {
   hierarchyTest.setState({ tasks: [parent, first], task_tag_catalog: [] });
   const resolved = hierarchyTest.parentTaskForEntry({
@@ -167,6 +245,8 @@ test("mobile hierarchy keeps readable state and touch-sized ordering controls", 
   assert.match(mobile, /\.task-state \{ grid-column: 2; justify-items: start; \}/);
   assert.match(mobile, /\.reorder-controls button \{ min-width: 40px; min-height: 40px/);
   assert.match(mobile, /\.task-editor-dialog \{ width: calc\(100vw - 16px\)/);
+  assert.match(mobile, /\.schedule-row \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(mobile, /\.schedule-row > \.state-badge \{ grid-column: 1; justify-self: start; \}/);
 });
 
 test("child rows advertise keyboard reordering without stealing ordinary arrows", () => {
