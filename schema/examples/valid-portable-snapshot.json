@@ -1,0 +1,206 @@
+{
+  "schema_version": "mission-control.portable-snapshot/v1",
+  "snapshot_id": "synthetic-mold-plan-snapshot",
+  "generated_at": "2026-10-24T10:05:00Z",
+  "selection": {
+    "kinds": ["task", "contact"],
+    "plugin_ids": ["synthetic-lab", "synthetic-addressbook"],
+    "tags": ["synthetic-remediation"]
+  },
+  "records": [
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-plan",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-plan"},
+      "revision": "1",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000001",
+        "updated": "2026-10-24T09:00:00Z",
+        "title": "Synthetic remediation exercise",
+        "description": "A fictional parent task used only for contract tests.",
+        "progress": "needs-action",
+        "keywords": {"synthetic-remediation": true}
+      },
+      "mc": {"workflow": {"state": "ready"}, "planning": {"intent": "none"}, "sibling_order": 0}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-inspect",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-inspect"},
+      "revision": "2",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000002",
+        "updated": "2026-10-24T09:01:00Z",
+        "title": "Inspect synthetic sample area",
+        "progress": "in-process",
+        "relatedTo": {
+          "urn:uuid:20000000-0000-4000-8000-000000000001": {"@type": "Relation", "relation": {"parent": true}}
+        }
+      },
+      "mc": {"workflow": {"state": "in-progress"}, "planning": {"intent": "none"}, "sibling_order": 0}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-contain",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-contain"},
+      "revision": "3",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000003",
+        "updated": "2026-10-24T09:02:00Z",
+        "title": "Set up a fictional containment zone",
+        "due": "2026-11-07T00:00:00",
+        "timeZone": null,
+        "showWithoutTime": true,
+        "progress": "needs-action",
+        "relatedTo": {
+          "urn:uuid:20000000-0000-4000-8000-000000000001": {"@type": "Relation", "relation": {"parent": true}}
+        }
+      },
+      "mc": {"workflow": {"state": "backlog"}, "planning": {"intent": "hard-deadline"}, "sibling_order": 1}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-clean",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-clean"},
+      "revision": "4",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000004",
+        "updated": "2026-10-24T09:03:00Z",
+        "title": "Run the synthetic cleanup exercise",
+        "progress": "needs-action",
+        "relatedTo": {
+          "urn:uuid:20000000-0000-4000-8000-000000000002": {"@type": "Relation", "relation": {"mission-control.dev:depends-on": true}}
+        }
+      },
+      "mc": {"workflow": {"state": "ready", "blocked": true, "waiting_on": "Synthetic inspection result"}, "planning": {"intent": "none"}, "sibling_order": 1}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-timed",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-timed"},
+      "revision": "5",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000005",
+        "updated": "2026-10-24T09:04:00Z",
+        "title": "Verify the fictional sensor reading",
+        "due": "2026-11-01T01:30:00",
+        "timeZone": "America/New_York",
+        "progress": "needs-action"
+      },
+      "mc": {"workflow": {"state": "ready"}, "planning": {"intent": "hard-deadline"}, "sibling_order": 2}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-date-like",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-date-like"},
+      "revision": "6",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000006",
+        "updated": "2026-10-24T09:05:00Z",
+        "title": "Review the synthetic exercise",
+        "progress": "needs-action"
+      },
+      "mc": {"workflow": {"state": "backlog", "review_after": "2026-11-07"}, "planning": {"intent": "planning-target", "target": "2026-11-07T00:00:00", "time_zone": null, "show_without_time": true}, "sibling_order": 3}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-complete",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-complete"},
+      "revision": "7",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000007",
+        "updated": "2026-10-24T09:06:00Z",
+        "title": "Archive fictional reference material",
+        "progress": "completed",
+        "percentComplete": 100
+      },
+      "mc": {"workflow": {"state": "done"}, "planning": {"intent": "none"}, "sibling_order": 4}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-task-canceled",
+      "kind": "task",
+      "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+      "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "provider-task-canceled"},
+      "revision": "8",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Task",
+        "uid": "urn:uuid:20000000-0000-4000-8000-000000000008",
+        "updated": "2026-10-24T09:07:00Z",
+        "title": "Cancel a redundant fictional check",
+        "progress": "cancelled",
+        "futureProperty": {"arrayOrder": [3, 1, 2]},
+        "example.com:labColor": "violet"
+      },
+      "mc": {"workflow": {"state": "canceled"}, "planning": {"intent": "none"}, "sibling_order": 5}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-contact-alex",
+      "kind": "contact",
+      "standard": {"name": "jscontact", "version": "2.0", "profile": "mission-control.jscontact/v1"},
+      "source": {"plugin_id": "synthetic-addressbook", "entity_type": "contact", "entity_id": "provider-contact-alex"},
+      "revision": "9",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Card",
+        "version": "2.0",
+        "uid": "urn:uuid:30000000-0000-4000-8000-000000000001",
+        "kind": "individual",
+        "name": {"full": "Alex Example", "components": [{"kind": "given", "value": "Alex"}, {"kind": "surname", "value": "Example"}], "isOrdered": true},
+        "emails": {"work": {"address": "alex@example.test", "contexts": {"work": true}}},
+        "phones": {"mobile": {"number": "tel:+1-555-0100", "contexts": {"mobile": true}}},
+        "language": "en"
+      },
+      "mc": {}
+    },
+    {
+      "schema_version": "mission-control.portable-record/v1",
+      "record_id": "synthetic-contact-no-uid",
+      "kind": "contact",
+      "standard": {"name": "jscontact", "version": "2.0", "profile": "mission-control.jscontact/v1"},
+      "source": {"plugin_id": "synthetic-addressbook", "entity_type": "contact", "entity_id": "provider-contact-no-uid"},
+      "revision": "10",
+      "observed_at": "2026-10-24T10:00:00Z",
+      "record": {
+        "@type": "Card",
+        "version": "2.0",
+        "kind": "org",
+        "name": {"full": "Fictional Test Lab Ω"},
+        "organizations": {"main": {"name": "Fictional Test Lab Ω"}},
+        "futureContactProperty": {"preserved": true},
+        "example.com:directoryKey": "synthetic-only"
+      },
+      "mc": {}
+    }
+  ]
+}

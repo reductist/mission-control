@@ -1,0 +1,11 @@
+{
+  "schema_version": "mission-control.portable-record/v1",
+  "record_id": "offset-task-due",
+  "kind": "task",
+  "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+  "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "offset-task-due-source"},
+  "revision": "1",
+  "observed_at": "2026-10-24T10:00:00Z",
+  "record": {"@type": "Task", "uid": "offset-task-due-uid", "updated": "2026-10-24T09:00:00Z", "due": "2026-11-01T01:30:00-04:00"},
+  "mc": {}
+}

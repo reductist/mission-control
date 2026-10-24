@@ -1,0 +1,12 @@
+{
+  "schema_version": "mission-control.portable-record/v1",
+  "record_id": "bad-envelope",
+  "kind": "task",
+  "standard": {"name": "jscalendar", "version": "1.0", "profile": "mission-control.jscalendar/v1"},
+  "source": {"plugin_id": "synthetic-lab", "entity_type": "task", "entity_id": "bad-envelope-source"},
+  "revision": "1",
+  "observed_at": "2026-10-24T10:00:00Z",
+  "record": {"@type": "Task", "uid": "bad-envelope-uid", "updated": "2026-10-24T09:00:00Z"},
+  "mc": {},
+  "unexpected": true
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": "mission-control.portable-record/v1",
+  "record_id": "synthetic-contact-record-02",
+  "kind": "contact",
+  "standard": {
+    "name": "jscontact",
+    "version": "2.0",
+    "profile": "mission-control.jscontact/v1"
+  },
+  "source": {
+    "plugin_id": "synthetic-addressbook",
+    "entity_type": "contact",
+    "entity_id": "provider-contact-02"
+  },
+  "revision": "fixture-revision-2",
+  "observed_at": "2026-10-24T10:00:00Z",
+  "record": {
+    "@type": "Card",
+    "version": "2.0",
+    "kind": "individual",
+    "name": {
+      "full": "No UID Example"
+    },
+    "futureContactProperty": {
+      "preserved": true
+    },
+    "example.com:directoryKey": "synthetic-only"
+  },
+  "mc": {}
+}
