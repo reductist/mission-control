@@ -1,0 +1,859 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#Address": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Address"
+                },
+                "components": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                },
+                "contexts": {
+                    "$ref": "#/$defs/%23ContactContexts"
+                },
+                "full": {
+                    "type": "string"
+                }
+            }
+        },
+        "#ContactContexts": {
+            "type": "object",
+            "additionalProperties": {
+                "const": true
+            }
+        },
+        "#ContactRelation": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Relation"
+                },
+                "relation": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "const": true
+                    }
+                }
+            }
+        },
+        "#Date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "#Duration": {
+            "type": "string",
+            "pattern": "^P(?:(?:[0-9]+W(?:[0-9]+D)?|[0-9]+D)(?:T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+(?:\\.[0-9]*[1-9])?S)?|[0-9]+(?:\\.[0-9]*[1-9])?S)?|[0-9]+M(?:[0-9]+(?:\\.[0-9]*[1-9])?S)?|[0-9]+(?:\\.[0-9]*[1-9])?S))?|T(?:[0-9]+H(?:[0-9]+M(?:[0-9]+(?:\\.[0-9]*[1-9])?S)?|[0-9]+(?:\\.[0-9]*[1-9])?S)?|[0-9]+M(?:[0-9]+(?:\\.[0-9]*[1-9])?S)?|[0-9]+(?:\\.[0-9]*[1-9])?S))$"
+        },
+        "#EmailAddress": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "EmailAddress"
+                },
+                "address": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "contexts": {
+                    "$ref": "#/$defs/%23ContactContexts"
+                },
+                "pref": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 100,
+                            "minimum": 1
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "address"
+            ]
+        },
+        "#Identifier": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "#JSCalendarEvent": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Event"
+                },
+                "categories": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "const": true
+                    }
+                },
+                "created": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "descriptionContentType": {
+                    "type": "string",
+                    "pattern": "^text/"
+                },
+                "duration": {
+                    "$ref": "#/$defs/%23Duration"
+                },
+                "keywords": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "const": true
+                    }
+                },
+                "relatedTo": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23Relation"
+                    }
+                },
+                "sequence": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "showWithoutTime": {
+                    "type": "boolean"
+                },
+                "start": {
+                    "$ref": "#/$defs/%23LocalDateTime"
+                },
+                "status": {
+                    "anyOf": [
+                        {
+                            "const": "confirmed"
+                        },
+                        {
+                            "const": "cancelled"
+                        },
+                        {
+                            "const": "tentative"
+                        },
+                        {
+                            "type": "string",
+                            "pattern": "^[a-z0-9.-]+:[A-Za-z0-9._:-]+$"
+                        }
+                    ]
+                },
+                "timeZone": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/%23TimeZoneID"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "title": {
+                    "type": "string"
+                },
+                "uid": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "updated": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                }
+            },
+            "required": [
+                "@type",
+                "start",
+                "uid",
+                "updated"
+            ]
+        },
+        "#JSCalendarTask": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Task"
+                },
+                "categories": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "const": true
+                    }
+                },
+                "created": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "descriptionContentType": {
+                    "type": "string",
+                    "pattern": "^text/"
+                },
+                "due": {
+                    "$ref": "#/$defs/%23LocalDateTime"
+                },
+                "estimatedDuration": {
+                    "$ref": "#/$defs/%23Duration"
+                },
+                "keywords": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "const": true
+                    }
+                },
+                "percentComplete": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 100,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "progress": {
+                    "anyOf": [
+                        {
+                            "const": "needs-action"
+                        },
+                        {
+                            "const": "in-process"
+                        },
+                        {
+                            "const": "completed"
+                        },
+                        {
+                            "const": "failed"
+                        },
+                        {
+                            "const": "cancelled"
+                        },
+                        {
+                            "type": "string",
+                            "pattern": "^[a-z0-9.-]+:[A-Za-z0-9._:-]+$"
+                        }
+                    ]
+                },
+                "progressUpdated": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                },
+                "relatedTo": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23Relation"
+                    }
+                },
+                "sequence": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "showWithoutTime": {
+                    "type": "boolean"
+                },
+                "start": {
+                    "$ref": "#/$defs/%23LocalDateTime"
+                },
+                "timeZone": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/%23TimeZoneID"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "title": {
+                    "type": "string"
+                },
+                "uid": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "updated": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                }
+            },
+            "required": [
+                "@type",
+                "uid",
+                "updated"
+            ]
+        },
+        "#JSContactCard": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Card"
+                },
+                "addresses": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23Address"
+                    }
+                },
+                "created": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                },
+                "emails": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23EmailAddress"
+                    }
+                },
+                "kind": {
+                    "anyOf": [
+                        {
+                            "const": "individual"
+                        },
+                        {
+                            "const": "group"
+                        },
+                        {
+                            "const": "org"
+                        },
+                        {
+                            "const": "location"
+                        },
+                        {
+                            "const": "device"
+                        },
+                        {
+                            "const": "application"
+                        },
+                        {
+                            "type": "string",
+                            "pattern": "^[a-z0-9.-]+:[A-Za-z0-9._:-]+$"
+                        }
+                    ]
+                },
+                "members": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "const": true
+                    }
+                },
+                "name": {
+                    "$ref": "#/$defs/%23Name"
+                },
+                "onlineServices": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23OnlineService"
+                    }
+                },
+                "organizations": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23Organization"
+                    }
+                },
+                "phones": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23Phone"
+                    }
+                },
+                "relatedTo": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23ContactRelation"
+                    }
+                },
+                "uid": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "updated": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                },
+                "version": {
+                    "const": "2.0"
+                }
+            },
+            "required": [
+                "@type",
+                "version"
+            ]
+        },
+        "#JSONValue": {
+            "anyOf": [
+                {
+                    "type": "null"
+                },
+                {
+                    "type": "boolean"
+                },
+                {
+                    "type": "number"
+                },
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/%23JSONValue"
+                    }
+                }
+            ]
+        },
+        "#LocalDateTime": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]*[1-9])?$"
+        },
+        "#MissionControlMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "planning": {
+                    "$ref": "#/$defs/%23Planning"
+                },
+                "sibling_order": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/%23Workflow"
+                }
+            }
+        },
+        "#Name": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Name"
+                },
+                "components": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23NameComponent"
+                    }
+                },
+                "full": {
+                    "type": "string"
+                },
+                "isOrdered": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "#NameComponent": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "NameComponent"
+                },
+                "kind": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "value": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind",
+                "value"
+            ]
+        },
+        "#NonEmpty": {
+            "type": "string",
+            "minLength": 1
+        },
+        "#OnlineService": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "OnlineService"
+                },
+                "contexts": {
+                    "$ref": "#/$defs/%23ContactContexts"
+                },
+                "service": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "uri": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "user": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                }
+            }
+        },
+        "#Organization": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Organization"
+                },
+                "contexts": {
+                    "$ref": "#/$defs/%23ContactContexts"
+                },
+                "name": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                }
+            }
+        },
+        "#Phone": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Phone"
+                },
+                "contexts": {
+                    "$ref": "#/$defs/%23ContactContexts"
+                },
+                "number": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "pref": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 100,
+                            "minimum": 1
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "number"
+            ]
+        },
+        "#Planning": {
+            "anyOf": [
+                {
+                    "const": {
+                        "intent": "none"
+                    }
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "intent": {
+                            "const": "planning-target"
+                        },
+                        "show_without_time": {
+                            "type": "boolean"
+                        },
+                        "target": {
+                            "$ref": "#/$defs/%23LocalDateTime"
+                        },
+                        "time_zone": {
+                            "anyOf": [
+                                {
+                                    "$ref": "#/$defs/%23TimeZoneID"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "intent",
+                        "show_without_time",
+                        "target",
+                        "time_zone"
+                    ]
+                },
+                {
+                    "const": {
+                        "intent": "hard-deadline"
+                    }
+                }
+            ]
+        },
+        "#PluginID": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "#PortableRecord": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "kind": {
+                    "enum": [
+                        "task",
+                        "event",
+                        "contact"
+                    ]
+                },
+                "mc": {
+                    "$ref": "#/$defs/%23MissionControlMetadata"
+                },
+                "observed_at": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                },
+                "record": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/%23JSCalendarTask"
+                        },
+                        {
+                            "$ref": "#/$defs/%23JSCalendarEvent"
+                        },
+                        {
+                            "$ref": "#/$defs/%23JSContactCard"
+                        }
+                    ]
+                },
+                "record_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "revision": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                },
+                "schema_version": {
+                    "const": "mission-control.portable-record/v1"
+                },
+                "source": {
+                    "$ref": "#/$defs/%23SourceRef"
+                },
+                "standard": {
+                    "$ref": "#/$defs/%23Standard"
+                }
+            },
+            "required": [
+                "kind",
+                "mc",
+                "observed_at",
+                "record",
+                "record_id",
+                "revision",
+                "schema_version",
+                "source",
+                "standard"
+            ]
+        },
+        "#Relation": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "@type": {
+                    "const": "Relation"
+                },
+                "relation": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "const": true
+                    }
+                }
+            },
+            "required": [
+                "@type"
+            ]
+        },
+        "#SelectionWindow": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "ends_at": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                },
+                "starts_at": {
+                    "$ref": "#/$defs/%23UTCDateTime"
+                }
+            },
+            "required": [
+                "ends_at",
+                "starts_at"
+            ]
+        },
+        "#SnapshotSelection": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "kinds": {
+                    "type": "array",
+                    "items": {
+                        "enum": [
+                            "task",
+                            "event",
+                            "contact"
+                        ]
+                    }
+                },
+                "plugin_ids": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23PluginID"
+                    }
+                },
+                "record_ids": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23Identifier"
+                    }
+                },
+                "states": {
+                    "type": "array",
+                    "items": {
+                        "enum": [
+                            "backlog",
+                            "ready",
+                            "in-progress",
+                            "done",
+                            "canceled"
+                        ]
+                    }
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/%23NonEmpty"
+                    }
+                },
+                "window": {
+                    "$ref": "#/$defs/%23SelectionWindow"
+                }
+            }
+        },
+        "#SourceRef": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "entity_id": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "entity_type": {
+                    "$ref": "#/$defs/%23Identifier"
+                },
+                "plugin_id": {
+                    "$ref": "#/$defs/%23PluginID"
+                }
+            },
+            "required": [
+                "entity_id",
+                "entity_type",
+                "plugin_id"
+            ]
+        },
+        "#Standard": {
+            "enum": [
+                {
+                    "name": "jscalendar",
+                    "version": "1.0",
+                    "profile": "mission-control.jscalendar/v1"
+                },
+                {
+                    "name": "jscontact",
+                    "version": "2.0",
+                    "profile": "mission-control.jscontact/v1"
+                }
+            ]
+        },
+        "#TimeZoneID": {
+            "type": "string",
+            "minLength": 1
+        },
+        "#UTCDateTime": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]*[1-9])?Z$"
+        },
+        "#Workflow": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "blocked": {
+                    "type": "boolean"
+                },
+                "review_after": {
+                    "$ref": "#/$defs/%23Date"
+                },
+                "state": {
+                    "enum": [
+                        "backlog",
+                        "ready",
+                        "in-progress",
+                        "done",
+                        "canceled"
+                    ]
+                },
+                "waiting_on": {
+                    "$ref": "#/$defs/%23NonEmpty"
+                }
+            },
+            "required": [
+                "state"
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "generated_at": {
+            "$ref": "#/$defs/%23UTCDateTime"
+        },
+        "records": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/%23PortableRecord"
+            }
+        },
+        "schema_version": {
+            "const": "mission-control.portable-snapshot/v1"
+        },
+        "selection": {
+            "$ref": "#/$defs/%23SnapshotSelection"
+        },
+        "snapshot_id": {
+            "$ref": "#/$defs/%23Identifier"
+        }
+    },
+    "required": [
+        "generated_at",
+        "records",
+        "schema_version",
+        "selection",
+        "snapshot_id"
+    ]
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": "mission-control.portable-record/v1",
+  "record_id": "synthetic-task-record-01",
+  "kind": "task",
+  "standard": {
+    "name": "jscalendar",
+    "version": "1.0",
+    "profile": "mission-control.jscalendar/v1"
+  },
+  "source": {
+    "plugin_id": "synthetic-lab",
+    "entity_type": "task",
+    "entity_id": "provider-task-01"
+  },
+  "revision": "fixture-revision-1",
+  "observed_at": "2026-10-24T10:00:00Z",
+  "record": {
+    "@type": "Task",
+    "uid": "urn:uuid:10000000-0000-4000-8000-000000000001",
+    "updated": "2026-10-24T09:55:00Z",
+    "title": "Inspect synthetic sample area",
+    "description": "Fictional fixture content only.",
+    "due": "2026-11-01T01:30:00",
+    "timeZone": "America/New_York",
+    "progress": "in-process",
+    "futureProperty": {
+      "nested": ["kept", 7, true]
+    },
+    "example.com:labColor": "violet"
+  },
+  "mc": {
+    "workflow": {
+      "state": "in-progress",
+      "blocked": false
+    },
+    "planning": {
+      "intent": "hard-deadline"
+    },
+    "sibling_order": 0
+  }
+}

@@ -9,6 +9,7 @@ The current contracts cover:
 - the immutable agenda contribution a provider returns for aggregation and rendering
 - the immutable closed-item contribution a provider returns for completed/history views
 - the entity-focused detail and immutable activity projection composed at read time
+- a standards-aligned portable record envelope and immutable selected-record snapshot
 - the command envelope a client sends to exactly one authoritative owner
 - the structured outcome returned for accepted, rejected, stale, unauthorized, or failed commands
 - the renderer-neutral state exchanged during an explicit plugin setup session
@@ -52,6 +53,21 @@ active/inactive state, opaque note revision, and one current
 `lifecycle.dismiss` or `lifecycle.reopen` affordance. Plugin-supplied domain events
 cannot impersonate those core-owned controls.
 
+## Portable record and snapshot contracts
+
+The portable record boundary wraps an intact JSCalendar Task/Event or JSContact
+2.0 Card in a small Mission Control envelope. The envelope is closed and owns
+source provenance, revision, workflow, planning intent, and order. The
+standards-native `record` is deliberately open so unknown standard properties
+and namespaced extensions survive round trips. This is a narrow supported
+profile, not a full validator for either RFC.
+
+The snapshot freezes selected envelopes under one generation timestamp. It is
+not the agenda or entity-detail read model, a provider transport, a renderer, or
+a persistence schema. See
+[`docs/adr/0001-standards-aligned-portable-records.md`](../docs/adr/0001-standards-aligned-portable-records.md)
+for the semantic boundary, mappings, and loss-reporting limitations.
+
 ## Runtime artifacts
 
 The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
@@ -70,6 +86,8 @@ The canonical CUE definitions and generated Draft 2020-12 JSON Schemas are:
 | Agenda query | `schema/agenda/query.cue` | `mission_control/schemas/agenda-query.schema.json` |
 | Closed-item contribution | `schema/closed-items/contribution.cue` | `mission_control/schemas/closed-items-contribution.schema.json` |
 | Entity detail and activity | `schema/entity-detail/contract.cue` | `mission_control/schemas/entity-detail.schema.json` |
+| Portable record | `schema/portable-record/contract.cue` | `mission_control/schemas/portable-record.schema.json` |
+| Portable snapshot | `schema/portable-record/contract.cue` | `mission_control/schemas/portable-snapshot.schema.json` |
 | Command envelope | `schema/command/contract.cue` | `mission_control/schemas/command-envelope.schema.json` |
 | Command result | `schema/command/contract.cue` | `mission_control/schemas/command-result.schema.json` |
 
