@@ -43,6 +43,10 @@ CLOSED_ITEMS_GENERATED="$GENERATED_DIR/closed-items-contribution.runtime-check.s
 CLOSED_ITEMS_RUNTIME="./mission_control/schemas/closed-items-contribution.schema.json"
 ENTITY_DETAIL_GENERATED="$GENERATED_DIR/entity-detail.runtime-check.schema.json"
 ENTITY_DETAIL_RUNTIME="./mission_control/schemas/entity-detail.schema.json"
+PORTABLE_RECORD_GENERATED="$GENERATED_DIR/portable-record.runtime-check.schema.json"
+PORTABLE_RECORD_RUNTIME="./mission_control/schemas/portable-record.schema.json"
+PORTABLE_SNAPSHOT_GENERATED="$GENERATED_DIR/portable-snapshot.runtime-check.schema.json"
+PORTABLE_SNAPSHOT_RUNTIME="./mission_control/schemas/portable-snapshot.schema.json"
 APPLICATION_CONFIG_GENERATED="$GENERATED_DIR/application-config.runtime-check.schema.json"
 APPLICATION_CONFIG_RUNTIME="$ROOT_DIR/mission_control/schemas/application-config.schema.json"
 APPLICATION_CONFIG_RAW="$GENERATED_DIR/application-config.raw.schema.json"
@@ -144,6 +148,12 @@ cue def --force --out jsonschema -e '#ClosedItemsContribution' \
 cue def --force --out jsonschema -e '#EntityDetail' \
   -o "$ENTITY_DETAIL_GENERATED" \
   ./schema/entity-detail
+cue def --force --out jsonschema -e '#PortableRecord' \
+  -o "$PORTABLE_RECORD_GENERATED" \
+  ./schema/portable-record
+cue def --force --out jsonschema -e '#PortableSnapshot' \
+  -o "$PORTABLE_SNAPSHOT_GENERATED" \
+  ./schema/portable-record
 (
   cd ./schema
   cue def --force --out jsonschema -e '#ApplicationConfig' \
@@ -261,6 +271,8 @@ compare_schema "$COMMAND_GENERATED" "$COMMAND_RUNTIME" "command envelope"
 compare_schema "$COMMAND_RESULT_GENERATED" "$COMMAND_RESULT_RUNTIME" "command result"
 compare_schema "$CLOSED_ITEMS_GENERATED" "$CLOSED_ITEMS_RUNTIME" "closed items contribution"
 compare_schema "$ENTITY_DETAIL_GENERATED" "$ENTITY_DETAIL_RUNTIME" "entity detail"
+compare_schema "$PORTABLE_RECORD_GENERATED" "$PORTABLE_RECORD_RUNTIME" "portable record"
+compare_schema "$PORTABLE_SNAPSHOT_GENERATED" "$PORTABLE_SNAPSHOT_RUNTIME" "portable snapshot"
 compare_schema "$APPLICATION_CONFIG_GENERATED" "$APPLICATION_CONFIG_RUNTIME" "application config"
 compare_schema "$APPLICATION_DEFAULTS_GENERATED" "$APPLICATION_DEFAULTS_RUNTIME" "application defaults"
 compare_schema "$GOOGLE_CONFIG_GENERATED" "$GOOGLE_CONFIG_RUNTIME" "Google configuration"
@@ -347,6 +359,12 @@ validate_success '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS
   ./schema/examples/valid-landscape-closed-items.json
 validate_success '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/valid-landscape-entity-detail.json
+validate_success '#PortableRecord' ./schema/portable-record "$PORTABLE_RECORD_GENERATED" \
+  ./schema/examples/valid-portable-task.json
+validate_success '#PortableRecord' ./schema/portable-record "$PORTABLE_RECORD_GENERATED" \
+  ./schema/examples/valid-portable-contact.json
+validate_success '#PortableSnapshot' ./schema/portable-record "$PORTABLE_SNAPSHOT_GENERATED" \
+  ./schema/examples/valid-portable-snapshot.json
 validate_success '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
   ./schema/examples/valid-application-config.json
 validate_success '#GoogleConfiguration' ./schema/google "$GOOGLE_CONFIG_GENERATED" \
@@ -429,6 +447,14 @@ expect_failure '#ClosedItemsContribution' ./schema/closed-items "$CLOSED_ITEMS_G
   ./schema/examples/invalid-closed-item-key.json
 expect_failure '#EntityDetail' ./schema/entity-detail "$ENTITY_DETAIL_GENERATED" \
   ./schema/examples/invalid-entity-detail-key.json
+for fixture in \
+  ./schema/examples/invalid-portable-record-key.json \
+  ./schema/examples/invalid-portable-task-missing-uid.json \
+  ./schema/examples/invalid-portable-task-offset-due.json \
+  ./schema/examples/invalid-portable-mc-key.json; do
+  expect_failure '#PortableRecord' ./schema/portable-record \
+    "$PORTABLE_RECORD_GENERATED" "$fixture"
+done
 expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
   ./schema/examples/invalid-application-config.json
 expect_failure '#ApplicationConfig' ./schema/config "$APPLICATION_CONFIG_GENERATED" \
