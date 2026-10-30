@@ -109,7 +109,7 @@ def test_upgrade_preserves_legacy_tasks_and_events(tmp_path):
             connection.executescript(migration.read_text())
         connection.execute("INSERT INTO tasks(id,title,description,state,blocked,review_after,created_at,updated_at) VALUES ('legacy','Existing task','','ready',0,'2026-10-15','old','old')")
         connection.execute("INSERT INTO task_events(event_id,task_id,event_type,payload_json,occurred_at) VALUES ('old-event','legacy','task.created','{}','old')")
-    assert MigrationRunner(database).apply() == [5, 6]
+    assert MigrationRunner(database).apply() == [5, 6, 7]
     task = TaskRepository(database).get("legacy")
     assert task.title == "Existing task" and task.review_after == "2026-10-15"
     assert task.deadline is None and task.tags == []

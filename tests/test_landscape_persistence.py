@@ -45,7 +45,7 @@ def initialized_repository(tmp_path) -> LandscapeRepository:
 
 def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
     database = Database(tmp_path / "mission-control.db")
-    assert MigrationRunner(database).apply() == [1, 2, 3, 4, 5, 6]
+    assert MigrationRunner(database).apply() == [1, 2, 3, 4, 5, 6, 7]
     runner = LandscapeMigrationRunner(database)
 
     assert runner.apply() == [1, 2]
@@ -58,7 +58,7 @@ def test_landscape_owns_namespaced_idempotent_migrations(tmp_path) -> None:
         landscape_version = connection.execute(
             "SELECT max(version) FROM plugin__9__landscape__schema_migrations"
         ).fetchone()[0]
-    assert (core_version, landscape_version) == (6, 2)
+    assert (core_version, landscape_version) == (7, 2)
 
 
 def test_generic_lifecycle_adopts_already_deployed_plugin_migrations(tmp_path) -> None:

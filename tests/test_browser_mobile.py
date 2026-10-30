@@ -93,7 +93,7 @@ def test_mobile_native_section_clicks_and_inspector_focus(browser, width):
     execute, click, viewport, tap = browser
     viewport(width)
     for _ in range(2):
-        for view, title in [("overview", "Overview"), ("schedule", "Schedule"), ("house", "House"),
+        for view, title in [("overview", "Overview"), ("schedule", "Schedule"), ("contacts", "Contacts"), ("house", "House"),
                             ("maintenance", "Maintenance"), ("yard", "Yard"), ("history", "History")]:
             click(f'.mobile-section-tab[data-view="{view}"]')
             assert execute('return document.querySelector("#page-title").textContent') == title
@@ -136,6 +136,55 @@ def test_desktop_sidebar_and_keyboard_context(browser):
     click("#navigator-toggle")
     click("#inspector-toggle")
     assert execute('return document.querySelector(".queue-pane").getBoundingClientRect().width') > before
+
+
+@pytest.mark.parametrize("width", [412, 1440])
+def test_contact_add_edit_cancel_and_reload(browser, width):
+    execute, click, viewport, _tap = browser
+    viewport(width)
+
+    def wait_for(script):
+        for _ in range(100):
+            if execute(script):
+                return
+            time.sleep(0.05)
+        assert execute(script), script
+
+    def fill(selector, value):
+        execute(
+            f"const e=document.querySelector({json.dumps(selector)}); "
+            f"e.value={json.dumps(value)}; e.dispatchEvent(new Event('input',{{bubbles:true}})); "
+            "e.dispatchEvent(new Event('change',{bubbles:true}));"
+        )
+
+    navigation = ".mobile-section-tab" if width <= 680 else ".nav-item"
+    click(navigation + '[data-view="contacts"]')
+    click("#add-contact")
+    fill("#contact-name", f"Browser Contact {width}")
+    fill("#contact-email", f"browser-{width}@example.invalid")
+    click('#contact-edit-form button[type="submit"]')
+    wait_for('return !document.querySelector("#contact-editor-dialog").open')
+    wait_for(f'return document.querySelector("#app").textContent.includes("Browser Contact {width}")')
+    contact_id = execute('return document.querySelector("[data-edit-contact]").dataset.editContact')
+    contact_selector = f'[data-edit-contact="{contact_id}"]'
+
+    viewport(width)
+    click(navigation + '[data-view="contacts"]')
+    wait_for(f"return !!document.querySelector({json.dumps(contact_selector)})")
+    click(contact_selector)
+    fill("#contact-phone", "+1-555-0199")
+    click("[data-close-contact-editor]")
+    click(contact_selector)
+    assert execute('return document.querySelector("#contact-phone").value') == ""
+    fill("#contact-phone", "+1-555-0199")
+    fill("#contact-organization", "Synthetic Browser Cooperative")
+    click('#contact-edit-form button[type="submit"]')
+    wait_for('return !document.querySelector("#contact-editor-dialog").open')
+
+    viewport(width)
+    click(navigation + '[data-view="contacts"]')
+    wait_for('return document.querySelector("#app").textContent.includes("Synthetic Browser Cooperative")')
+    assert execute('return document.documentElement.scrollWidth <= innerWidth')
 
 
 @pytest.mark.parametrize(("width", "expected_columns"), [(320, 1), (412, 1), (1440, 3)])
