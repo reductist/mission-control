@@ -188,7 +188,7 @@ def test_hierarchy_migration_preserves_ids_metadata_events_and_foreign_keys(tmp_
             "VALUES ('keep-event','keep-id','task.created','{}','created')"
         )
 
-    assert MigrationRunner(database).apply() == [6]
+    assert MigrationRunner(database).apply() == [6, 7]
     task = TaskRepository(database).get("keep-id")
     assert (task.title, task.description, task.state, task.tags) == (
         "Keep title",

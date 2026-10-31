@@ -16,6 +16,7 @@ test("every workspace section remains represented by a touch button", () => {
   assert.deepEqual(sections, [
     "overview",
     "schedule",
+    "contacts",
     "house",
     "maintenance",
     "yard",

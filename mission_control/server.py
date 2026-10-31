@@ -57,6 +57,7 @@ from mission_control.closed_items import (
     project_core_closed_items,
     validate_closed_items_capabilities,
 )
+from mission_control.contacts import ContactRepository, StaleContactRevisionError
 from mission_control.database import Database
 from mission_control.entity_details import (
     compose_entity_detail,
@@ -89,6 +90,7 @@ from mission_control.task_metadata import TASK_TAG_CATALOG, validate_task_reques
 
 MAX_REQUEST_BYTES = 64 * 1024
 _TASK_PATH = re.compile(r"^/api/tasks/([^/]+)$")
+_CONTACT_PATH = re.compile(r"^/api/contacts/([^/]+)$")
 _ENTITY_PATH = re.compile(r"^/api/entities/([^/]+)/([^/]+)/([^/]+)$")
 _STATIC_ASSETS = {
     "/app.webmanifest": (
@@ -149,6 +151,7 @@ class MissionControlApplication:
     ) -> None:
         MigrationRunner(database).apply()
         self.repository = TaskRepository(database)
+        self.contact_repository = ContactRepository(database)
         self.annotation_repository = AnnotationRepository(database)
         self.demo = demo
         self.write_token = write_token or secrets.token_urlsafe(24)
@@ -327,6 +330,7 @@ class MissionControlApplication:
                 _task_to_dict(task, repository=self.repository)
                 for task in _sort_tasks(tasks)
             ],
+            "contacts": self.contact_repository.list(),
             "task_hierarchy": {
                 "schema_version": "mission-control.tasks/v1",
                 "max_depth": 2,
@@ -557,6 +561,47 @@ class MissionControlApplication:
                 HTTPStatus.BAD_REQUEST, "invalid-task", str(error)
             ) from error
 
+    def create_contact(self, document: object) -> dict[str, object]:
+        payload = _object_payload(document, allowed={"record"})
+        record = payload.get("record")
+        if not isinstance(record, Mapping):
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST,
+                "invalid-contact",
+                "record must be a JSContact Card object",
+            )
+        try:
+            return self.contact_repository.create(record)
+        except (TypeError, ValueError) as error:
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST, "invalid-contact", str(error)
+            ) from error
+
+    def update_contact(self, contact_id: str, document: object) -> dict[str, object]:
+        payload = _object_payload(document, allowed={"record", "expected_revision"})
+        record = payload.get("record")
+        expected_revision = payload.get("expected_revision")
+        if not isinstance(record, Mapping) or not isinstance(expected_revision, str):
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST,
+                "invalid-contact",
+                "record and expected_revision are required",
+            )
+        try:
+            return self.contact_repository.update(
+                contact_id, record, expected_revision=expected_revision
+            )
+        except StaleContactRevisionError as error:
+            raise ApiError(HTTPStatus.CONFLICT, "stale-contact", str(error)) from error
+        except KeyError as error:
+            raise ApiError(
+                HTTPStatus.NOT_FOUND, "contact-not-found", "contact not found"
+            ) from error
+        except (TypeError, ValueError) as error:
+            raise ApiError(
+                HTTPStatus.BAD_REQUEST, "invalid-contact", str(error)
+            ) from error
+
     def execute_command(
         self, document: object, *, authorized: bool
     ) -> tuple[HTTPStatus, dict[str, object]]:
@@ -720,6 +765,9 @@ def _handler_for(application: MissionControlApplication):
             if path == "/api/commands":
                 self._handle_command()
                 return
+            if path == "/api/contacts":
+                self._handle_mutation(lambda payload: application.create_contact(payload))
+                return
             if path != "/api/tasks":
                 self._send_error(
                     ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found")
@@ -728,7 +776,24 @@ def _handler_for(application: MissionControlApplication):
             self._handle_mutation(lambda payload: application.create_task(payload))
 
         def do_PATCH(self) -> None:  # noqa: N802 - stdlib handler interface
-            match = _TASK_PATH.fullmatch(urlsplit(self.path).path)
+            path = urlsplit(self.path).path
+            contact_match = _CONTACT_PATH.fullmatch(path)
+            if contact_match is not None:
+                contact_id = unquote(contact_match.group(1))
+                if not contact_id or "/" in contact_id:
+                    self._send_error(
+                        ApiError(
+                            HTTPStatus.BAD_REQUEST,
+                            "invalid-contact-reference",
+                            "contact reference contains unsupported characters",
+                        )
+                    )
+                    return
+                self._handle_mutation(
+                    lambda payload: application.update_contact(contact_id, payload)
+                )
+                return
+            match = _TASK_PATH.fullmatch(path)
             if match is None:
                 self._send_error(
                     ApiError(HTTPStatus.NOT_FOUND, "not-found", "not found")

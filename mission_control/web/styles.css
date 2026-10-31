@@ -213,6 +213,39 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; fo
   font: 10px/1.35 var(--mono);
 }
 .schedule-days { display: grid; gap: 16px; }
+.contact-toolbar {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.contact-toolbar label { flex: 1; color: var(--muted); font: 10px/1.3 var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.contact-toolbar input { width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-strong); color: var(--text); text-transform: none; letter-spacing: normal; }
+.contact-list { display: grid; }
+.contact-row {
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.2fr) auto;
+  align-items: center;
+  gap: 18px;
+  border-top: 1px solid var(--border);
+}
+.contact-identity { min-width: 0; display: flex; align-items: center; gap: 11px; }
+.contact-identity strong { display: block; overflow-wrap: anywhere; }
+.contact-identity p { margin: 3px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.contact-avatar { flex: 0 0 34px; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--accent); background: var(--accent-soft); font: 700 12px/1 var(--mono); }
+.contact-details { min-width: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
+.contact-details div { min-width: 0; }
+.contact-details dt { color: var(--muted); font: 9px/1.3 var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.contact-details dd { margin: 1px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.contact-details a { color: var(--text); text-underline-offset: 2px; }
+.contact-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.contact-full-field { grid-column: 1 / -1; }
+.contact-form-grid label { min-width: 0; display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.contact-form-grid input, .contact-form-grid select, .contact-form-grid textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-strong); color: var(--text); }
+.contact-edit-form textarea { min-height: 70px; resize: vertical; }
 .schedule-task-hierarchy { margin-bottom: 16px; }
 .schedule-list { display: grid; }
 .schedule-row {
@@ -1051,6 +1084,13 @@ kbd {
   .schedule-choice, .schedule-filter { min-height: 34px; font-size: 11px; }
   .schedule-row { grid-template-columns: minmax(0, 1fr); }
   .schedule-row > .state-badge { grid-column: 1; justify-self: start; }
+  .contact-toolbar { align-items: stretch; flex-direction: column; }
+  .contact-toolbar input, .contact-form-grid input, .contact-form-grid select, .contact-form-grid textarea { font-size: 16px; }
+  .contact-row { grid-template-columns: 1fr auto; gap: 12px; }
+  .contact-details { grid-column: 1 / -1; grid-row: 2; grid-template-columns: 1fr; }
+  .contact-row > .text-button { grid-column: 2; grid-row: 1; align-self: start; }
+  .contact-form-grid { grid-template-columns: 1fr; }
+  .contact-full-field { grid-column: auto; }
   .inspector-section h3 { font-size: 10px; }
   .command-table button { min-height: 38px; font-size: 11px; }
   .task-metadata-fields label, .task-edit-form > label, .tag-picker fieldset label { font-size: 13px; }

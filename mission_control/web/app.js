@@ -26,6 +26,11 @@ const viewCopy = {
     title: "Schedule",
     description: "Events, appointments, tasks, and reminders from enabled sources.",
   },
+  contacts: {
+    eyebrow: "Address book",
+    title: "Contacts",
+    description: "People and organizations stored as portable JSContact cards.",
+  },
   house: {
     eyebrow: "House search",
     title: "House",
@@ -58,6 +63,8 @@ let activityExpanded = false;
 let scheduleFilter = "all";
 let scheduleTags = [];
 let editingTask = null;
+let editingContact = null;
+let contactQuery = "";
 let scheduleLayout = "agenda";
 let calendarRangeMode = "three-day";
 let refreshInFlight = false;
@@ -205,6 +212,7 @@ function focusSignature(element) {
     element.dataset?.entityId,
     element.dataset?.command,
     element.dataset?.editTask,
+    element.dataset?.editContact,
     element.name === "tags" ? element.value : "",
   ].join("|");
 }
@@ -215,6 +223,8 @@ function render() {
     renderEntityDetail();
   } else if (activeView === "schedule") {
     renderSchedule();
+  } else if (activeView === "contacts") {
+    renderContacts();
   } else if (activeView === "house") {
     renderHouse();
   } else if (activeView === "maintenance") {
@@ -297,6 +307,64 @@ function compactMetric(label, value) {
 
 function overviewRoom(label, status, lines, view) {
   return `<article class="room-row"><div><p class="kicker">${escapeHtml(label)}</p><strong>${escapeHtml(status)}</strong></div><ul>${lines.length ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("") : "<li>No current items</li>"}</ul><button class="text-button" data-view="${view}" type="button" aria-label="Open ${escapeHtml(label)}">Open →</button></article>`;
+}
+
+function contactCollectionValue(collection, property) {
+  const entries = Object.entries(collection || {}).sort((left, right) =>
+    (left[1]?.pref || 101) - (right[1]?.pref || 101) || left[0].localeCompare(right[0]));
+  return entries[0]?.[1]?.[property] || "";
+}
+
+function contactName(contact) {
+  return contact.record?.name?.full
+    || contactCollectionValue(contact.record?.organizations, "name")
+    || "Unnamed contact";
+}
+
+function renderContacts() {
+  const contacts = (dashboard.contacts || []).filter((contact) => {
+    const record = contact.record || {};
+    const haystack = [
+      contactName(contact),
+      contactCollectionValue(record.emails, "address"),
+      contactCollectionValue(record.phones, "number"),
+      contactCollectionValue(record.organizations, "name"),
+    ].join(" ").toLocaleLowerCase();
+    return haystack.includes(contactQuery.toLocaleLowerCase());
+  });
+  app.innerHTML = `
+    <section class="panel contact-toolbar" aria-label="Contact actions">
+      <label for="contact-search">Find contact<input id="contact-search" type="search" value="${escapeHtml(contactQuery)}" placeholder="Name, email, phone, organization"></label>
+      <button class="primary-button" id="add-contact" type="button">Add contact</button>
+    </section>
+    <section class="panel contact-panel">
+      <div class="panel-header"><h2>Address book</h2><span>${contacts.length} ${contacts.length === 1 ? "contact" : "contacts"}</span></div>
+      <div class="contact-list">${contacts.length ? contacts.map(contactRow).join("") : `<div class="empty">${contactQuery ? "No contacts match this search." : "No contacts yet. Add a person or organization to begin."}</div>`}</div>
+    </section>`;
+  document.querySelector("#add-contact").addEventListener("click", () => openContactEditor());
+  document.querySelector("#contact-search").addEventListener("input", (event) => {
+    contactQuery = event.target.value;
+    renderContacts();
+    const search = document.querySelector("#contact-search");
+    search.focus({ preventScroll: true });
+    search.setSelectionRange(contactQuery.length, contactQuery.length);
+  });
+  document.querySelectorAll("[data-edit-contact]").forEach((button) => {
+    button.addEventListener("click", () => openContactEditor(button.dataset.editContact));
+  });
+}
+
+function contactRow(contact) {
+  const record = contact.record || {};
+  const email = contactCollectionValue(record.emails, "address");
+  const phone = contactCollectionValue(record.phones, "number");
+  const organization = contactCollectionValue(record.organizations, "name");
+  const address = contactCollectionValue(record.addresses, "full");
+  return `<article class="contact-row">
+    <div class="contact-identity"><span class="contact-avatar" aria-hidden="true">${escapeHtml(contactName(contact).slice(0, 1).toLocaleUpperCase() || "·")}</span><div><strong>${escapeHtml(contactName(contact))}</strong><p>${escapeHtml(organization || record.kind || "individual")}</p></div></div>
+    <dl class="contact-details">${email ? `<div><dt>Email</dt><dd><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></dd></div>` : ""}${phone ? `<div><dt>Phone</dt><dd><a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a></dd></div>` : ""}${address ? `<div><dt>Address</dt><dd>${escapeHtml(address)}</dd></div>` : ""}${!email && !phone && !address ? "<div><dt>Details</dt><dd>None added</dd></div>" : ""}</dl>
+    <button class="text-button" type="button" data-edit-contact="${escapeHtml(contact.source.entity_id)}" aria-label="Edit ${escapeHtml(contactName(contact))}">Edit</button>
+  </article>`;
 }
 
 function renderSchedule() {
@@ -1976,6 +2044,119 @@ function taskParentOptions(task) {
     .join("");
 }
 
+function contactFormValue(record, collection, property) {
+  return contactCollectionValue(record?.[collection], property);
+}
+
+function contactKindOptions(selected = "individual") {
+  const kinds = [
+    ["individual", "Person"],
+    ["org", "Organization"],
+    ["group", "Group"],
+    ["location", "Location"],
+    ["device", "Device"],
+    ["application", "Application"],
+  ];
+  if (selected && !kinds.some(([value]) => value === selected)) {
+    kinds.push([selected, `Other (${selected})`]);
+  }
+  return kinds.map(([value, label]) => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function openContactEditor(id = null) {
+  editingContact = id
+    ? (dashboard?.contacts || []).find((contact) => contact.source.entity_id === id)
+    : null;
+  if (id && !editingContact) return;
+  const record = editingContact?.record || {};
+  const dialog = document.querySelector("#contact-editor-dialog");
+  document.querySelector("#contact-editor-content").innerHTML = `<form id="contact-edit-form" class="task-edit-form contact-edit-form">
+    <div class="dialog-heading"><h2 id="contact-editor-title">${editingContact ? "Edit contact" : "Add contact"}</h2><button type="button" data-close-contact-editor aria-label="Close contact editor">×</button></div>
+    <div class="contact-form-grid">
+      <label class="contact-full-field" for="contact-name">Name<input id="contact-name" name="name" value="${escapeHtml(record.name?.full || "")}" maxlength="200" autofocus></label>
+      <label for="contact-kind">Kind<select id="contact-kind" name="kind">${contactKindOptions(record.kind || "individual")}</select></label>
+      <label for="contact-organization">Organization<input id="contact-organization" name="organization" value="${escapeHtml(contactFormValue(record, "organizations", "name"))}" maxlength="200"></label>
+      <label for="contact-email">Primary email<input id="contact-email" name="email" type="email" value="${escapeHtml(contactFormValue(record, "emails", "address"))}" maxlength="320" autocomplete="email"></label>
+      <label for="contact-phone">Primary phone<input id="contact-phone" name="phone" type="tel" value="${escapeHtml(contactFormValue(record, "phones", "number"))}" maxlength="80" autocomplete="tel"></label>
+      <label class="contact-full-field" for="contact-address">Address<textarea id="contact-address" name="address" maxlength="500" autocomplete="street-address">${escapeHtml(contactFormValue(record, "addresses", "full"))}</textarea></label>
+    </div>
+    <p class="deadline-note">Mission Control keeps the complete JSContact card. Editing these primary fields preserves any additional standard or extension properties.</p>
+    <p class="form-error" role="status"></p><button class="primary-button" type="submit">${editingContact ? "Save contact" : "Add contact"}</button>
+  </form>`;
+  document.querySelector("#contact-edit-form").addEventListener("submit", saveContact);
+  dialog.showModal();
+}
+
+function updateContactCollection(record, collection, property, value, type) {
+  const current = record[collection] && typeof record[collection] === "object"
+    ? { ...record[collection] }
+    : {};
+  const key = Object.entries(current).sort((left, right) =>
+    (left[1]?.pref || 101) - (right[1]?.pref || 101) || left[0].localeCompare(right[0]))[0]?.[0]
+    || "primary";
+  if (value) current[key] = { ...(current[key] || {}), "@type": type, [property]: value };
+  else delete current[key];
+  if (Object.keys(current).length) record[collection] = current;
+  else delete record[collection];
+}
+
+function contactRecordFromForm(form) {
+  const record = editingContact
+    ? JSON.parse(JSON.stringify(editingContact.record))
+    : { "@type": "Card", version: "2.0" };
+  record.kind = form.elements.kind.value;
+  const fullName = form.elements.name.value.trim();
+  const name = { ...(record.name || {}) };
+  if (fullName) name.full = fullName;
+  else delete name.full;
+  if (Object.keys(name).length) record.name = name;
+  else delete record.name;
+  updateContactCollection(record, "organizations", "name", form.elements.organization.value.trim(), "Organization");
+  updateContactCollection(record, "emails", "address", form.elements.email.value.trim(), "EmailAddress");
+  updateContactCollection(record, "phones", "number", form.elements.phone.value.trim(), "Phone");
+  updateContactCollection(record, "addresses", "full", form.elements.address.value.trim(), "Address");
+  return record;
+}
+
+async function saveContact(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    if (!form.elements.name.value.trim() && !form.elements.organization.value.trim()) {
+      throw new Error("Add a name or organization.");
+    }
+    const editing = editingContact;
+    const path = editing
+      ? `/api/contacts/${encodeURIComponent(editing.source.entity_id)}`
+      : "/api/contacts";
+    await request(path, {
+      method: editing ? "PATCH" : "POST",
+      body: JSON.stringify({
+        record: contactRecordFromForm(form),
+        ...(editing ? { expected_revision: editing.revision } : {}),
+      }),
+    });
+    dialogClose("#contact-editor-dialog");
+    editingContact = null;
+    await refresh();
+    showNotice(editing ? "Contact updated." : "Contact added.");
+  } catch (error) {
+    form.querySelector(".form-error").textContent = error.status === 409
+      ? "This contact changed. Close and reopen the editor to review the latest values."
+      : error.message;
+    if (error.status === 409) await refresh();
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+function dialogClose(selector) {
+  const dialog = document.querySelector(selector);
+  if (dialog?.open) dialog.close();
+}
+
 function openTaskEditor(id) {
   const task = dashboard?.tasks?.find((item) => item.id === id);
   if (!task) return;
@@ -2037,6 +2218,10 @@ document.addEventListener("click", (event) => {
   const customTag = event.target.closest?.("[data-add-custom-tag]");
   if (customTag) addCustomTag(customTag.closest(".tag-picker"));
   if (event.target.closest?.("[data-close-task-editor]")) document.querySelector("#task-editor-dialog").close();
+  if (event.target.closest?.("[data-close-contact-editor]")) {
+    editingContact = null;
+    dialogClose("#contact-editor-dialog");
+  }
 });
 document.addEventListener("change", (event) => {
   if (event.target.name === "tags") {
@@ -2466,6 +2651,12 @@ function cancelJump() {
 }
 
 function handleEscape() {
+  const contactDialog = document.querySelector("#contact-editor-dialog");
+  if (contactDialog?.open) {
+    editingContact = null;
+    contactDialog.close();
+    return;
+  }
   const taskDialog = document.querySelector("#task-editor-dialog");
   if (taskDialog?.open) {
     taskDialog.close();
@@ -2503,7 +2694,7 @@ document.addEventListener("keydown", (event) => {
     handleEscape();
     return;
   }
-  if (helpDialog?.open || document.querySelector("#task-editor-dialog")?.open || isTypingTarget(event.target)) return;
+  if (helpDialog?.open || document.querySelector("#task-editor-dialog")?.open || document.querySelector("#contact-editor-dialog")?.open || isTypingTarget(event.target)) return;
   const toggledPane = paneToggleForKey(event.key);
   if (toggledPane && !event.metaKey && !event.ctrlKey && !event.altKey) {
     event.preventDefault();

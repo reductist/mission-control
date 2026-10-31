@@ -57,6 +57,7 @@ Mission Control is pre-release software. The current version includes:
 - a responsive web interface with Dashboard, Schedule, History, and entity
   detail views
 - local task creation, state changes, notes, and immutable activity history
+- local contact viewing and editing backed by portable JSContact 2.0 cards
 - a read-only Google integration for Calendar events, appointments, Tasks, and
   migrated Reminders
 - support for multiple isolated Google connections
@@ -140,6 +141,10 @@ client-contract semantics. The separate
 [`eight-task production migration plan`](docs/eight-task-production-migration.md)
 is an approval-gated, privacy-safe operator template; it is not authorization to
 change production data.
+
+Contacts can be added, searched, and edited from the **Contacts** section. See
+[`docs/contacts.md`](docs/contacts.md) for the standards-native storage model,
+supported fields, and current limitations.
 
 To connect a real Google account, follow
 [`docs/google-integration.md`](docs/google-integration.md). OAuth credentials
