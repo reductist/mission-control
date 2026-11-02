@@ -17,6 +17,7 @@ test("every workspace section remains represented by a touch button", () => {
     "overview",
     "schedule",
     "contacts",
+    "rewards",
     "house",
     "maintenance",
     "yard",

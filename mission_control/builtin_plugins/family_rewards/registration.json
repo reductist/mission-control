@@ -1,0 +1,8 @@
+{
+  "schema_version":"mission-control.plugin/v3","id":"family-rewards","name":"Family rewards","version":"0.1.0","plugin_api":">=1.0.0 <2.0.0",
+  "capabilities":["agenda","commands","entity-details"],
+  "runtime":{"entrypoint":"mission_control.builtin_plugins.family_rewards:activate","migration_set":"family_rewards_v1"},
+  "permissions":["database"],
+  "configuration":{"document_version":"mission-control.family-rewards.config/v1","schema_resource":"config.schema.json","defaults_resource":"config.defaults.json","presentation_resource":"config.presentation.json"},
+  "entity_types":{"account":{"capabilities":["activity.read","entity.annotate","family-rewards.task.award","family-rewards.ledger.reverse","family-rewards.credit.spend","family-rewards.settings.update","family-rewards.override.set","family-rewards.override.remove"]},"routine-task":{"capabilities":[]},"play-window":{"capabilities":[]}}
+}

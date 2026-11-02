@@ -31,6 +31,11 @@ const viewCopy = {
     title: "Contacts",
     description: "People and organizations stored as portable JSContact cards.",
   },
+  rewards: {
+    eyebrow: "Family rewards",
+    title: "Rewards",
+    description: "Parent-operated morning credit, play windows, and explicit corrections.",
+  },
   house: {
     eyebrow: "House search",
     title: "House",
@@ -55,6 +60,9 @@ const viewCopy = {
 
 let dashboard = null;
 let homeSearchDetails = new Map();
+let familyRewardsDetail = null;
+let rewardsDate = null;
+let rewardsTaskDetails = new Map();
 let activeView = "overview";
 let entityDetail = null;
 let detailReturnView = "overview";
@@ -135,12 +143,14 @@ async function refresh() {
     const detailTarget = entityDetail?.source;
     const nextDashboard = await request("/api/dashboard");
     const homeSearchLoad = await loadHomeSearchDetails(nextDashboard);
+    const rewardsLoad = await loadFamilyRewardsDetail(nextDashboard);
     let nextDetail = entityDetail;
     if (detailTarget) {
       nextDetail = await request(entityDetailPath(detailTarget));
     }
     dashboard = nextDashboard;
     homeSearchDetails = homeSearchLoad.details;
+    familyRewardsDetail = rewardsLoad;
     entityDetail = nextDetail;
     connectionLabel.textContent = "Online";
     modeLabel.textContent = dashboard.mode === "demo" ? "House showcase enabled" : "Operational workspace";
@@ -225,6 +235,8 @@ function render() {
     renderSchedule();
   } else if (activeView === "contacts") {
     renderContacts();
+  } else if (activeView === "rewards") {
+    renderRewards();
   } else if (activeView === "house") {
     renderHouse();
   } else if (activeView === "maintenance") {
@@ -971,6 +983,194 @@ function renderHistory() {
   wireCommandButtons();
   wireEntityLinks();
   wireExpandableText();
+}
+
+function familyRewardsAccount(source = dashboard) {
+  return (source?.agenda || []).find((entry) =>
+    entry.source?.plugin_id === "family-rewards"
+      && entry.source?.entity_type === "account"
+      && entry.source?.entity_id === "family-credit");
+}
+
+async function loadFamilyRewardsDetail(source) {
+  const account = familyRewardsAccount(source);
+  if (!account) return null;
+  try {
+    return await request(entityDetailPath(account.source));
+  } catch (_error) {
+    return familyRewardsDetail;
+  }
+}
+
+function rewardAttribute(key, detail = familyRewardsDetail) {
+  return (detail?.attributes || []).find((item) => item.key === key)?.value;
+}
+
+function rewardDocument(key, fallback) {
+  try {
+    return JSON.parse(rewardAttribute(key) || "");
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function rewardTaskState(task, localDate, snapshot) {
+  if (localDate === snapshot.local_date) {
+    return (snapshot.tasks || []).find((item) => item.id === task.id) || task;
+  }
+  const detail = rewardsTaskDetails.get(task.id);
+  const attributes = Object.fromEntries((detail?.attributes || []).map((item) => [item.key, item.value]));
+  return {
+    ...task,
+    completed: detail?.state === "checked",
+    award_entry_id: attributes["award-entry-id"] === "none" ? null : attributes["award-entry-id"],
+  };
+}
+
+async function loadRewardsTasks(localDate) {
+  const settings = rewardDocument("rewards-settings", { tasks: [] });
+  const pairs = await Promise.all((settings.tasks || []).map(async (task) => {
+    const source = { plugin_id: "family-rewards", entity_type: "routine-task", entity_id: `morning:${localDate}:${task.id}` };
+    try {
+      return [task.id, await request(entityDetailPath(source))];
+    } catch (_error) {
+      return [task.id, null];
+    }
+  }));
+  rewardsTaskDetails = new Map(pairs);
+}
+
+function renderRewards() {
+  if (!familyRewardsDetail) {
+    app.innerHTML = renderNoDemo(
+      "Family rewards is not enabled",
+      "Enable the family-rewards plugin to use the parent-operated point ledger. This view does not add child authentication or device enforcement.",
+    );
+    return;
+  }
+  const snapshot = rewardDocument("rewards-snapshot", {});
+  const settings = rewardDocument("rewards-settings", { tasks: [], windows: [] });
+  const overrides = rewardDocument("rewards-overrides", []);
+  rewardsDate ||= snapshot.local_date;
+  const tasks = (settings.tasks || []).map((task) => rewardTaskState(task, rewardsDate, snapshot));
+  const reversed = new Set((familyRewardsDetail.activity || []).map((entry) =>
+    entry.body?.match(/Reverses entry: ([^\n]+)/)?.[1]).filter(Boolean));
+  app.innerHTML = `
+    <div class="ops-summary rewards-summary" aria-label="Reward summary">
+      ${compactMetric("Available", `${snapshot.balance_minutes} min`)}
+      ${compactMetric("School cap", `${settings.school_day_cap_minutes} min`)}
+      ${compactMetric("Other-day cap", `${settings.non_school_day_cap_minutes} min`)}
+      ${compactMetric("Timezone", settings.timezone)}
+    </div>
+    <section class="panel rewards-routine">
+      <div class="panel-header"><h2>Morning routine</h2><label>Family date <input id="rewards-date" type="date" value="${escapeHtml(rewardsDate)}"></label></div>
+      <p class="rewards-guidance">Each task earns independently. The morning target is guidance, not an all-or-nothing cliff; reminders and parent support count.</p>
+      <div class="reward-task-list">${tasks.map((task) => `<article class="reward-task ${task.completed ? "is-complete" : ""}"><div><strong>${escapeHtml(task.label)}</strong><p>${task.minutes} minutes</p></div><button class="${task.completed ? "secondary-button" : "primary-button"}" type="button" data-reward-task="${escapeHtml(task.id)}" data-entry-id="${escapeHtml(task.award_entry_id || "")}">${task.completed ? "Undo correction" : "Check off"}</button></article>`).join("")}</div>
+    </section>
+    <section class="panel rewards-spend">
+      <div class="panel-header"><h2>Record play credit</h2><span>No timer or device enforcement</span></div>
+      <form class="reward-inline-form" id="reward-spend-form">
+        <label>Minutes<input name="minutes" type="number" min="1" max="1440" required></label>
+        <label>Note<input name="note" maxlength="240" placeholder="Optional context"></label>
+        <button class="primary-button" type="submit">Redeem</button><p class="form-error" role="status"></p>
+      </form>
+    </section>
+    <section class="panel rewards-history">
+      <div class="panel-header"><h2>Audit history</h2><span>Corrections append; entries are never edited</span></div>
+      <div class="activity-list">${(familyRewardsDetail.activity || []).length ? [...familyRewardsDetail.activity].reverse().map((entry) => {
+        const entryId = entry.activity_id.replace(/^ledger:/, "");
+        const reversible = ["family-rewards.earn", "family-rewards.spend"].includes(entry.activity_type) && !reversed.has(entryId);
+        return `<article class="activity-row"><div><strong>${escapeHtml(entry.summary)}</strong><p>${escapeHtml(entry.body || "")}</p><small>${escapeHtml(formatDateTime(entry.occurred_at))}</small></div>${reversible ? `<button class="text-button" type="button" data-reverse-entry="${escapeHtml(entryId)}">${entry.activity_type.endsWith("spend") ? "Refund" : "Correct"}</button>` : ""}</article>`;
+      }).join("") : '<div class="empty">No credit activity yet.</div>'}</div>
+    </section>
+    <details class="panel rewards-settings"><summary>Reward settings</summary>
+      <form class="snapshot-form" id="reward-settings-form">
+        <div class="reward-settings-grid"><label>Timezone<input name="timezone" value="${escapeHtml(settings.timezone)}" required></label><label>School-day cap<input name="school-cap" type="number" min="0" max="1440" value="${settings.school_day_cap_minutes}" required></label><label>Non-school-day cap<input name="other-cap" type="number" min="0" max="1440" value="${settings.non_school_day_cap_minutes}" required></label></div>
+        <fieldset><legend>Four independent morning tasks</legend>${(settings.tasks || []).map((task) => `<div class="reward-task-setting"><label>Label<input name="task-label-${escapeHtml(task.id)}" maxlength="160" value="${escapeHtml(task.label)}" required></label><label>Minutes<input name="task-minutes-${escapeHtml(task.id)}" type="number" min="1" max="240" value="${task.minutes}" required></label></div>`).join("")}</fieldset>
+        <label>Recurring play windows (JSON)<textarea name="windows" rows="8" spellcheck="false">${escapeHtml(JSON.stringify(settings.windows, null, 2))}</textarea></label>
+        <div class="review-controls"><button class="primary-button" type="submit">Save settings</button><button class="secondary-button" id="cancel-reward-settings" type="button">Cancel changes</button></div><p class="form-error" role="status"></p>
+      </form>
+    </details>
+    <section class="panel rewards-overrides">
+      <div class="panel-header"><h2>Date overrides</h2><span>Holidays and late pickups</span></div>
+      <form class="reward-inline-form" id="reward-override-form">
+        <label>Date<input name="local-date" type="date" required></label><label>Day type<select name="school-day"><option value="default">Use weekday default</option><option value="school">School day</option><option value="other">Non-school day</option></select></label><label><input name="eligible" type="checkbox" checked> Eligible for play</label><label>Starts<input name="starts-at" type="time" value="15:00"></label><label>Ends<input name="ends-at" type="time" value="19:00"></label><label>Note<input name="note" maxlength="160"></label><button class="primary-button" type="submit">Save override</button><p class="form-error" role="status"></p>
+      </form>
+      <div class="override-list">${overrides.length ? overrides.map((item) => `<article><div><strong>${escapeHtml(item.local_date)}</strong><p>${item.eligible ? `${escapeHtml(item.starts_at)}–${escapeHtml(item.ends_at)}` : "Not eligible"}${item.note ? ` · ${escapeHtml(item.note)}` : ""}</p></div><button class="text-button" type="button" data-remove-override="${escapeHtml(item.local_date)}">Remove</button></article>`).join("") : '<div class="empty">No date overrides.</div>'}</div>
+    </section>`;
+  wireRewards();
+}
+
+async function sendRewardCommand(operation, arguments, control) {
+  control?.setAttribute("disabled", "");
+  try {
+    await request("/api/commands", { method: "POST", body: JSON.stringify({
+      schema_version: "mission-control.command/v1",
+      command_id: `web-reward-${Date.now()}-${++commandSequence}`,
+      target: familyRewardsDetail.source,
+      expected_revision: familyRewardsDetail.revision,
+      command: operation,
+      arguments,
+    }) });
+    await refresh();
+    if (rewardsDate && rewardsDate !== rewardDocument("rewards-snapshot", {}).local_date) {
+      await loadRewardsTasks(rewardsDate);
+      renderRewards();
+    }
+  } catch (error) {
+    showNotice(error.message, error.status === 409 ? "warning" : "error");
+    control?.removeAttribute("disabled");
+  }
+}
+
+function wireRewards() {
+  document.querySelector("#rewards-date")?.addEventListener("change", async (event) => {
+    rewardsDate = event.target.value;
+    await loadRewardsTasks(rewardsDate);
+    renderRewards();
+  });
+  document.querySelectorAll("[data-reward-task]").forEach((button) => button.addEventListener("click", () => {
+    const operation = button.dataset.entryId ? "reverse-entry" : "award-task";
+    const arguments = button.dataset.entryId
+      ? { entry_id: button.dataset.entryId, note: "Morning checkmark corrected" }
+      : { local_date: rewardsDate, task_id: button.dataset.rewardTask };
+    sendRewardCommand(operation, arguments, button);
+  }));
+  document.querySelectorAll("[data-reverse-entry]").forEach((button) => button.addEventListener("click", () => {
+    sendRewardCommand("reverse-entry", { entry_id: button.dataset.reverseEntry, note: "Parent-recorded correction" }, button);
+  }));
+  document.querySelector("#reward-spend-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    sendRewardCommand("spend-credit", { local_date: rewardsDate, minutes: Number(form.elements.minutes.value), note: form.elements.note.value }, form.querySelector("button"));
+  });
+  document.querySelector("#reward-settings-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const current = rewardDocument("rewards-settings", { tasks: [] });
+    let windows;
+    try { windows = JSON.parse(form.elements.windows.value); } catch (_error) {
+      form.querySelector(".form-error").textContent = "Recurring windows must be valid JSON.";
+      return;
+    }
+    const settings = {
+      timezone: form.elements.timezone.value.trim(),
+      school_day_cap_minutes: Number(form.elements["school-cap"].value),
+      non_school_day_cap_minutes: Number(form.elements["other-cap"].value),
+      tasks: current.tasks.map((task) => ({ id: task.id, label: form.elements[`task-label-${task.id}`].value.trim(), minutes: Number(form.elements[`task-minutes-${task.id}`].value) })),
+      windows,
+    };
+    sendRewardCommand("update-settings", { settings }, form.querySelector("button[type=submit]"));
+  });
+  document.querySelector("#cancel-reward-settings")?.addEventListener("click", renderRewards);
+  document.querySelector("#reward-override-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const schoolValue = form.elements["school-day"].value;
+    const eligible = form.elements.eligible.checked;
+    sendRewardCommand("set-date-override", { local_date: form.elements["local-date"].value, school_day: schoolValue === "default" ? null : schoolValue === "school", eligible, starts_at: eligible ? form.elements["starts-at"].value : null, ends_at: eligible ? form.elements["ends-at"].value : null, note: form.elements.note.value }, form.querySelector("button"));
+  });
+  document.querySelectorAll("[data-remove-override]").forEach((button) => button.addEventListener("click", () => sendRewardCommand("remove-date-override", { local_date: button.dataset.removeOverride }, button)));
 }
 
 function renderHouse() {

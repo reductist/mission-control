@@ -18,6 +18,7 @@ from urllib.error import HTTPError
 import pytest
 
 from mission_control.database import Database
+from mission_control.builtin_plugins import prepare_builtin_agenda_plugins
 from mission_control.server import MissionControlApplication, build_server
 
 
@@ -31,7 +32,15 @@ def browser(tmp_path):
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
     driver = subprocess.Popen([driver_path, f"--port={port}"], stdout=subprocess.DEVNULL)
-    server = build_server(MissionControlApplication(Database(tmp_path / "browser.db"), demo=True), "127.0.0.1", 0)
+    server = build_server(
+        MissionControlApplication(
+            Database(tmp_path / "browser.db"),
+            demo=True,
+            builtin_plugins=prepare_builtin_agenda_plugins(("family-rewards",)),
+        ),
+        "127.0.0.1",
+        0,
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{port}"
@@ -136,6 +145,48 @@ def test_desktop_sidebar_and_keyboard_context(browser):
     click("#navigator-toggle")
     click("#inspector-toggle")
     assert execute('return document.querySelector(".queue-pane").getBoundingClientRect().width') > before
+
+
+@pytest.mark.parametrize("width", [412, 1440])
+def test_family_rewards_repeat_refresh_cancel_and_rejection(browser, width):
+    execute, click, viewport, _tap = browser
+    viewport(width)
+
+    def wait_for(script):
+        for _ in range(100):
+            if execute(script):
+                return
+            time.sleep(0.05)
+        assert execute(script), script
+
+    navigation = ".mobile-section-tab" if width <= 680 else ".nav-item"
+    click(navigation + '[data-view="rewards"]')
+    wait_for('return !!document.querySelector("[data-reward-task]")')
+    first = "[data-reward-task]"
+    click(first)
+    # The handler disables the control synchronously, preventing a second UI
+    # delivery while the exact command is in flight.
+    assert execute(f'return document.querySelector({json.dumps(first)}).disabled')
+    wait_for('return document.querySelector(".rewards-summary").textContent.includes("10 min")')
+    assert execute('return document.querySelectorAll(".reward-task.is-complete").length') == 1
+
+    # Reloading must persist the ledger without re-submitting the checkmark.
+    viewport(width)
+    click(navigation + '[data-view="rewards"]')
+    wait_for('return document.querySelector(".rewards-summary").textContent.includes("10 min")')
+    assert execute('return document.querySelectorAll(".reward-task.is-complete").length') == 1
+
+    click(".rewards-settings > summary")
+    execute('document.querySelector(\'[name="school-cap"]\').value="45"')
+    click("#cancel-reward-settings")
+    click(".rewards-settings > summary")
+    assert execute('return document.querySelector(\'[name="school-cap"]\').value') == "40"
+
+    execute('document.querySelector(\'#reward-spend-form [name="minutes"]\').value="20"')
+    execute('document.querySelector("#reward-spend-form").requestSubmit()')
+    wait_for('return document.querySelector(".notice")?.textContent.includes("not enough earned credit")')
+    assert execute('return document.querySelector(".rewards-summary").textContent.includes("10 min")')
+    assert execute("return document.documentElement.scrollWidth <= innerWidth")
 
 
 @pytest.mark.parametrize("width", [412, 1440])
@@ -258,6 +309,7 @@ def test_mobile_task_deadlines_tags_edit_and_schedule_filter(browser, width):
                 f"e.value={json.dumps(value)}; e.dispatchEvent(new Event('input',{{bubbles:true}})); "
                 "e.dispatchEvent(new Event('change',{bubbles:true}));")
 
+    wait_for('return !!document.querySelector("#quick-add-title")')
     today = execute("return new Date().toLocaleDateString('en-CA')")
     titles = [f"Browser synthetic yard {width}", f"Browser synthetic social {width}"]
     for index, title in enumerate(titles):

@@ -45,6 +45,14 @@ import setup "mission-control.dev/schema/setup"
 	})
 })
 
+// Command lookup is an optional durability hook. Providers that advertise it
+// may return a previously committed outcome before current-state checks run.
+#CommandLookupCall: close({
+	schema_version!: "mission-control.plugin-call/v2"
+	operation!:      "commands.lookup"
+	input!: close({command!: cmd.CommandEnvelope})
+})
+
 #EmptyCall: close({
 	schema_version!: "mission-control.plugin-call/v2"
 	operation!:      "health.get" | "jobs.list" | "runtime.describe" | "runtime.stop"
@@ -82,6 +90,7 @@ import setup "mission-control.dev/schema/setup"
 	#EntityDetailCall |
 	#CommandStateCall |
 	#CommandExecuteCall |
+	#CommandLookupCall |
 	#EmptyCall |
 	#JobCall |
 	#SetupDescribeCall |
@@ -149,6 +158,7 @@ import setup "mission-control.dev/schema/setup"
 	"agenda.snapshot" |
 	"closed-items.snapshot" |
 	"commands.execute" |
+	"commands.lookup" |
 	"commands.state" |
 	"entity-details.get" |
 	"health.get" |
