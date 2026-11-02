@@ -401,6 +401,21 @@ class CommandRouter:
                 ),
             )
         try:
+            replay = getattr(owner, "replay", None)
+            if callable(replay):
+                replayed = replay(command)
+                if replayed is not None:
+                    if not isinstance(
+                        replayed,
+                        (Accepted, Rejected, Conflicted, Stale, Unauthorized, Failed),
+                    ):
+                        raise TypeError("owner returned an unsupported replay outcome")
+                    if (
+                        replayed.command_id != command.command_id
+                        or replayed.target != command.target
+                    ):
+                        raise ValueError("owner replayed an outcome for a different command")
+                    return replayed
             registration = self._registrations.get(command.target.plugin_id.value)
             capability: EntityCapability | None = None
             if registration is not None:

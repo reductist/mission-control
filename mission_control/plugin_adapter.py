@@ -58,6 +58,9 @@ _CAPABILITY_OPERATIONS = {
     Capability.JOBS: frozenset({"jobs.failure", "jobs.list", "jobs.run"}),
     Capability.HEALTH: frozenset({"health.get"}),
 }
+_OPTIONAL_CAPABILITY_OPERATIONS = {
+    Capability.COMMANDS: frozenset({"commands.lookup"}),
+}
 
 
 def validate_runtime_capability_adapters(registration: PluginRegistration) -> None:
@@ -114,7 +117,10 @@ class DocumentPluginProvider:
         for capability in self.registration.capabilities:
             expected.update(_CAPABILITY_OPERATIONS.get(capability, ()))
         actual = set(operations)
-        if actual - expected - {"runtime.stop"}:
+        optional = {"runtime.stop"}
+        for capability in self.registration.capabilities:
+            optional.update(_OPTIONAL_CAPABILITY_OPERATIONS.get(capability, ()))
+        if actual - expected - optional:
             raise PluginCallContractError(
                 "plugin runtime exposes operations outside its manifest capabilities"
             )
@@ -123,6 +129,25 @@ class DocumentPluginProvider:
                 "plugin runtime is missing operations required by its manifest capabilities"
             )
         return frozenset(actual)
+
+    def replay(self, command: CommandEnvelope) -> CommandOutcome | None:
+        """Return a durable prior outcome before revision/affordance checks."""
+
+        if "commands.lookup" not in self._operations:
+            return None
+        output = call_plugin(
+            self.handler,
+            "commands.lookup",
+            {"command": command_to_dict(command)},
+        )
+        if output is None:
+            return None
+        outcome = parse_command_result(output)
+        if outcome.command_id != command.command_id or outcome.target != command.target:
+            raise PluginCallContractError(
+                "command lookup returned an outcome for a different command"
+            )
+        return outcome
 
     def contribution(self, *, generated_at: datetime) -> AgendaContribution:
         output = call_plugin(

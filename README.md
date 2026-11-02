@@ -69,6 +69,8 @@ Mission Control is pre-release software. The current version includes:
 - a configuration-backed Household plugin for maintenance cases, contractor
   contacts, related task IDs, reference links, investigation notes, and
   scheduled visits
+- an optional parent-operated Family rewards ledger with independent morning
+  checkmarks, play-credit redemptions, recurring windows, and date overrides
 - a command-line interface for administration, configuration inspection, and
   machine-readable queries
 - SQLite storage with ordered migrations
@@ -155,6 +157,10 @@ To record household maintenance cases and scheduled contractor visits, see
 
 To import sourced house-purchase candidates without enabling a scraper or daily
 watcher, follow [`docs/home-search.md`](docs/home-search.md).
+
+To enable the adult-operated play-credit ledger, follow
+[`docs/family-rewards.md`](docs/family-rewards.md). It intentionally does not
+provide child authentication, a countdown timer, or device enforcement.
 
 ## Command-line tools
 

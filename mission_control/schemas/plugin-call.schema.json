@@ -73,6 +73,35 @@
                 "schema_version"
             ]
         },
+        "#CommandLookupCall": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "command": {
+                            "$ref": "#/$defs/CommandEnvelope"
+                        }
+                    },
+                    "required": [
+                        "command"
+                    ]
+                },
+                "operation": {
+                    "const": "commands.lookup"
+                },
+                "schema_version": {
+                    "const": "mission-control.plugin-call/v2"
+                }
+            },
+            "required": [
+                "input",
+                "operation",
+                "schema_version"
+            ]
+        },
         "#CommandStateCall": {
             "type": "object",
             "additionalProperties": false,
@@ -436,6 +465,9 @@
         },
         {
             "$ref": "#/$defs/%23CommandExecuteCall"
+        },
+        {
+            "$ref": "#/$defs/%23CommandLookupCall"
         },
         {
             "$ref": "#/$defs/%23EmptyCall"

@@ -1,0 +1,17 @@
+{
+  "schema_version": "mission-control.plugin-config-defaults/v1",
+  "configuration_schema": "mission-control.family-rewards.config/v1",
+  "defaults": {"settings": {
+    "timezone": "America/New_York", "school_day_cap_minutes": 40, "non_school_day_cap_minutes": 60,
+    "tasks": [
+      {"id": "get-dressed", "label": "Get dressed before going downstairs", "minutes": 10},
+      {"id": "breakfast", "label": "Participate in breakfast", "minutes": 10},
+      {"id": "brush-teeth", "label": "Brush teeth", "minutes": 10},
+      {"id": "pack-up", "label": "Fill water bottle and pack snacks/backpack", "minutes": 10}
+    ],
+    "windows": [
+      {"id": "school-afternoon", "label": "School-day play", "weekdays": [1,2,3,4,5], "starts_at": "15:00", "ends_at": "19:00"},
+      {"id": "weekend-daytime", "label": "Non-school-day play", "weekdays": [6,7], "starts_at": "09:00", "ends_at": "19:00"}
+    ]
+  }, "credentials": {}}
+}

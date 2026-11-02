@@ -10,6 +10,7 @@
                 "agenda.snapshot",
                 "closed-items.snapshot",
                 "commands.execute",
+                "commands.lookup",
                 "commands.state",
                 "entity-details.get",
                 "health.get",

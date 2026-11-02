@@ -29,6 +29,7 @@ from mission_control.plugins import Permission, PluginId
 
 def test_bundled_manifest_identity_does_not_depend_on_directory_name() -> None:
     assert bundled_plugin_ids() == (
+        "family-rewards",
         "google-calendar",
         "home-search",
         "household",
