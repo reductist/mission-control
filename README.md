@@ -220,6 +220,12 @@ of truth that drifts from the original system.
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for component responsibilities and
 [`INTERFACES.md`](INTERFACES.md) for the public contracts.
 
+## Follow through on requests
+
+The optional [Open requests plugin](docs/open-requests.md) keeps requests, linked
+tasks, and result documents together until your own follow-through is finished.
+Filter by tags and status, and link several tasks or documents to one request.
+
 ## Configuration
 
 Mission Control uses one TOML application configuration. An optional base file

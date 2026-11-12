@@ -508,4 +508,8 @@ for fixture in \
   expect_failure '#AgendaContribution' ./schema/agenda "$AGENDA_GENERATED" "$fixture"
 done
 
+cue def --force --out jsonschema -e '#Request' -o "$GENERATED_DIR/open-requests.runtime-check.schema.json" ./schema/open-requests
+compare_schema "$GENERATED_DIR/open-requests.runtime-check.schema.json" "$ROOT_DIR/mission_control/builtin_plugins/open_requests/request.schema.json" "Open requests"
+validate_success '#PluginRegistration' ./schema/plugin "$PLUGIN_GENERATED" ./mission_control/builtin_plugins/open_requests/registration.json
+
 echo "Mission Control schema checks passed"
