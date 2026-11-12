@@ -36,7 +36,7 @@ def browser(tmp_path):
         MissionControlApplication(
             Database(tmp_path / "browser.db"),
             demo=True,
-            builtin_plugins=prepare_builtin_agenda_plugins(("family-rewards",)),
+            builtin_plugins=prepare_builtin_agenda_plugins(("family-rewards", "open-requests")),
         ),
         "127.0.0.1",
         0,
@@ -427,3 +427,83 @@ def test_unrelated_edit_preserves_precise_timed_deadline(browser):
     result = execute('return fetch("/api/dashboard").then(r=>r.json()).then(d=>d.tasks.find(t=>t.id===' + json.dumps(task["id"]) + '))')
     assert result["title"] == "Browser precision edited"
     assert result["deadline"] == deadline
+
+
+@pytest.mark.parametrize("width", [320, 412, 1440])
+def test_requests_create_edit_links_close_reopen_and_mobile_layout(browser, width):
+    execute, click, viewport, _tap = browser
+    viewport(width)
+
+    def wait_for(script):
+        for _ in range(100):
+            if execute(script):
+                return
+            time.sleep(0.05)
+        assert execute(script), script
+
+    def fill(selector, value):
+        execute(f"const e=document.querySelector({json.dumps(selector)}); "
+                f"e.value={json.dumps(value)}; e.dispatchEvent(new Event('input',{{bubbles:true}})); "
+                "e.dispatchEvent(new Event('change',{bubbles:true}));")
+
+    wait_for('return !!document.querySelector("#quick-add-title")')
+    for number in (1, 2):
+        title = f"Request test work {number}"
+        fill("#quick-add-title", title)
+        click('#quick-add-form button[type="submit"]')
+        wait_for(f"return [...document.querySelectorAll('.task-title')].some(e=>e.textContent==={json.dumps(title)})")
+
+    navigation = ".mobile-section-tab" if width <= 680 else ".nav-item"
+    click(navigation + '[data-view="requests"]')
+    wait_for('return !!document.querySelector("#add-request")')
+    click("#add-request")
+    fill('#request-edit-form [name="title"]', f"Follow through {width}")
+    fill('#request-edit-form [name="description"]', "Synthetic request only")
+    fill('#request-edit-form [name="next_step"]', "Review the results")
+    fill('#request-edit-form [name="request_tags"]', "testing, review")
+    for index in (1, 2):
+        click(f'.request-task-picker label:nth-of-type({index}) input')
+    click('[data-request-links="result_links"] [data-add-request-link]')
+    fill('[data-request-links="result_links"] [data-link-label]', "Test result document")
+    fill('[data-request-links="result_links"] [data-link-url]', "https://example.com/result")
+    assert execute('return document.documentElement.scrollWidth <= innerWidth')
+    assert execute('const e=document.querySelector("#request-editor-dialog"); return e.scrollWidth <= e.clientWidth')
+    click('#request-edit-form button[type="submit"]')
+    wait_for('return !document.querySelector("#request-editor-dialog").open')
+    wait_for('return document.querySelectorAll(".request-card").length === 1')
+    request_id = execute('return document.querySelector("[data-edit-request]").dataset.editRequest')
+    edit = f'[data-edit-request="{request_id}"]'
+    assert execute('return document.querySelectorAll(".request-card [data-entity-link]").length') == 2
+    assert execute('return document.querySelector(".request-card a").href') == "https://example.com/result"
+    assert execute('return document.querySelectorAll(".request-tags span").length') == 2
+    assert execute('return document.documentElement.scrollWidth <= innerWidth')
+
+    # Reload, cancel an edit, and verify the persisted links and original title.
+    viewport(width)
+    click(navigation + '[data-view="requests"]')
+    wait_for(f"return !!document.querySelector({json.dumps(edit)})")
+    click(edit)
+    assert execute('return document.querySelectorAll(\'[name="request_tasks"]:checked\').length') == 2
+    fill('#request-edit-form [name="title"]', "Unwanted draft")
+    click('[data-close-request-editor]')
+    click(edit)
+    assert execute('return document.querySelector(\'#request-edit-form [name="title"]\').value') == f"Follow through {width}"
+    fill('#request-edit-form [name="status"]', "closed")
+    click('#request-edit-form button[type="submit"]')
+    wait_for('return !document.querySelector("#request-editor-dialog").open')
+    wait_for('return document.querySelectorAll(".request-card").length === 0')
+    fill("#request-status", "closed")
+    click(edit)
+    fill('#request-edit-form [name="status"]', "ready")
+    click('#request-edit-form button[type="submit"]')
+    wait_for('return !document.querySelector("#request-editor-dialog").open')
+    wait_for('return document.querySelectorAll(".request-card").length === 0')
+    fill("#request-status", "active")
+    assert execute('return document.querySelector(".request-card").textContent.includes("Ready for you")')
+    fill("#request-tag", "testing")
+    assert execute('return document.querySelectorAll(".request-card").length') == 1
+    fill("#request-search", "nonmatching")
+    assert execute('return document.querySelectorAll(".request-card").length') == 0
+    fill("#request-search", "follow through")
+    assert execute('return document.querySelectorAll(".request-card").length') == 1
+    assert execute('return document.documentElement.scrollWidth <= innerWidth')

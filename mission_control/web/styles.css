@@ -654,7 +654,38 @@ button.calendar-item:focus-visible { outline: 2px solid var(--accent); outline-o
   .entity-summary { position: static; }
 }
 
+/* Requests: a small follow-through queue, with reusable links and mobile-safe forms. */
+.requests-toolbar { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
+.requests-toolbar label { display: grid; gap: 5px; font-size: 12px; flex: 1; min-width: 120px; }
+.requests-toolbar input, .requests-toolbar select, #request-edit-form select { width: 100%; min-height: 38px; color: var(--text); background: #171a1d; border: 1px solid var(--border); border-radius: 4px; padding: 7px; }
+.requests-guidance, .requests-count, .requests-warning { margin: 10px 16px; font-size: 12px; color: var(--muted); }
+.requests-warning { color: #e7bc70; }
+.request-card { padding: 16px; border-top: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; }
+.request-card-heading, .request-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.request-card h3 { margin: 0; font-size: 15px; }
+.request-card p, .request-links { font-size: 13px; line-height: 1.5; }
+.request-description { white-space: pre-wrap; color: var(--muted); }
+.request-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.request-tags span { padding: 2px 7px; border: 1px solid var(--border); border-radius: 10px; font-size: 11px; }
+.request-links > div { margin: 8px 0; }
+.request-links dt { color: var(--muted); font-size: 11px; }
+.request-links dd { margin: 3px 0; }
+.request-card-footer small { color: var(--muted); font-size: 11px; }
+.request-task-picker { max-height: 220px; overflow-y: auto; }
+.request-task-picker label { display: flex; align-items: start; gap: 8px; margin: 8px 0; font-size: 13px; }
+.request-task-picker input { width: auto; }
+.request-task-picker small { color: var(--muted); }
+.request-link-editor p { font-size: 12px; color: var(--muted); }
+.request-link-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; align-items: end; gap: 8px; margin: 10px 0; }
+.request-link-row label { display: grid; gap: 4px; font-size: 12px; }
+
 @media (max-width: 680px) {
+  .requests-toolbar { flex-direction: column; }
+  .requests-toolbar input, .requests-toolbar select, #request-edit-form select { font-size: 16px; }
+  .request-card-heading { align-items: start; }
+  .request-link-row { grid-template-columns: minmax(0, 1fr); }
+  .request-link-row button { justify-self: start; min-height: 36px; }
+
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; padding: 14px 16px; gap: 14px; }
   .brand { display: none; }

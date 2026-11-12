@@ -1,0 +1,38 @@
+{
+  "schema_version": "mission-control.plugin/v3",
+  "id": "open-requests",
+  "name": "Open requests",
+  "version": "0.1.0",
+  "plugin_api": ">=1.0.0 <2.0.0",
+  "capabilities": [
+    "agenda",
+    "commands",
+    "entity-details"
+  ],
+  "runtime": {
+    "entrypoint": "mission_control.builtin_plugins.open_requests:activate",
+    "migration_set": "open_requests_v1"
+  },
+  "permissions": [
+    "database"
+  ],
+  "configuration": {
+    "document_version": "mission-control.open-requests.config/v1",
+    "schema_resource": "config.schema.json",
+    "defaults_resource": "config.defaults.json",
+    "presentation_resource": "config.presentation.json"
+  },
+  "entity_types": {
+    "tracker": {
+      "capabilities": [
+        "open-requests.request.create",
+        "open-requests.request.update"
+      ]
+    },
+    "request": {
+      "capabilities": [
+        "activity.read", "entity.annotate"
+      ]
+    }
+  }
+}

@@ -34,6 +34,7 @@ def test_bundled_manifest_identity_does_not_depend_on_directory_name() -> None:
         "home-search",
         "household",
         "landscape",
+        "open-requests",
     )
 
 

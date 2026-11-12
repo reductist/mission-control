@@ -31,6 +31,10 @@ const viewCopy = {
     title: "Contacts",
     description: "People and organizations stored as portable JSContact cards.",
   },
+  requests: {
+    eyebrow: "Follow-through", title: "Requests",
+    description: "Open requests, linked work, and results ready for your next step.",
+  },
   rewards: {
     eyebrow: "Family rewards",
     title: "Rewards",
@@ -61,6 +65,12 @@ const viewCopy = {
 let dashboard = null;
 let homeSearchDetails = new Map();
 let familyRewardsDetail = null;
+let openRequestsDetail = null;
+let openRequestsLoadFailed = false;
+let requestQuery = "";
+let requestStatus = "active";
+let requestTag = "";
+let requestEditor = null;
 let rewardsDate = null;
 let rewardsTaskDetails = new Map();
 let activeView = "overview";
@@ -144,6 +154,7 @@ async function refresh() {
     const nextDashboard = await request("/api/dashboard");
     const homeSearchLoad = await loadHomeSearchDetails(nextDashboard);
     const rewardsLoad = await loadFamilyRewardsDetail(nextDashboard);
+    const requestsLoad = await loadOpenRequestsDetail(nextDashboard);
     let nextDetail = entityDetail;
     if (detailTarget) {
       nextDetail = await request(entityDetailPath(detailTarget));
@@ -151,6 +162,8 @@ async function refresh() {
     dashboard = nextDashboard;
     homeSearchDetails = homeSearchLoad.details;
     familyRewardsDetail = rewardsLoad;
+    openRequestsDetail = requestsLoad.detail;
+    openRequestsLoadFailed = requestsLoad.failed;
     entityDetail = nextDetail;
     connectionLabel.textContent = "Online";
     modeLabel.textContent = dashboard.mode === "demo" ? "House showcase enabled" : "Operational workspace";
@@ -223,6 +236,7 @@ function focusSignature(element) {
     element.dataset?.command,
     element.dataset?.editTask,
     element.dataset?.editContact,
+    element.dataset?.editRequest,
     element.name === "tags" ? element.value : "",
   ].join("|");
 }
@@ -235,6 +249,8 @@ function render() {
     renderSchedule();
   } else if (activeView === "contacts") {
     renderContacts();
+  } else if (activeView === "requests") {
+    renderOpenRequests();
   } else if (activeView === "rewards") {
     renderRewards();
   } else if (activeView === "house") {
@@ -983,6 +999,189 @@ function renderHistory() {
   wireCommandButtons();
   wireEntityLinks();
   wireExpandableText();
+}
+
+function requestRecords(detail = openRequestsDetail) {
+  return (detail?.attributes || []).filter((item) => item.key.startsWith("request:")).flatMap((item) => {
+    try { return [JSON.parse(item.value)]; } catch (_error) { return []; }
+  });
+}
+
+async function loadOpenRequestsDetail(source) {
+  const tracker = (source?.agenda || []).find((entry) => entry.source?.plugin_id === "open-requests" && entry.source.entity_type === "tracker");
+  if (!tracker) return { detail: null, failed: false };
+  try { return { detail: await request(entityDetailPath(tracker.source)), failed: false }; }
+  catch (_error) { return { detail: openRequestsDetail, failed: true }; }
+}
+
+function requestSourceKey(source) { return JSON.stringify([source.plugin_id, source.entity_type, source.entity_id]); }
+
+function requestTaskOptions(selected = []) {
+  const entries = new Map();
+  for (const task of dashboard?.tasks || []) {
+    const source = { plugin_id: "core", entity_type: "task", entity_id: task.id };
+    entries.set(requestSourceKey(source), { source, title: task.title, state: task.state });
+  }
+  for (const task of [...(dashboard?.agenda || []), ...(dashboard?.closed_items || [])]) {
+    if (task.source?.plugin_id !== "open-requests" && task.kind === "action") entries.set(requestSourceKey(task.source), task);
+  }
+  for (const source of selected) {
+    const key = requestSourceKey(source);
+    if (!entries.has(key)) entries.set(key, { source, title: `${source.plugin_id} / ${source.entity_id}`, state: "Not in current view" });
+  }
+  return [...entries.values()];
+}
+
+function filteredRequests(records = requestRecords()) {
+  const query = requestQuery.trim().toLocaleLowerCase();
+  return records.filter((item) => (requestStatus === "all" || (requestStatus === "active" ? item.status !== "closed" : item.status === requestStatus))
+    && (!requestTag || item.tags.includes(requestTag))
+    && (!query || [item.title, item.description, item.next_step, ...item.tags].join(" ").toLocaleLowerCase().includes(query)));
+}
+
+function requestWebLinks(links) {
+  return links.map((link) => {
+    const url = safeHttpUrl(link.url);
+    return url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || link.url)}</a>` : `<span>${escapeHtml(link.label || "Unavailable link")}</span>`;
+  }).join(" · ");
+}
+
+function requestCard(item) {
+  const tasks = requestTaskOptions(item.task_links);
+  return `<article class="request-card">
+    <div class="request-card-heading"><h3>${escapeHtml(item.title)}</h3><span class="state-badge">${escapeHtml(item.status === "ready" ? "Ready for you" : item.status)}</span></div>
+    ${item.description ? `<p class="request-description">${escapeHtml(item.description)}</p>` : ""}
+    <p><strong>Next step:</strong> ${escapeHtml(item.next_step || "Not recorded yet")}</p>
+    ${item.tags.length ? `<p class="request-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</p>` : ""}
+    <dl class="request-links"><div><dt>Linked tasks</dt><dd>${item.task_links.length ? item.task_links.map((source) => { const task = tasks.find((candidate) => requestSourceKey(candidate.source) === requestSourceKey(source)); return `${entityLink(task)} <small>${escapeHtml(task.state || "")}</small>`; }).join(" · ") : "None linked"}</dd></div>
+    <div><dt>Follow-up work</dt><dd>${item.work_links.length ? requestWebLinks(item.work_links) : "No link yet"}</dd></div>
+    <div><dt>Results / solutions</dt><dd>${item.result_links.length ? requestWebLinks(item.result_links) : "No result link yet"}</dd></div></dl>
+    <div class="request-card-footer"><small>Updated ${escapeHtml(formatDateTime(item.updated_at))}</small><button class="text-button" type="button" data-edit-request="${escapeHtml(item.id)}">Edit / ${item.status === "closed" ? "reopen" : "close"}</button></div>
+  </article>`;
+}
+
+function renderOpenRequests() {
+  if (!openRequestsDetail) {
+    renderNoDemo("Open requests unavailable", openRequestsLoadFailed ? "The request tracker could not be loaded. Try refreshing." : "Enable the open-requests plugin to track requests and link their follow-up work.");
+    return;
+  }
+  const records = requestRecords();
+  const tags = [...new Set(records.flatMap((item) => item.tags))].sort();
+  const items = filteredRequests(records);
+  app.innerHTML = `<section class="panel requests-panel">
+    <div class="panel-header"><h2>Your requests</h2><button class="primary-button" id="add-request" type="button">Add request</button></div>
+    ${openRequestsLoadFailed ? '<p class="requests-warning" role="status">Showing previously loaded requests. Refresh failed; changes may conflict with newer work.</p>' : ""}
+    <p class="requests-guidance">Keep a request open until your follow-through is finished. Completed tasks and result links do not close it automatically.</p>
+    <div class="requests-toolbar"><label>Search<input id="request-search" type="search" value="${escapeHtml(requestQuery)}" placeholder="Title, next step, or tag"></label>
+    <label>Status<select id="request-status">${[["active", "Open requests"], ["open", "Open"], ["waiting", "Waiting"], ["ready", "Ready for you"], ["closed", "Closed"], ["all", "All"]].map(([value, label]) => `<option value="${value}"${requestStatus === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+    <label>Tag<select id="request-tag"><option value="">All tags</option>${tags.map((tag) => `<option value="${escapeHtml(tag)}"${requestTag === tag ? " selected" : ""}>${escapeHtml(tag)}</option>`).join("")}</select></label></div>
+    <p class="requests-count">${items.length} shown · ${records.filter((item) => item.status !== "closed").length} open</p>
+    <div class="request-list">${items.length ? items.map(requestCard).join("") : '<div class="empty">No matching requests. Add a request or change the filters.</div>'}</div></section>`;
+  document.querySelector("#add-request").addEventListener("click", () => openRequestEditor());
+  document.querySelector("#request-search").addEventListener("input", (event) => {
+    requestQuery = event.target.value; renderOpenRequests();
+    const input = document.querySelector("#request-search"); input.focus();
+  });
+  for (const [id, setter] of [["request-status", (value) => { requestStatus = value; }], ["request-tag", (value) => { requestTag = value; }]]) {
+    document.querySelector(`#${id}`).addEventListener("change", (event) => { setter(event.target.value); renderOpenRequests(); });
+  }
+  document.querySelectorAll("[data-edit-request]").forEach((button) => button.addEventListener("click", () => openRequestEditor(button.dataset.editRequest)));
+  wireEntityLinks();
+}
+
+function requestLinkEditor(kind, links) {
+  return `<fieldset class="request-link-editor" data-request-links="${kind}"><legend>${kind === "work_links" ? "Follow-up work links" : "Result / solution links"}</legend><p>Paste a shareable HTTP(S) link, such as a Drive document. This does not change its sharing permissions.</p><div class="request-link-rows">${links.map(requestLinkRow).join("")}</div><button class="secondary-button" type="button" data-add-request-link>Add link</button></fieldset>`;
+}
+
+function requestLinkRow(link = { label: "", url: "" }) {
+  return `<div class="request-link-row"><label>Label<input data-link-label maxlength="128" value="${escapeHtml(link.label)}" required></label><label>URL<input data-link-url type="url" maxlength="1024" value="${escapeHtml(link.url)}" placeholder="https://" required></label><button class="text-button" type="button" data-remove-request-link aria-label="Remove link">Remove</button></div>`;
+}
+
+function openRequestEditor(id = null) {
+  if (requestEditor?.pending || !openRequestsDetail) return;
+  const item = id ? requestRecords().find((record) => record.id === id) : null;
+  if (id && !item) return;
+  requestEditor = { id, revision: openRequestsDetail.revision, pending: false };
+  const selected = item?.task_links || [];
+  const tasks = requestTaskOptions(selected);
+  const dialog = document.querySelector("#request-editor-dialog");
+  document.querySelector("#request-editor-content").innerHTML = `<form id="request-edit-form" class="task-edit-form">
+    <div class="dialog-heading"><h2 id="request-editor-title">${id ? "Edit request" : "Add request"}</h2><button type="button" data-close-request-editor aria-label="Close request editor">×</button></div>
+    <label>Title<input name="title" value="${escapeHtml(item?.title || "")}" maxlength="256" required autofocus></label>
+    <label>Request / context<textarea name="description" maxlength="1200" rows="3">${escapeHtml(item?.description || "")}</textarea></label>
+    <label>Status<select name="status">${[["open", "Open"], ["waiting", "Waiting"], ["ready", "Ready for you"], ["closed", "Closed"]].map(([value, label]) => `<option value="${value}"${item?.status === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+    <label>Next step<input name="next_step" value="${escapeHtml(item?.next_step || "")}" maxlength="512"></label>
+    <label>Tags (comma-separated)<input name="request_tags" value="${escapeHtml((item?.tags || []).join(", "))}"></label>
+    <fieldset class="request-task-picker"><legend>Linked tasks (up to 20)</legend>${tasks.length ? tasks.map((task) => `<label><input type="checkbox" name="request_tasks" value="${escapeHtml(JSON.stringify(task.source))}"${selected.some((source) => requestSourceKey(source) === requestSourceKey(task.source)) ? " checked" : ""}><span>${escapeHtml(task.title)} <small>${escapeHtml(task.state || "")}</small></span></label>`).join("") : '<p>No tasks available yet.</p>'}</fieldset>
+    ${requestLinkEditor("work_links", item?.work_links || [])}${requestLinkEditor("result_links", item?.result_links || [])}
+    <p class="deadline-note">Links may be reused across requests. Keep the complete record under 4,096 characters, including link metadata. Saving never changes linked tasks or closes this request automatically.</p>
+    <p class="form-error" role="status"></p><div class="review-controls"><button class="primary-button" type="submit">Save request</button><button class="secondary-button" type="button" data-close-request-editor>Cancel</button></div>
+  </form>`;
+  const form = document.querySelector("#request-edit-form");
+  form.addEventListener("submit", saveRequest);
+  form.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-request-editor]")) closeRequestEditor();
+    if (event.target.closest("[data-add-request-link]")) event.target.closest("fieldset").querySelector(".request-link-rows").insertAdjacentHTML("beforeend", requestLinkRow());
+    if (event.target.closest("[data-remove-request-link]")) event.target.closest(".request-link-row").remove();
+  });
+  dialog.showModal();
+}
+
+function requestFromForm(form) {
+  const result = {
+    title: form.elements.title.value.trim(), description: form.elements.description.value.trim(), status: form.elements.status.value,
+    next_step: form.elements.next_step.value.trim(), tags: [...new Set(form.elements.request_tags.value.split(",").map((value) => value.trim()).filter(Boolean))],
+    task_links: [...form.querySelectorAll('[name="request_tasks"]:checked')].map((input) => JSON.parse(input.value)),
+  };
+  for (const kind of ["work_links", "result_links"]) result[kind] = [...form.querySelectorAll(`[data-request-links="${kind}"] .request-link-row`)].map((row) => {
+    const label = row.querySelector("[data-link-label]").value.trim();
+    const url = row.querySelector("[data-link-url]").value.trim();
+    if (!label || !safeHttpUrl(url)) throw new Error("Each link needs a label and a valid HTTP(S) URL.");
+    return { label, url };
+  });
+  if (!result.title) throw new Error("Add a request title.");
+  return result;
+}
+
+function closeRequestEditor() {
+  if (requestEditor?.pending) return;
+  requestEditor = null;
+  dialogClose("#request-editor-dialog");
+}
+
+async function saveRequest(event) {
+  event.preventDefault();
+  if (!requestEditor || requestEditor.pending) return;
+  const editor = requestEditor;
+  const form = event.currentTarget;
+  try {
+    const document = requestFromForm(form);
+    editor.pending = true;
+    form.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+    const fingerprint = JSON.stringify(document);
+    if (editor.attempt && editor.attempt.fingerprint !== fingerprint) {
+      throw new Error("A previous save may have reached the server. Retry the unchanged draft, or close and reopen after refreshing before making different changes.");
+    }
+    editor.attempt ||= { fingerprint, body: JSON.stringify({
+      schema_version: "mission-control.command/v1", command_id: `web-request-${Date.now()}-${++commandSequence}`,
+      target: { plugin_id: "open-requests", entity_type: "tracker", entity_id: "requests" }, expected_revision: editor.revision,
+      command: editor.id ? "update-request" : "create-request", arguments: { ...(editor.id ? { request_id: editor.id } : {}), request: document },
+    }) };
+    await request("/api/commands", { method: "POST", body: editor.attempt.body });
+    editor.pending = false;
+    closeRequestEditor();
+    await refresh();
+    showNotice(editor.id ? "Request updated." : "Request added.");
+  } catch (error) {
+    form.querySelector(".form-error").textContent = error.status === 409
+      ? "Requests changed while you were editing. Your draft is still here. Copy any changes, then close and reopen to review the latest version."
+      : error.message;
+    if (error.status && error.status < 500) editor.attempt = null;
+    if (error.status === 409) await refresh();
+  } finally {
+    editor.pending = false;
+    form.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+  }
 }
 
 function familyRewardsAccount(source = dashboard) {
@@ -2851,6 +3050,7 @@ function cancelJump() {
 }
 
 function handleEscape() {
+  if (document.querySelector("#request-editor-dialog")?.open) { closeRequestEditor(); return; }
   const contactDialog = document.querySelector("#contact-editor-dialog");
   if (contactDialog?.open) {
     editingContact = null;
@@ -2878,6 +3078,8 @@ function handleEscape() {
   else setActivePane("navigator");
 }
 
+document.querySelector("#request-editor-dialog")?.addEventListener("cancel", (event) => { event.preventDefault(); closeRequestEditor(); });
+
 document.querySelector("#help-button")?.addEventListener("click", openHelp);
 helpDialog?.addEventListener("close", () => { keyboardModeLabel.textContent = "NAV"; });
 document.querySelectorAll("[data-toggle-pane]").forEach((button) => {
@@ -2894,7 +3096,7 @@ document.addEventListener("keydown", (event) => {
     handleEscape();
     return;
   }
-  if (helpDialog?.open || document.querySelector("#task-editor-dialog")?.open || document.querySelector("#contact-editor-dialog")?.open || isTypingTarget(event.target)) return;
+  if (document.querySelector("#request-editor-dialog")?.open || helpDialog?.open || document.querySelector("#task-editor-dialog")?.open || document.querySelector("#contact-editor-dialog")?.open || isTypingTarget(event.target)) return;
   const toggledPane = paneToggleForKey(event.key);
   if (toggledPane && !event.metaKey && !event.ctrlKey && !event.altKey) {
     event.preventDefault();

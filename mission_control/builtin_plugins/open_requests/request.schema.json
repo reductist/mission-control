@@ -1,0 +1,112 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "#Link": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "label": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                },
+                "url": {
+                    "type": "string",
+                    "maxLength": 1024,
+                    "pattern": "^https?://"
+                }
+            },
+            "required": [
+                "label",
+                "url"
+            ]
+        },
+        "#SourceRef": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "entity_id": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "entity_type": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "plugin_id": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "pattern": "^[a-z][a-z0-9-]*$"
+                }
+            },
+            "required": [
+                "entity_id",
+                "entity_type",
+                "plugin_id"
+            ]
+        }
+    },
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "description": {
+            "type": "string",
+            "maxLength": 1200
+        },
+        "next_step": {
+            "type": "string",
+            "maxLength": 512
+        },
+        "result_links": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/%23Link"
+            }
+        },
+        "status": {
+            "enum": [
+                "open",
+                "waiting",
+                "ready",
+                "closed"
+            ]
+        },
+        "tags": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "maxLength": 48,
+                "minLength": 1
+            }
+        },
+        "task_links": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/%23SourceRef"
+            }
+        },
+        "title": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1
+        },
+        "work_links": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/%23Link"
+            }
+        }
+    },
+    "required": [
+        "description",
+        "next_step",
+        "result_links",
+        "status",
+        "tags",
+        "task_links",
+        "title",
+        "work_links"
+    ]
+}
