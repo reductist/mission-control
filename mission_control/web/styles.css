@@ -828,7 +828,8 @@ kbd {
 .tag-filter-note, .deadline-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .form-error { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 12px; }
 .section-core-tasks { margin-top: 12px; }
-.task-editor-dialog { max-height: calc(100dvh - 24px); overflow: auto; }
+/* Keep focused/scrolled controls clear of the modal viewport edges. */
+.task-editor-dialog { max-height: calc(100dvh - 24px); overflow: auto; scroll-padding-block: 24px; }
 
 .workspace { min-height: 0; display: grid; grid-template-columns: minmax(184px, .74fr) minmax(430px, 2.35fr) minmax(260px, 1fr); background: var(--border); gap: 1px; }
 .workspace.is-navigator-hidden { grid-template-columns: minmax(430px, 2.35fr) minmax(260px, 1fr); }
