@@ -1173,3 +1173,10 @@ kbd {
   .system-state { display: none; }
   .pane-toggle { padding-inline: 7px; }
 }
+
+.request-completion { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; }
+.request-completion input { width: 22px; height: 22px; flex: 0 0 auto; accent-color: var(--accent); }
+.request-history { border-top: 1px solid var(--border); }
+.request-history > summary { padding: 16px; cursor: pointer; color: var(--muted); font-weight: 600; }
+
+.request-id { display: block; margin-bottom: 6px; user-select: text; overflow-wrap: anywhere; }

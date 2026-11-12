@@ -17,11 +17,15 @@ For example, a request can link two MC tasks, a work thread with a usable web
 URL, and a Google Drive report. The same task or result can serve several
 requests. Task links retain the full plugin/type/id reference. If a linked task
 is unavailable or its plugin is disabled, its reference is retained and shown
-as unavailable; it is never silently removed. Linking does not alter a task.
+as unavailable; it is never silently removed. Linking does not alter a task. Linked task detail pages show reciprocal
+**Related requests** links while the tracker is enabled.
 
 Use **Ready for you** when a result needs reading or action. A completed task or
 new result link does not close the request. Close it explicitly when follow-through
-is finished; reopen it from the Closed or All filter. Change history is retained.
+is finished using its completion checkbox. Completed requests move into the collapsed
+**Completed history** section; expand it and uncheck a request to reopen it.
+Search and tag filters apply to history too. Each card displays its stable,
+selectable Request ID so you can refer to it unambiguously. Change history is retained.
 
 ## First-slice limits
 

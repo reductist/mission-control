@@ -68,6 +68,8 @@ let familyRewardsDetail = null;
 let openRequestsDetail = null;
 let openRequestsLoadFailed = false;
 let requestQuery = "";
+let requestHistoryOpen = false;
+let requestTogglePending = false;
 let requestStatus = "active";
 let requestTag = "";
 let requestEditor = null;
@@ -1032,9 +1034,9 @@ function requestTaskOptions(selected = []) {
   return [...entries.values()];
 }
 
-function filteredRequests(records = requestRecords()) {
+function filteredRequests(records = requestRecords(), status = requestStatus) {
   const query = requestQuery.trim().toLocaleLowerCase();
-  return records.filter((item) => (requestStatus === "all" || (requestStatus === "active" ? item.status !== "closed" : item.status === requestStatus))
+  return records.filter((item) => (status === "all" || (status === "active" ? item.status !== "closed" : item.status === status))
     && (!requestTag || item.tags.includes(requestTag))
     && (!query || [item.title, item.description, item.next_step, ...item.tags].join(" ").toLocaleLowerCase().includes(query)));
 }
@@ -1049,14 +1051,14 @@ function requestWebLinks(links) {
 function requestCard(item) {
   const tasks = requestTaskOptions(item.task_links);
   return `<article class="request-card">
-    <div class="request-card-heading"><h3>${escapeHtml(item.title)}</h3><span class="state-badge">${escapeHtml(item.status === "ready" ? "Ready for you" : item.status)}</span></div>
+    <div class="request-card-heading"><label class="request-completion"><input type="checkbox" data-complete-request="${escapeHtml(item.id)}" aria-label="${item.status === "closed" ? "Reopen" : "Complete"} request: ${escapeHtml(item.title)}"${item.status === "closed" ? " checked" : ""}${requestTogglePending ? " disabled" : ""}><h3>${escapeHtml(item.title)}</h3></label><span class="state-badge">${escapeHtml(item.status === "ready" ? "Ready for you" : item.status)}</span></div>
     ${item.description ? `<p class="request-description">${escapeHtml(item.description)}</p>` : ""}
     <p><strong>Next step:</strong> ${escapeHtml(item.next_step || "Not recorded yet")}</p>
     ${item.tags.length ? `<p class="request-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</p>` : ""}
     <dl class="request-links"><div><dt>Linked tasks</dt><dd>${item.task_links.length ? item.task_links.map((source) => { const task = tasks.find((candidate) => requestSourceKey(candidate.source) === requestSourceKey(source)); return `${entityLink(task)} <small>${escapeHtml(task.state || "")}</small>`; }).join(" · ") : "None linked"}</dd></div>
     <div><dt>Follow-up work</dt><dd>${item.work_links.length ? requestWebLinks(item.work_links) : "No link yet"}</dd></div>
     <div><dt>Results / solutions</dt><dd>${item.result_links.length ? requestWebLinks(item.result_links) : "No result link yet"}</dd></div></dl>
-    <div class="request-card-footer"><small>Updated ${escapeHtml(formatDateTime(item.updated_at))}</small><button class="text-button" type="button" data-edit-request="${escapeHtml(item.id)}">Edit / ${item.status === "closed" ? "reopen" : "close"}</button></div>
+    <div class="request-card-footer"><small><span class="request-id">Request ID: <code>${escapeHtml(item.id)}</code></span>Updated ${escapeHtml(formatDateTime(item.updated_at))}</small><button class="text-button" type="button" data-edit-request="${escapeHtml(item.id)}">Edit details</button></div>
   </article>`;
 }
 
@@ -1068,15 +1070,17 @@ function renderOpenRequests() {
   const records = requestRecords();
   const tags = [...new Set(records.flatMap((item) => item.tags))].sort();
   const items = filteredRequests(records);
+  const completed = filteredRequests(records, "closed");
   app.innerHTML = `<section class="panel requests-panel">
     <div class="panel-header"><h2>Your requests</h2><button class="primary-button" id="add-request" type="button">Add request</button></div>
     ${openRequestsLoadFailed ? '<p class="requests-warning" role="status">Showing previously loaded requests. Refresh failed; changes may conflict with newer work.</p>' : ""}
     <p class="requests-guidance">Keep a request open until your follow-through is finished. Completed tasks and result links do not close it automatically.</p>
     <div class="requests-toolbar"><label>Search<input id="request-search" type="search" value="${escapeHtml(requestQuery)}" placeholder="Title, next step, or tag"></label>
-    <label>Status<select id="request-status">${[["active", "Open requests"], ["open", "Open"], ["waiting", "Waiting"], ["ready", "Ready for you"], ["closed", "Closed"], ["all", "All"]].map(([value, label]) => `<option value="${value}"${requestStatus === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+    <label>Status<select id="request-status">${[["active", "Open requests"], ["open", "Open"], ["waiting", "Waiting"], ["ready", "Ready for you"]].map(([value, label]) => `<option value="${value}"${requestStatus === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>
     <label>Tag<select id="request-tag"><option value="">All tags</option>${tags.map((tag) => `<option value="${escapeHtml(tag)}"${requestTag === tag ? " selected" : ""}>${escapeHtml(tag)}</option>`).join("")}</select></label></div>
     <p class="requests-count">${items.length} shown · ${records.filter((item) => item.status !== "closed").length} open</p>
-    <div class="request-list">${items.length ? items.map(requestCard).join("") : '<div class="empty">No matching requests. Add a request or change the filters.</div>'}</div></section>`;
+    <div class="request-list">${items.length ? items.map(requestCard).join("") : '<div class="empty">No open requests match these filters.</div>'}</div>
+    <details class="request-history"${requestHistoryOpen ? " open" : ""}><summary>Completed history (${completed.length})</summary><p class="requests-guidance">Uncheck a request to reopen it. Search and tag filters also apply here.</p>${completed.length ? completed.map(requestCard).join("") : '<div class="empty">No completed requests match these filters.</div>'}</details></section>`;
   document.querySelector("#add-request").addEventListener("click", () => openRequestEditor());
   document.querySelector("#request-search").addEventListener("input", (event) => {
     requestQuery = event.target.value; renderOpenRequests();
@@ -1086,7 +1090,39 @@ function renderOpenRequests() {
     document.querySelector(`#${id}`).addEventListener("change", (event) => { setter(event.target.value); renderOpenRequests(); });
   }
   document.querySelectorAll("[data-edit-request]").forEach((button) => button.addEventListener("click", () => openRequestEditor(button.dataset.editRequest)));
+  document.querySelector(".request-history").addEventListener("toggle", (event) => { requestHistoryOpen = event.target.open; });
+  document.querySelectorAll("[data-complete-request]").forEach((input) => input.addEventListener("change", () => toggleRequestCompletion(input)));
   wireEntityLinks();
+}
+
+async function toggleRequestCompletion(input) {
+  if (requestTogglePending || requestEditor?.pending) return;
+  const item = requestRecords().find((record) => record.id === input.dataset.completeRequest);
+  if (!item) return;
+  const status = input.checked ? "closed" : "open";
+  const document = Object.fromEntries(["title", "description", "next_step", "tags", "task_links", "work_links", "result_links"].map((key) => [key, item[key]]));
+  document.status = status;
+  requestTogglePending = true;
+  let notice;
+  let tone = "success";
+  renderOpenRequests();
+  try {
+    await request("/api/commands", { method: "POST", body: JSON.stringify({
+      schema_version: "mission-control.command/v1", command_id: `web-request-${Date.now()}-${++commandSequence}`,
+      target: { plugin_id: "open-requests", entity_type: "tracker", entity_id: "requests" },
+      expected_revision: openRequestsDetail.revision,
+      command: "update-request", arguments: { request_id: item.id, request: document },
+    }) });
+    await refresh();
+    notice = status === "closed" ? "Request completed. Find it in Completed history." : "Request reopened.";
+  } catch (error) {
+    await refresh();
+    tone = "warning";
+    notice = error.status === 409 ? "Requests changed. Review the refreshed status before trying again." : "Could not confirm the change. Check the current status before trying again.";
+  } finally {
+    requestTogglePending = false;
+    if (activeView === "requests" && !entityDetail) { renderOpenRequests(); showNotice(notice, tone); }
+  }
 }
 
 function requestLinkEditor(kind, links) {
@@ -1098,7 +1134,7 @@ function requestLinkRow(link = { label: "", url: "" }) {
 }
 
 function openRequestEditor(id = null) {
-  if (requestEditor?.pending || !openRequestsDetail) return;
+  if (requestTogglePending || requestEditor?.pending || !openRequestsDetail) return;
   const item = id ? requestRecords().find((record) => record.id === id) : null;
   if (id && !item) return;
   requestEditor = { id, revision: openRequestsDetail.revision, pending: false };
@@ -1597,6 +1633,7 @@ function renderYard() {
 
 function renderEntityDetail() {
   const detail = entityDetail;
+  const relatedRequests = requestRecords().filter((item) => item.task_links.some((source) => requestSourceKey(source) === requestSourceKey(detail.source)));
   const annotate = (detail.affordances || []).find(
     (affordance) => affordance.capability === "entity.annotate",
   );
@@ -1626,6 +1663,7 @@ function renderEntityDetail() {
         <div class="panel-body">
           ${detail.description ? `<p class="entity-description">${escapeHtml(detail.description)}</p>` : '<p class="task-description">No additional description.</p>'}
           ${detail.attributes?.length ? `<dl class="attribute-list">${detail.attributes.map(detailAttribute).join("")}</dl>` : ""}
+          ${relatedRequests.length ? `<div class="related-requests"><h3>Related requests</h3>${relatedRequests.map((item) => `<p>${entityLink({title: item.title, source: {plugin_id: "open-requests", entity_type: "request", entity_id: item.id}})} <small>${escapeHtml(item.status)}</small></p>`).join("")}</div>` : ""}
           ${lifecycle && detail.revision ? `<button class="secondary-button entity-action" type="button" data-plugin-id="${escapeHtml(detail.source.plugin_id)}" data-entity-type="${escapeHtml(detail.source.entity_type)}" data-entity-id="${escapeHtml(detail.source.entity_id)}" data-revision="${escapeHtml(detail.revision)}" data-command="${escapeHtml(lifecycle.command)}" data-capability="${escapeHtml(lifecycle.capability)}">${lifecycleLabel}</button>` : ""}
         </div>
       </section>
@@ -1662,6 +1700,7 @@ function renderEntityDetail() {
   `;
 
   document.querySelector("#entity-detail-back").addEventListener("click", () => showView(detailReturnView));
+  wireEntityLinks();
   wireCommandButtons();
   const noteForm = document.querySelector("#entity-note-form");
   if (noteForm) {
@@ -2135,6 +2174,11 @@ function entityDetailPath(source) {
 }
 
 async function openEntityDetail(source) {
+  if (source.plugin_id === "core" && source.entity_type === "task") {
+    if (!dashboard?.tasks?.some((item) => item.id === source.entity_id)) { showNotice("This linked task is not in the current snapshot.", "warning"); return; }
+    openTaskEditor(source.entity_id);
+    return;
+  }
   detailReturnView = activeView;
   activityExpanded = false;
   app.setAttribute("aria-busy", "true");
@@ -2560,9 +2604,14 @@ function openTaskEditor(id) {
   const task = dashboard?.tasks?.find((item) => item.id === id);
   if (!task) return;
   editingTask = task;
+  const related = requestRecords().filter((item) => item.task_links.some((source) => source.plugin_id === "core" && source.entity_type === "task" && source.entity_id === id));
   const dialog = document.querySelector("#task-editor-dialog");
-  document.querySelector("#task-editor-content").innerHTML = `<form id="task-edit-form" class="task-edit-form"><div class="dialog-heading"><h2 id="task-editor-title">Edit shared task</h2><button type="button" data-close-task-editor aria-label="Close task editor">×</button></div><label for="edit-task-title">Title<input id="edit-task-title" name="title" value="${escapeHtml(task.title)}" required maxlength="160"></label><label for="edit-task-description">Description<textarea id="edit-task-description" name="description">${escapeHtml(task.description || "")}</textarea></label><label for="edit-task-parent">Parent task<select id="edit-task-parent" name="parent_id"><option value="">No parent</option>${taskParentOptions(task)}</select></label><p class="deadline-note">Moving a task changes its presentation only; it does not create a dependency or copy dates and tags.</p>${taskMetadataFields("edit", task)}<p class="form-error" role="status"></p><button class="primary-button" type="submit">Save task</button></form>`;
+  document.querySelector("#task-editor-content").innerHTML = `<form id="task-edit-form" class="task-edit-form"><div class="dialog-heading"><h2 id="task-editor-title">Edit shared task</h2><button type="button" data-close-task-editor aria-label="Close task editor">×</button></div><label for="edit-task-title">Title<input id="edit-task-title" name="title" value="${escapeHtml(task.title)}" required maxlength="160"></label><label for="edit-task-description">Description<textarea id="edit-task-description" name="description">${escapeHtml(task.description || "")}</textarea></label><label for="edit-task-parent">Parent task<select id="edit-task-parent" name="parent_id"><option value="">No parent</option>${taskParentOptions(task)}</select></label><p class="deadline-note">Moving a task changes its presentation only; it does not create a dependency or copy dates and tags.</p>${taskMetadataFields("edit", task)}${related.length ? `<div class="related-requests"><h3>Related requests</h3>${related.map((item) => `<p><button type="button" class="entity-link" data-related-request="${escapeHtml(item.id)}">${escapeHtml(item.title)}</button> <small>${escapeHtml(item.status)}</small></p>`).join("")}</div>` : ""}<p class="form-error" role="status"></p><button class="primary-button" type="submit">Save task</button></form>`;
   document.querySelector("#task-edit-form").addEventListener("submit", saveTaskEdit);
+  dialog.querySelectorAll("[data-related-request]").forEach((button) => button.addEventListener("click", () => {
+    dialog.close();
+    openEntityDetail({plugin_id: "open-requests", entity_type: "request", entity_id: button.dataset.relatedRequest});
+  }));
   dialog.showModal();
 }
 

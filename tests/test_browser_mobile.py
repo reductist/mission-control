@@ -478,6 +478,12 @@ def test_requests_create_edit_links_close_reopen_and_mobile_layout(browser, widt
     assert execute('return document.querySelectorAll(".request-tags span").length') == 2
     assert execute('return document.documentElement.scrollWidth <= innerWidth')
 
+    click('.request-card [data-entity-link]')
+    wait_for('return !!document.querySelector(".related-requests [data-related-request]")')
+    assert execute('return document.querySelector(".related-requests").textContent.includes("Follow through")')
+    click('.related-requests [data-related-request]')
+    wait_for('return document.querySelector("#page-title").textContent.startsWith("Follow through")')
+
     # Reload, cancel an edit, and verify the persisted links and original title.
     viewport(width)
     click(navigation + '[data-view="requests"]')
@@ -488,17 +494,25 @@ def test_requests_create_edit_links_close_reopen_and_mobile_layout(browser, widt
     click('[data-close-request-editor]')
     click(edit)
     assert execute('return document.querySelector(\'#request-edit-form [name="title"]\').value') == f"Follow through {width}"
-    fill('#request-edit-form [name="status"]', "closed")
-    click('#request-edit-form button[type="submit"]')
-    wait_for('return !document.querySelector("#request-editor-dialog").open')
-    wait_for('return document.querySelectorAll(".request-card").length === 0')
-    fill("#request-status", "closed")
+    click('[data-close-request-editor]')
+    completion = f'[data-complete-request="{request_id}"]'
+    assert execute('return document.querySelector(".request-id code").textContent') == request_id
+    click(completion)
+    wait_for('return document.querySelectorAll(".request-list .request-card").length === 0')
+    wait_for('return !document.querySelector("[data-complete-request]").disabled')
+    assert execute('return document.querySelector(".notice").textContent.includes("Request completed")')
+    assert execute('return document.querySelector(".request-history").open') is False
+    click(".request-history summary")
+    assert execute('return document.querySelector(".request-history [data-complete-request]").checked') is True
+    assert execute('return document.querySelector(".request-history a").href') == "https://example.com/result"
+    click(completion)
+    wait_for('return document.querySelectorAll(".request-list .request-card").length === 1')
+    wait_for('return !document.querySelector("[data-complete-request]").disabled')
+    assert execute('return document.querySelector(".request-id code").textContent') == request_id
     click(edit)
     fill('#request-edit-form [name="status"]', "ready")
     click('#request-edit-form button[type="submit"]')
     wait_for('return !document.querySelector("#request-editor-dialog").open')
-    wait_for('return document.querySelectorAll(".request-card").length === 0')
-    fill("#request-status", "active")
     assert execute('return document.querySelector(".request-card").textContent.includes("Ready for you")')
     fill("#request-tag", "testing")
     assert execute('return document.querySelectorAll(".request-card").length') == 1
@@ -507,3 +521,12 @@ def test_requests_create_edit_links_close_reopen_and_mobile_layout(browser, widt
     fill("#request-search", "follow through")
     assert execute('return document.querySelectorAll(".request-card").length') == 1
     assert execute('return document.documentElement.scrollWidth <= innerWidth')
+
+    # A rejected completion must retain its warning and the open request.
+    execute("window.realFetch = window.fetch; window.fetch = (url, options) => url === '/api/commands' ? Promise.resolve(new Response(JSON.stringify({error:{detail:'Stale revision'}}), {status:409, headers:{'Content-Type':'application/json'}})) : window.realFetch(url, options)")
+    click(completion)
+    wait_for('return !!document.querySelector(".notice.is-warning")')
+    assert execute('return document.querySelector(".notice").textContent.includes("Requests changed")')
+    assert execute('return document.querySelectorAll(".request-list .request-card").length') == 1
+    assert execute('return document.querySelector("[data-complete-request]").checked') is False
+    execute("window.fetch = window.realFetch")
