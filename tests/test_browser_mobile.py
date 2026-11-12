@@ -431,8 +431,15 @@ def test_unrelated_edit_preserves_precise_timed_deadline(browser):
 
 @pytest.mark.parametrize("width", [320, 412, 1440])
 def test_requests_create_edit_links_close_reopen_and_mobile_layout(browser, width):
-    execute, click, viewport, _tap = browser
+    execute, native_click, viewport, _tap = browser
     viewport(width)
+
+    def click(selector):
+        # ChromeDriver's minimal scroll can leave a long modal's target clipped
+        # at its bottom border (font metrics differ between Linux runners).
+        # Scroll as a person would, then still require a real hit-tested click.
+        execute(f"document.querySelector({json.dumps(selector)}).scrollIntoView({{block:'center', inline:'nearest', behavior:'instant'}})")
+        native_click(selector)
 
     def wait_for(script):
         for _ in range(100):
